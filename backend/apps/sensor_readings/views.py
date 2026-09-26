@@ -35,19 +35,40 @@ class SensorReadingByNodeView(generics.ListAPIView):
 
     def get_queryset(self):
         node_id = self.kwargs['node_id']
-        return SensorReading.objects.filter(
-            node__node_id=node_id
-        ).order_by('-timestamp')
+        qs = SensorReading.objects.filter(node__node_id=node_id).order_by('-timestamp')
+
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            qs = qs.filter(reading_status=status_param)
+
+        return qs
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+
+        hotspot_param = request.query_params.get('hotspot')
+        if hotspot_param:
+            from apps.sensor_nodes.services import hotspot_at
+            queryset = [
+                r for r in queryset
+                if hotspot_at(r.node, r.timestamp)[1] == hotspot_param
+            ]
+
+        page = self.paginate_queryset(queryset)
+        serializer = self.get_serializer(page if page is not None else queryset, many=True)
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
 
 
 # Tunable constants
 
 TREND_WINDOW    = 5
-FLOW_NORMAL_MIN = 0.10
-FLOW_SLOW_MIN   = 0.02
+FLOW_NORMAL_MIN = 0.002
+FLOW_SLOW_MIN   = 0.001
 WEIGHT_FLOW     = 0.60
 WEIGHT_TREND    = 0.40
-MAX_FLOW_RATE   = 1.0
+MAX_FLOW_RATE   = 0.002
 MAX_TREND_RISE  = 5.0
 FRAME_COUNT     = 5
 
@@ -207,10 +228,13 @@ def call_ai_service(image_bytes: bytes):
 # How far back to look for the MQTT-created anchor reading that these
 # frames belong to. MQTT fires first in the device's loop and is a tiny
 # payload (near-instant); HTTP frame upload is the slow multipart leg
-# that follows. 30s comfortably covers normal timing plus some slack
-# for a slow cellular window, without being so wide it risks attaching
-# frames to a stale, unrelated reading from a prior cycle.
-MQTT_MATCH_WINDOW_SECONDS = 30
+# that follows. Originally set to 30s, but field testing on a
+# weak-signal device (~-95dBm) showed the frame upload alone taking
+# ~46s under poor cellular conditions, causing legitimate uploads to
+# 409 even though MQTT had succeeded. Widened to give real-world slow
+# connections realistic room, while still bounded enough to avoid
+# attaching frames to a stale, unrelated reading from a prior cycle.
+MQTT_MATCH_WINDOW_SECONDS = 90
 
 
 class SensorReadingWithFlowView(APIView):
@@ -289,6 +313,9 @@ class SensorReadingWithFlowView(APIView):
         reading.clog_pct        = clog_pct
         reading.save(update_fields=['water_flow_rate', 'water_flow', 'clog_pct'])
 
+        from apps.sensor_readings.services import evaluate_clog
+        evaluate_clog(reading)
+
         if clog_pct is not None and clog_pct >= CLASSIFY_THRESHOLD:
             self._handle_clog_classification(
                 node=node,
@@ -308,8 +335,6 @@ class SensorReadingWithFlowView(APIView):
         from apps.alerts.models import Alert
         from django.utils import timezone
         from datetime import timedelta
-        from apps.sensor_readings.signals import get_clog_severity
-        from apps.waste_classification.utils import estimate_weight_kg
 
         ai_result = call_ai_service(frame_bytes)
         classification_result = ai_result.get("classification") if ai_result else None
@@ -331,26 +356,16 @@ class SensorReadingWithFlowView(APIView):
 
         hotspot = node.hotspot if node else None
 
-        # Prefer the item-count-based estimate (YOLO) once a trained model
-        # exists. Until then, estimate_weight_from_detection returns
-        # (None, None) and we transparently fall back to the existing
-        # geometry-based formula — dominant_label/MobileNetV2 output is
-        # unaffected either way, only the weight number's source changes.
         detection = ai_result.get("detection") if ai_result else {}
         detected_kg = detection.get("estimated_kg")
         detected_counts = detection.get("counts_by_class")
+
         if detected_kg is not None:
             estimated_kg = detected_kg
             print(f"[DEBUG] estimated_kg from detection: {estimated_kg} counts={detected_counts}")
         else:
-            estimated_kg = estimate_weight_kg(
-                canal_width=hotspot.canal_width if hotspot else None,
-                sensor_height=hotspot.sensor_height if hotspot else None,
-                water_level=reading.water_level,
-                clog_pct=clog_pct,
-                waste_type=dominant_label,
-            )
-            estimated_kg = estimated_kg if estimated_kg is not None else 0.0
+            print(f"[WARN] YOLO returned no detection for reading {reading.reading_id} — defaulting estimated_kg to 0.0")
+            estimated_kg = 0.0
 
         classification = WasteClassification.objects.create(
             node=node,

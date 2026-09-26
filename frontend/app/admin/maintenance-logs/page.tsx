@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button"
 
 // lib
 import { api } from "@/lib/api"
-import { exportPdf } from "@/lib/exportPDF"
+import { printReport } from "@/lib/printReport"
+import { getUser } from "@/lib/auth"
 
 // hooks
 import { usePageCache } from "@/components/hooks/usePageCache"
@@ -21,11 +22,11 @@ import { usePolling } from "@/components/hooks/usePolling"
 import { usePagination } from "@/components/hooks/usePagination"
 
 // components
+import { PrintReport } from "@/components/PrintReport/PrintReport"
 import { SearchFilter } from "@/components/SearchFilter"
-import { useExportDialog } from "@/components/ExportDialog/useExportDialog"
 import { SpinnerIcon } from "@/components/SpinnerIcon"
 import { Toast } from "@/components/Toast"
-import { AuditSkeleton } from "@/components/Skeleton/Admin/AuditSkeleton"
+import { MaintenanceLogsSkeleton } from "@/components/Skeleton/Admin/MaintenanceLogsSkeleton"
 
 
 type MaintenanceLog = {
@@ -46,6 +47,7 @@ type MaintenanceLog = {
   } | null
   started_at: string
   resolved_at: string | null
+  closed_reason: 'Fixed' | 'Retired' | null
 }
 
 function getMonthOptions() {
@@ -90,17 +92,9 @@ export default function MaintenanceLogs() {
 
   const { toasts, addToast, removeToast } = useToast()
 
-  const { requestExport, ExportDialogs } = useExportDialog(async () => {
-    try {
-      await exportPdf(
-        "/api/maintenance-logs/export/",
-        { month: selectedMonth || undefined },
-        "maintenance-logs.pdf"
-      )
-    } catch {
-      addToast("Failed to export maintenance logs.", "error")
-    }
-  }, { description: "Are you sure you want to export the maintenance logs shown here as a PDF?" })
+  const handlePrint = () => {
+    printReport()
+  }
 
   const filteredLogs = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -135,13 +129,25 @@ export default function MaintenanceLogs() {
 
   const { paginated, currentPage, setCurrentPage, totalItems, itemsPerPage } = usePagination(filteredLogs, rows)
 
+  const printRows = filteredLogs.map(l => [
+    l.node_details?.node_name ?? 'Unknown Node',
+    l.reason,
+    new Date(l.started_at).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+    l.resolved_at
+      ? new Date(l.resolved_at).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+      : 'Ongoing',
+  ])
+
+  const currentUser = getUser()
+  const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Admin'
+
   useEffect(() => {
     setCurrentPage(1)
   }, [search, selectedMonth, setCurrentPage])
 
   usePolling(async () => { await logsCache.refetch() }, 30000)
 
-  if (loading) return <AuditSkeleton />
+  if (loading) return <MaintenanceLogsSkeleton />
 
   return (
     <div className="w-full h-full flex flex-col gap-2 max-w-full box-border">
@@ -162,9 +168,9 @@ export default function MaintenanceLogs() {
             <ChevronDown size={14} className="text-[#999999]" />
           </button>
 
-          <Button onClick={() => requestExport()} disabled={exporting} className="bg-[#2fd45b] hover:bg-[#28b54e] cursor-pointer py-[17px]">
+          <Button onClick={handlePrint} className="bg-[#2fd45b] hover:bg-[#28b54e] cursor-pointer py-[17px]">
             <FileDown size={16}/>
-            {exporting ? "Exporting..." : "Export PDF"}
+            Export
           </Button>
 
           {isOpen && (
@@ -202,6 +208,7 @@ export default function MaintenanceLogs() {
                 <TableHead className='font-semibold text-left text-[#727272] text-xs px-1 whitespace-nowrap'>NODE</TableHead>
                 <TableHead className='font-semibold text-left text-[#727272] text-xs px-1 whitespace-nowrap'>REASON</TableHead>
                 <TableHead className='font-semibold text-left text-[#727272] text-xs px-1 whitespace-nowrap'>DATE MARKED</TableHead>
+                <TableHead className='font-semibold text-left text-[#727272] text-xs px-1 whitespace-nowrap'>DATE FIXED</TableHead>
               </TableRow>
             </TableHeader>
 
@@ -213,6 +220,13 @@ export default function MaintenanceLogs() {
                   </TableCell>
                   <TableCell className="text-[#122A48] text-left text-[12px] max-w-md px-2 h-7 truncate">{l.reason}</TableCell>
                   <TableCell className="text-[#122A48] text-left text-[12px] px-2 h-7 whitespace-nowrap">{new Date(l.started_at).toLocaleString()}</TableCell>
+                  <TableCell className="text-[#122A48] text-left text-[12px] px-2 h-7 whitespace-nowrap">
+                    {l.resolved_at ? (
+                      new Date(l.resolved_at).toLocaleString()
+                    ) : (
+                      <span className="inline-block px-2 py-0.5 rounded-full bg-[#FFF3CD] text-[#8A6D00] text-[11px] font-medium">Ongoing</span>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -266,7 +280,12 @@ export default function MaintenanceLogs() {
 
     <Toast toasts={toasts} onRemove={removeToast} />
 
-    {ExportDialogs}
+    <PrintReport
+      reportTitle="Maintenance Logs"
+      columns={["Node", "Reason", "Date Marked", "Date Fixed"]}
+      rows={printRows}
+      generatedBy={generatedBy}
+    />
 
     </div>
   )

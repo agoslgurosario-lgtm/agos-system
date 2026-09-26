@@ -4,46 +4,41 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import { api } from "@/lib/api";
-import { BarangayMonthlyReport } from "@/types/reports";
 import { exportPdf } from "@/lib/exportPdf";
+import type { CanalMonitoringReport, FinalCanalCondition } from "@/types/reports";
+import {
+  SEVERITY_COLORS, WATER_LEVEL_OPTIONS, OBSTRUCTION_COVERAGE_OPTIONS,
+  WATER_FLOW_OPTIONS, FINAL_CONDITION_OPTIONS, optionLabel,
+} from "@/constants/reports";
+import { PhotoPreviewModal } from "@/components/reports/PhotoPreviewModal";
 
 
-function RecyclablesCard({ report }: { report: BarangayMonthlyReport }) {
-  const groups = [
-    { label: "Bote / Plastic", kg: (report.bote_kg || 0) + (report.plastic_kg || 0), amount: report.amount_sold_bote_plastic },
-    { label: "Bakal", kg: report.bakal_kg || 0, amount: report.amount_sold_bakal },
-    { label: "Papel / Karton", kg: (report.papel_kg || 0) + (report.karton_kg || 0), amount: report.amount_sold_papel_karton },
-  ];
+const WASTE_ROWS: { key: keyof CanalMonitoringReport; label: string }[] = [
+  { key: "waste_plastic_kg", label: "Plastic" },
+  { key: "waste_food_wrapper_kg", label: "Food Wrapper" },
+  { key: "waste_paper_cardboard_kg", label: "Paper / Cardboard" },
+  { key: "waste_glass_kg", label: "Glass" },
+  { key: "waste_organic_kg", label: "Organic" },
+  { key: "waste_metal_kg", label: "Metal" },
+  { key: "waste_foam_kg", label: "Foam" },
+  { key: "waste_textile_kg", label: "Clothes / Textiles" },
+  { key: "waste_ewaste_kg", label: "E-waste" },
+];
 
-  return (
-    <View className="flex-1 rounded-xl border border-[#f1f5f9] bg-[#f8fafc] p-3 -mt-[px]"
-      style={{
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOpacity: 0.06,
-        shadowRadius: 4,
-        shadowOffset: { width: 0, height: 2 },
-      }}
-    >
-      <View className="mb-1.5 flex-row items-center gap-1.5">
-        <MaterialCommunityIcons name="recycle" size={16} color="#16a34a" />
-        <Text className="text-xs font-semibold text-[#334155]">Recyclables</Text>
-      </View>
-      <View className="gap-2">
-        {groups.map((g) => (
-          <View key={g.label} className="flex-row justify-between">
-            <Text className="text-[11px] text-[#64748b]">{g.label}</Text>
-            <View className="items-end">
-              <Text className="text-[11px] font-bold text-[#0f172a]">{g.kg} kg</Text>
-              <Text className="text-[10px] text-[#16a34a]">
-                {g.amount ? `₱ ${Number(g.amount).toFixed(2)}` : "—"}
-              </Text>
-            </View>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
+const FINAL_CONDITION_COLORS: Record<FinalCanalCondition, string> = {
+  Clear: "#15803d",
+  Partially_Clear: "#b45309",
+  Still_Obstructed: "#b91c1c",
+};
+
+function formatDateTime(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+    hour: "numeric", minute: "2-digit",
+  });
 }
 
 function DetailLabelValue({ label, value, flex = 1, valueColor = "#122A48", }: {
@@ -64,34 +59,6 @@ function DetailLabelValue({ label, value, flex = 1, valueColor = "#122A48", }: {
   );
 }
 
-function WasteCard({ icon, label, valueKg, }: {
-  icon: string;
-  label: string;
-  valueKg: number;
-}) {
-  return (
-    <View className="flex-1 rounded-xl border border-[#f1f5f9] bg-[#f8fafc] p-3"
-      style={{
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOpacity: 0.06,
-        shadowRadius: 4,
-        shadowOffset: { width: 0, height: 2 },
-      }}
-    >
-      <View className="mb-1.5 flex-row items-center gap-1.5">
-        <MaterialCommunityIcons name={icon as any} size={16} color="#16a34a" />
-        <Text className="text-xs font-semibold text-[#122A48]">
-          {label}
-        </Text>
-      </View>
-      <Text className="text-lg font-extrabold text-[#122A48]">
-        {valueKg} Kg
-      </Text>
-    </View>
-  );
-}
-
 function SectionHeader({ icon, title }: { icon: string; title: string }) {
   return (
     <View className="mb-3 mt-1 flex-row items-center gap-1.5">
@@ -103,16 +70,25 @@ function SectionHeader({ icon, title }: { icon: string; title: string }) {
   );
 }
 
+function WasteRow({ label, kg }: { label: string; kg: number }) {
+  return (
+    <View className="flex-row items-center justify-between border-b border-[#f1f5f9] py-2">
+      <Text className="text-[13px] text-[#475569]">{label}</Text>
+      <Text className="text-[13px] font-bold text-[#122A48]">{kg.toFixed(2)} kg</Text>
+    </View>
+  );
+}
 
 export default function ViewReportScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
 
-  const [report, setReport] = useState<BarangayMonthlyReport | null>(null);
+  const [report, setReport] = useState<CanalMonitoringReport | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-
   const [isExporting, setIsExporting] = useState(false);
+
+  const [preview, setPreview] = useState<{ photos: { uri: string }[]; index: number } | null>(null);
 
   useEffect(() => {
     if (!params.id) {
@@ -121,19 +97,32 @@ export default function ViewReportScreen() {
       return;
     }
     api
-      .get(`/api/barangay-reports/${params.id}/`)
-      .then((data) => setReport(data))
-      .catch(() => setLoadError(true))
-      .finally(() => setIsLoading(false));
-  }, [params.id]);
+      .get(`/api/canal-reports/${params.id}/`)
+      .then((data: CanalMonitoringReport) => {
+        // an unsubmitted report belongs in the form, not the read-only view
+        if (!data.is_submitted) {
+          router.replace({
+            pathname: "/new-report",
+            params: { report_id: String(data.report_id) },
+          } as any);
+          return;
+        }
+        setReport(data);
+        setIsLoading(false);
+      })
+      .catch(() => {
+        setLoadError(true);
+        setIsLoading(false);
+      });
+  }, [params.id, router]);
 
   const handleExport = async () => {
     if (!report) return;
     setIsExporting(true);
     try {
       await exportPdf(
-        `/api/barangay-reports/${report.monthly_report_id}/export/`,
-        `${report.barangay_details?.barangay_name ?? "barangay"}-MRF-${report.report_month}.pdf`
+        `/api/canal-reports/${report.report_id}/export/`,
+        `${report.barangay_details?.barangay_name ?? "barangay"}-Canal-Report-${report.report_id}.pdf`
       );
     } catch {
       Alert.alert("Export failed", "Could not generate the PDF. Please try again.");
@@ -163,21 +152,33 @@ export default function ViewReportScreen() {
     );
   }
 
-  const isDraft = report.status === "Draft";
+  const bannerColors = report.severity
+    ? SEVERITY_COLORS[report.severity]
+    : { bg: "#e2e8f0", text: "#475569" };
 
-  const statusConfig = {
-    Draft: { bg: "#fef3c7", text: "#b45309", icon: "clipboard-text-outline", label: "Draft" },
-    Pending: { bg: "#e0f2fe", text: "#0369a1", icon: "clock-outline", label: "Pending" },
-    Reviewed: { bg: "#bbf7d0", text: "#15803d", icon: "check-circle-outline", label: "Reviewed" },
-  } as const;
-  const { bg: bannerBg, text: bannerText, icon: bannerIcon, label: statusLabel } = statusConfig[report.status];
+  const coordinates =
+    report.latitude != null && report.longitude != null
+      ? `${report.latitude.toFixed(6)}, ${report.longitude.toFixed(6)}`
+      : "";
 
-  const beforePhotos = report.media.filter((m) => m.media_category === "Before_Clearing");
-  const afterPhotos = report.media.filter((m) => m.media_category === "After_Clearing");
-  const hasAttachment = beforePhotos.length > 0 || afterPhotos.length > 0;
+  const wasteRows = [
+    ...WASTE_ROWS.map((row) => ({ label: row.label, kg: Number(report[row.key] ?? 0) })),
+    {
+      label: report.waste_other_label ? `Other (${report.waste_other_label})` : "Other",
+      kg: report.waste_other_kg ?? 0,
+    },
+  ].filter((row) => row.kg > 0);
 
-  const formattedMonth = new Date(report.report_month).toLocaleDateString("en-US", { month: "long", year: "numeric" });
-  const formattedEntryDate = new Date(report.clearing_date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  const photosBy = (category: string) => report.media.filter((m) => m.media_category === category);
+  const photoGroups = [
+    { label: "Before Cleanup", items: photosBy("Before_Clearing") },
+    { label: "After Cleanup", items: photosBy("After_Clearing") },
+    { label: "Additional Evidence", items: photosBy("Additional_Evidence") },
+  ].filter((group) => group.items.length > 0);
+
+  const filedBy = report.reported_by_details
+    ? `${report.reported_by_details.first_name} ${report.reported_by_details.last_name}`
+    : "";
 
   return (
     <SafeAreaView className="flex-1 bg-[#f8fafc]" edges={["top"]}>
@@ -191,16 +192,24 @@ export default function ViewReportScreen() {
         <View></View>
       </View>
 
-      <View className="flex-row items-center justify-between px-4 py-2.5" style={{ backgroundColor: bannerBg }}>
+      <View
+        className="flex-row items-center justify-between px-4 py-2.5"
+        style={{ backgroundColor: bannerColors.bg }}
+      >
         <View className="flex-row items-center gap-1.5">
-          <MaterialCommunityIcons name={bannerIcon as any} size={18} color={bannerText} />
-          <Text className="text-[13px] font-bold" style={{ color: bannerText }}>{statusLabel}</Text>
+          <MaterialCommunityIcons name="alert-circle-outline" size={18} color={bannerColors.text} />
+          <Text className="text-[13px] font-bold" style={{ color: bannerColors.text }}>
+            {report.severity ? `${report.severity} severity` : "Submitted"}
+          </Text>
         </View>
-        <Text className="text-xs font-semibold" style={{ color: bannerText }}>{formattedEntryDate}</Text>
+        <Text className="text-xs font-semibold" style={{ color: bannerColors.text }}>
+          {formatDateTime(report.date_observed)}
+        </Text>
       </View>
 
       <ScrollView className="flex-1" contentContainerClassName="px-3.5 pt-3 pb-6">
-        <View className="rounded-2xl border border-[#f1f5f9] bg-white p-4 "
+        <View
+          className="rounded-2xl border border-[#f1f5f9] bg-white p-4"
           style={{
             elevation: 2,
             shadowColor: '#000',
@@ -209,112 +218,136 @@ export default function ViewReportScreen() {
             shadowOffset: { width: 0, height: 2 },
           }}
         >
-          <SectionHeader icon="information-outline" title="REPORT DETAILS" />
+          {/* SITE */}
+          <SectionHeader icon="map-marker-radius-outline" title="MONITORING SITE" />
+          <DetailLabelValue label="CANAL NAME / ID" value={report.canal_name ?? ""} />
+          <View className="flex-row">
+            <DetailLabelValue label="BARANGAY" value={report.barangay_details?.barangay_name ?? ""} />
+            <DetailLabelValue label="MUNICIPALITY" value="Rosario, La Union" />
+          </View>
+          <DetailLabelValue label="GPS COORDINATES" value={coordinates} />
+          <DetailLabelValue label="NEAREST LANDMARK" value={report.nearest_landmark} />
 
-          <View className="mt-1 ">
-            <DetailLabelValue label="REPORT MONTH" value={formattedMonth} />
-            <View className="flex-row">
-              <DetailLabelValue label="ENTRY DATE" value={formattedEntryDate} />
-              <DetailLabelValue label="LOCATION" value={report.barangay_details?.barangay_name ?? ""} />
-            </View>
-            <View className="flex-row">
-              <DetailLabelValue label="TOTAL AMOUNT SOLD" value={`₱ ${Number(report.amount_sold ?? 0).toFixed(2)}`} />
-              <DetailLabelValue label="STATUS" value={statusLabel} valueColor={bannerText} />
-            </View>
-            <View className="flex-row">
-              <DetailLabelValue
-                label="SUBMITTED BY"
-                value={report.submitted_by_details ? `${report.submitted_by_details.first_name} ${report.submitted_by_details.last_name}` : ""}
-              />
-              <DetailLabelValue
-                label="VERIFIED BY"
-                value={report.verified_by_details ? `${report.verified_by_details.first_name} ${report.verified_by_details.last_name}` : ""}
-              />
-            </View>
-            {report.remarks ? <DetailLabelValue label="NARRATIVE REPORT" value={report.remarks} /> : null}
+          <View className="my-3 h-px bg-[#f1f5f9]" />
+
+          {/* DETECTION SUMMARY */}
+          <SectionHeader icon="clipboard-alert-outline" title="DETECTION SUMMARY" />
+          <View className="flex-row">
+            <DetailLabelValue label="DATE / TIME OBSERVED" value={formatDateTime(report.date_observed)} flex={2} />
+            <DetailLabelValue
+              label="SEVERITY"
+              value={report.severity ?? ""}
+              valueColor={bannerColors.text}
+            />
           </View>
 
           <View className="my-3 h-px bg-[#f1f5f9]" />
 
-          <SectionHeader icon="trash-can-outline" title="WASTE COLLECTED (KG)" />
-          <View className="mb-3 gap-2.5">
-            <View className="flex-row gap-2.5">
-              <WasteCard icon="leaf" label="Biodegradable" valueKg={report.biodegradable_kg || 0} />
-            </View>
-            <View className="mt-2.5">
-              <RecyclablesCard report={report} />
-            </View>
-            <View className="flex-row gap-2.5">
-              <WasteCard icon="delete-outline" label="Residual" valueKg={report.residual_waste_kg || 0} />
-              <WasteCard icon="archive-outline" label="Special" valueKg={report.special_waste_kg || 0} />
-            </View>
+          {/* CANAL CONDITION */}
+          <SectionHeader icon="waves" title="CANAL CONDITION" />
+          <View className="flex-row">
+            <DetailLabelValue label="WATER LEVEL" value={optionLabel(WATER_LEVEL_OPTIONS, report.water_level)} />
+            <DetailLabelValue
+              label="OBSTRUCTION"
+              value={optionLabel(OBSTRUCTION_COVERAGE_OPTIONS, report.obstruction_coverage)}
+            />
+          </View>
+          <DetailLabelValue label="WATER FLOW" value={optionLabel(WATER_FLOW_OPTIONS, report.water_flow_condition)} />
+
+          <View className="my-3 h-px bg-[#f1f5f9]" />
+
+          {/* WASTE COMPOSITION */}
+          <SectionHeader icon="trash-can-outline" title="WASTE COMPOSITION" />
+          <View className="mb-3">
+            {wasteRows.length > 0 ? (
+              wasteRows.map((row) => <WasteRow key={row.label} label={row.label} kg={row.kg} />)
+            ) : (
+              <Text className="text-[13px] text-[#94a3b8]">No waste breakdown recorded.</Text>
+            )}
           </View>
 
-          {hasAttachment && (
+          <View className="my-3 h-px bg-[#f1f5f9]" />
+
+          {/* BARANGAY RESPONSE */}
+          <SectionHeader icon="account-hard-hat-outline" title="BARANGAY RESPONSE" />
+          <DetailLabelValue label="ASSIGNED PERSONNEL" value={report.assigned_personnel ?? ""} />
+          <DetailLabelValue label="DATE / TIME RESPONDED" value={formatDateTime(report.date_responded)} />
+          <DetailLabelValue label="ACTION TAKEN" value={report.action_taken ?? ""} />
+          <View className="flex-row">
+            <DetailLabelValue
+              label="WASTE COLLECTED"
+              value={report.waste_collected_amount != null ? `${report.waste_collected_amount} kg` : ""}
+            />
+            <DetailLabelValue
+              label="FINAL CANAL CONDITION"
+              value={optionLabel(FINAL_CONDITION_OPTIONS, report.final_canal_condition)}
+              valueColor={
+                report.final_canal_condition ? FINAL_CONDITION_COLORS[report.final_canal_condition] : "#122A48"
+              }
+            />
+          </View>
+          {report.remarks ? <DetailLabelValue label="REMARKS" value={report.remarks} /> : null}
+          <DetailLabelValue label="FILED BY" value={filedBy} />
+
+          {photoGroups.length > 0 && (
             <>
               <View className="my-3 h-px bg-[#f1f5f9]" />
-              <SectionHeader icon="paperclip" title="ATTACHMENTS" />
+              <SectionHeader icon="paperclip" title="PHOTOS" />
               <View className="mb-3 gap-2.5">
-                {beforePhotos.length > 0 && (
-                  <View>
-                    <Text className="mb-1.5 text-[11px] font-semibold text-[#122A48]">Before Clearing</Text>
+                {photoGroups.map((group) => (
+                  <View key={group.label}>
+                    <Text className="mb-1.5 text-[11px] font-semibold text-[#122A48]">{group.label}</Text>
                     <View className="flex-row flex-wrap gap-2">
-                      {beforePhotos.map((m) => (
-                        <Image key={m.media} source={{ uri: m.file_url ?? undefined }} className="h-20 w-20 rounded-[10px]" />
+                      {group.items.map((m, i) => (
+                        <TouchableOpacity
+                          key={m.media}
+                          activeOpacity={0.85}
+                          onPress={() =>
+                            setPreview({
+                              photos: group.items.map((x) => ({ uri: x.file_url ?? "" })),
+                              index: i,
+                            })
+                          }
+                        >
+                          <Image
+                            source={{ uri: m.file_url ?? undefined }}
+                            className="h-20 w-20 rounded-[10px]"
+                          />
+                        </TouchableOpacity>
                       ))}
                     </View>
                   </View>
-                )}
-                {afterPhotos.length > 0 && (
-                  <View>
-                    <Text className="mb-1.5 text-[11px] font-semibold text-[#122A48]">After Clearing</Text>
-                    <View className="flex-row flex-wrap gap-2">
-                      {afterPhotos.map((m) => (
-                        <Image key={m.media} source={{ uri: m.file_url ?? undefined }} className="h-20 w-20 rounded-[10px]" />
-                      ))}
-                    </View>
-                  </View>
-                )}
+                ))}
               </View>
             </>
           )}
 
           <View className="mt-4">
-            <View className="flex-row gap-2.5">
-              {isDraft && (
-                <TouchableOpacity
-                  onPress={() =>
-                    router.push({
-                      pathname: "/new-report",
-                      params: { barangay: String(report.barangay), report_month: report.report_month },
-                    } as any)
-                  }
-                  className="flex-1 flex-row items-center justify-center gap-1.5 rounded-[10px] border border-[#cbd5e1] bg-[#f1f5f9] py-3"
-                >
-                  <MaterialCommunityIcons name="pencil-outline" size={18} color="#334155" />
-                  <Text className="text-[13px] font-semibold text-[#334155]">Continue Draft</Text>
-                </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleExport}
+              disabled={isExporting}
+              className="flex-row items-center justify-center gap-1.5 rounded-[10px] bg-[#16a34a] py-3"
+              style={isExporting ? { opacity: 0.6 } : undefined}
+            >
+              {isExporting ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <MaterialCommunityIcons name="tray-arrow-up" size={18} color="white" />
               )}
-
-                <TouchableOpacity
-                  onPress={handleExport}
-                  disabled={isExporting}
-                  className="flex-1 flex-row items-center justify-center gap-1.5 rounded-[10px] bg-[#16a34a] py-3"
-                  style={isExporting ? { opacity: 0.6 } : undefined}
-                >
-                  {isExporting ? (
-                    <ActivityIndicator size="small" color="white" />
-                  ) : (
-                    <MaterialCommunityIcons name="tray-arrow-up" size={18} color="white" />
-                  )}
-                  <Text className="text-[13px] font-semibold text-white">
-                    {isExporting ? "Exporting..." : "Export to PDF"}
-                  </Text>
-                </TouchableOpacity>
-            </View>
+              <Text className="text-[13px] font-semibold text-white">
+                {isExporting ? "Exporting..." : "Export to PDF"}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
+
+      <PhotoPreviewModal
+        visible={preview !== null}
+        photos={preview?.photos ?? []}
+        initialIndex={preview?.index ?? 0}
+        onClose={() => setPreview(null)}
+      />
     </SafeAreaView>
   );
 }

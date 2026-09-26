@@ -7,6 +7,8 @@ from apps.users.permissions import IsAdmin, IsMENRO, IsAdminOrMENRO, IsAdminOrME
 import re
 from rest_framework.views import APIView
 from apps.audit_logs.utils import log_action
+from apps.sensor_nodes.models import NodeAssignmentHistory
+from apps.sensor_nodes.serializers import NodeAssignmentHistorySerializer
 
 
 class HotspotListView(generics.ListCreateAPIView):
@@ -115,3 +117,15 @@ class HotspotAvailableByBarangayView(generics.ListAPIView):
             barangay__barangay_id=barangay_id,
             is_active=True
         ).exclude(hotspot_id__in=occupied_ids).order_by('name')
+
+
+class HotspotAssignmentHistoryView(generics.ListAPIView):
+    """Every node this hotspot has had assigned to it, newest first."""
+    serializer_class = NodeAssignmentHistorySerializer
+    permission_classes = [IsAdmin]
+    pagination_class = None
+
+    def get_queryset(self):
+        return NodeAssignmentHistory.objects.filter(
+            hotspot_id=self.kwargs['hotspot_id']
+        ).select_related('node', 'assigned_by', 'ended_by').order_by('-started_at')

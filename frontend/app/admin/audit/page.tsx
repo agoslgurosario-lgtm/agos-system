@@ -9,15 +9,16 @@ import { Button } from "@/components/ui/button"
 import { usePagination } from "@/components/hooks/usePagination"
 import { SearchFilter } from "@/components/SearchFilter"
 import { api } from "@/lib/api"
-import { exportPdf } from "@/lib/exportPDF"
 import { usePolling } from "@/components/hooks/usePolling"
 import { useToast } from "@/components/hooks/useToast"
 import { Toast } from "@/components/Toast"
 import { AuditSkeleton } from "@/components/Skeleton/Admin/AuditSkeleton"
 import { usePageCache } from "@/components/hooks/usePageCache"
 import { useFillRows } from "@/components/hooks/useFillRows"
-import { useExportDialog } from "@/components/ExportDialog/useExportDialog"
 import { SpinnerIcon } from "@/components/SpinnerIcon"
+import { PrintReport } from "@/components/PrintReport/PrintReport"
+import { printReport } from "@/lib/printReport"
+import { getUser } from "@/lib/auth"
 
 
 const affectedTableLabels: Record<string, string> = {
@@ -101,18 +102,6 @@ export default function Audit() {
   const [exporting, setExporting] = useState(false)
   
   const { toasts, addToast, removeToast } = useToast()
-
-  const { requestExport, ExportDialogs } = useExportDialog(async () => {
-    try {
-      await exportPdf(
-        "/api/audit-logs/export/",
-        { search, start_date: startDate, end_date: endDate },
-        "audit-logs.pdf"
-      )
-    } catch {
-      addToast("Failed to export audit logs.", "error")
-    }
-  }, { description: "Are you sure you want to export the audit logs shown here as a PDF?" })
   
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -179,6 +168,24 @@ export default function Audit() {
     return "Filter by Date"
   }, [startDate, endDate])
 
+    const printRows = filteredAudits.map(a => [
+    a.audit_id,
+    a.user_details ? `${a.user_details.first_name} ${a.user_details.last_name}` : '—',
+    a.action,
+    formatAffectedTableLabel(a.affected_table),
+    a.old_value?.trim() || '—',
+    a.new_value?.trim() || '—',
+    a.ip_address || '—',
+    new Date(a.timestamp).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+  ])
+
+  const currentUser = getUser()
+  const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Admin'
+
+  const handlePrint = () => {
+    printReport()
+  }
+
 
   if (loading) return <AuditSkeleton/>
 
@@ -205,9 +212,9 @@ export default function Audit() {
             <ChevronDown size={14} className="text-[#999999]" />
           </button>
 
-          <Button onClick={() => requestExport()} disabled={exporting} className="bg-[#2fd45b] hover:bg-[#28b54e] cursor-pointer py-[17px]">
+          <Button onClick={handlePrint} className="bg-[#2fd45b] hover:bg-[#28b54e] cursor-pointer py-[17px]">
             <FileDown size={16}/>
-            {exporting ? "Exporting..." : "Export PDF"}
+            Export
           </Button>
 
           {/* Expanded Dual Calendar Dropdown Card Panel */}
@@ -330,7 +337,12 @@ export default function Audit() {
 
     <Toast toasts={toasts} onRemove={removeToast} />
 
-    {ExportDialogs}
+    <PrintReport
+      reportTitle="Audit Logs"
+      columns={["ID", "User", "Action", "Table", "Old Value", "New Value", "IP Address", "Timestamp"]}
+      rows={printRows}
+      generatedBy={generatedBy}
+    />
 
     </div>
   )

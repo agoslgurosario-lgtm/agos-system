@@ -10,7 +10,7 @@ import { useToast } from "@/components/hooks/useToast"
 import { Toast } from "@/components/Toast"
 import { ClogEventsSkeleton } from "@/components/Skeleton/Admin/HistorySkeleton/ClogEventsSkeleton"
 import { useFillRows } from "@/components/hooks/useFillRows"
-import { useExportDialog } from "@/components/ExportDialog/useExportDialog"
+import { PrintReport } from "@/components/PrintReport/PrintReport"
 import { SpinnerIcon } from "@/components/SpinnerIcon"
 
 // react
@@ -30,8 +30,9 @@ import { fetchWithAuth } from "@/lib/auth"
 
 // lib
 import { usePageCache } from "@/components/hooks/usePageCache"
-import { exportPdf } from "@/lib/exportPDF"
 import { useWebSocket } from "@/lib/hooks/useWebSocket"
+import { printReport } from "@/lib/printReport"
+import { getUser } from "@/lib/auth"
 
 
 type Clogs = {
@@ -65,7 +66,8 @@ type Clogs = {
   classification_details: {
     classification_id: number
     dominant_waste_type: string
-  }
+  } | null
+  auto_cleared: boolean
 }
 
 type ClogMedia = {
@@ -219,17 +221,23 @@ export default function ClogEvents() {
 
   usePolling(refetchAll, 30000)
 
-  const { requestExport, ExportDialogs } = useExportDialog(async () => {
-    try {
-      await exportPdf(
-        "/api/clog-events/export/",
-        { search, barangay: barangay !== "All Barangay" ? barangay : undefined, severity: severity !== "All Severity" ? severity : undefined },
-        "clog-events.pdf"
-      )
-    } catch {
-      addToast("Failed to export clog events.", "error")
-    }
-  }, { description: "Are you sure you want to export the clog events shown here as a PDF?" })
+  const printRows = filtered.map(c => [
+    c.event_id,
+    c.severity,
+    c.detected_at ? new Date(c.detected_at).toLocaleString('en-PH', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }) : '—',
+    c.resolved_at ? new Date(c.resolved_at).toLocaleString('en-PH', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }) : '—',
+    c.barangay_details?.barangay_name ? `Brgy. ${c.barangay_details.barangay_name}` : '—',
+    c.reading_details?.water_level != null ? `${c.reading_details.water_level} cm` : '—',
+    c.reading_details?.water_flow_rate != null ? `${Number(c.reading_details.water_flow_rate).toFixed(5)} m/s` : '—',
+    c.status === 'Cleared' && c.auto_cleared ? 'Cleared (Auto)' : c.status,
+  ])
+
+  const currentUser = getUser()
+  const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Admin'
+
+  const handlePrint = () => {
+    printReport()
+  }
 
   useWebSocket({
     path: "/ws/clog-events/",
@@ -305,9 +313,9 @@ export default function ClogEvents() {
           </div>
 
           <div>
-            <Button onClick={() => requestExport()} className="bg-[#2fd45b] hover:bg-[#28b54e] cursor-pointer">
+            <Button onClick={handlePrint} className="bg-[#2fd45b] hover:bg-[#28b54e] cursor-pointer">
               <FileDown size={16} className="mr-1" />
-              Export PDF
+              Export
             </Button>
           </div>
 
@@ -385,7 +393,16 @@ export default function ClogEvents() {
                       <TableCell className="text-[#122A48] text-left h-13 text-xs">Brgy. {clog?.barangay_details?.barangay_name}</TableCell>
                       <TableCell className="text-[#122A48] text-left h-13 text-xs">{clog?.reading_details?.water_level ?? '—'} cm</TableCell>
                       <TableCell className="text-[#122A48] text-left h-13 text-xs">~ {clog.reading_details?.water_flow_rate != null ? Number(clog.reading_details.water_flow_rate).toFixed(5) : '—'} m/s</TableCell>
-                      <TableCell className="text-[#122A48] text-left h-13 text-xs">{clog.status}</TableCell>
+                      <TableCell className="text-[#122A48] text-left h-13 text-xs">
+                        <span className="inline-flex items-center gap-1.5">
+                          {clog.status}
+                          {clog.status === 'Cleared' && clog.auto_cleared && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#E5E5E6] text-[#727272]">
+                              Auto
+                            </span>
+                          )}
+                        </span>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -496,8 +513,7 @@ export default function ClogEvents() {
                 </div>
                 <div className="flex justify-between text-xs">
                   <p>Waste Classification</p>
-                  <p>{selectedClog.classification_details.dominant_waste_type}</p>
-
+                  <p>{selectedClog.classification_details?.dominant_waste_type ?? '—'}</p>
                 </div>
               </div>
 
@@ -526,7 +542,14 @@ export default function ClogEvents() {
 
                 <div className="flex justify-between text-xs">
                   <p>Status</p>
-                  <p>{selectedClog.status}</p>
+                  <p className="flex items-center gap-1.5">
+                    {selectedClog.status}
+                    {selectedClog.status === 'Cleared' && selectedClog.auto_cleared && (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#E5E5E6] text-[#727272]">
+                        Auto
+                      </span>
+                    )}
+                  </p>
                 </div>
 
               </div>
@@ -538,7 +561,13 @@ export default function ClogEvents() {
 
         </div>
         <Toast toasts={toasts} onRemove={removeToast} />
-        {ExportDialogs}
+        
+        <PrintReport
+          reportTitle="Clog Events"
+          columns={["ID", "Severity", "Detected At", "Resolved At", "Location", "Water Level", "Water Flow", "Status"]}
+          rows={printRows}
+          generatedBy={generatedBy}
+        />
 
       </div>
     </>

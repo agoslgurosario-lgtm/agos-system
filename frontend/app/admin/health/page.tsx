@@ -1,7 +1,7 @@
 "use client"
 
 // icons
-import { BatteryMedium, Signal, ScanSearch, Radar, FileSearch, Battery, FileDown, Wrench, CheckCircle2, X } from "lucide-react";
+import { BatteryMedium, Signal, ScanSearch, Radar, FileSearch, Battery, FileDown, Wrench, CheckCircle2, X, Moon } from "lucide-react";
 
 // react
 import { useEffect, useState } from "react";
@@ -9,11 +9,11 @@ import { useEffect, useState } from "react";
 // components
 import AgosMapWrapper from "@/components/Map/AgosMapWrapper";
 import { HealthSkeleton } from "@/components/Skeleton/Admin/HealthSkeleton";
-import { useExportDialog } from "@/components/ExportDialog/useExportDialog";
-import { exportPdf } from "@/lib/exportPDF";
 import { useToast } from "@/components/hooks/useToast";
 import { Toast } from "@/components/Toast";
 import { SpinnerIcon } from "@/components/SpinnerIcon";
+import { AssignNodeDialog, AssignNodeDialogPayload } from "@/components/AssignNodeDialog"
+import { PrintReport } from "@/components/PrintReport/PrintReport"
 
 // shadcn
 import { Button } from "@/components/ui/button"
@@ -24,6 +24,8 @@ import { Field, FieldLabel, FieldError } from "@/components/ui/field"
 // lib
 import { api } from "@/lib/api"
 import { DIALOG_COLOR } from "@/lib/constant"
+import { printReport } from "@/lib/printReport"
+import { getUser } from "@/lib/auth"
 
 // auth
 import { fetchWithAuth } from "@/lib/auth";
@@ -59,6 +61,11 @@ type SensorNode = {
   health_status: string | null
   is_online: boolean
   device_model?: string
+  hotspot_details: { hotspot_id: number; name: string; latitude: number; longitude: number } | null
+  barangay_details: { barangay_id: number; barangay_name: string } | null
+  installed_at: string
+  forced_sleep_until: string | null
+  is_force_sleeping: boolean
 }
 
 type HealthAlerts = {
@@ -79,6 +86,15 @@ type HealthAlerts = {
     sensor_continuity?: boolean
     status?: string
   } | null
+}
+
+type Barangay = { barangay_id: number; barangay_name: string }
+type Hotspot = {
+  hotspot_id: number
+  name: string
+  latitude: number
+  longitude: number
+  barangay_details?: { barangay_id: number; barangay_name: string } | null
 }
 
 function getBarColor(pct: number) {
@@ -151,6 +167,8 @@ export default function Health() {
 
   // node data states
   const [allNodes, setAllNodes] = useState<SensorNode[]>([])
+  const [allBarangays, setAllBarangays] = useState<Barangay[]>([])
+  const [allHotspots, setAllHotspots] = useState<Hotspot[]>([])
   const [healthAlert, setHealthAlert] = useState<HealthAlerts[]>([])
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null)
   const [selectedNode, setSelectedNode] = useState<NodeHealth | null>(null)
@@ -163,13 +181,35 @@ export default function Health() {
   const [successDialog, setSuccessDialog] = useState<{ open: boolean; message?: string }>({ open: false })
   const [errorDialog, setErrorDialog] = useState<{ open: boolean; message: string }>({ open: false, message: '' })
 
-  const [availableDialog, setAvailableDialog] = useState(false)
+  const [fixDialogOpen, setFixDialogOpen] = useState(false)
+  const [pendingFix, setPendingFix] = useState<AssignNodeDialogPayload | null>(null)
+  const [fixConfirmDialog, setFixConfirmDialog] = useState(false)
+  const [skipAssignDialog, setSkipAssignDialog] = useState(false)
   const [availableSubmitting, setAvailableSubmitting] = useState(false)
+
+  const [forceSleepDialogOpen, setForceSleepDialogOpen] = useState(false)
+  const [sleepMinutes, setSleepMinutes] = useState<number | null>(null)
+  const [customHours, setCustomHours] = useState('')
+  const [sleepError, setSleepError] = useState('')
+  const [cancelSleepDialogOpen, setCancelSleepDialogOpen] = useState(false)
 
   const emptyStateText = selectedNodeId === null ? 'No node selected' : 'No health data yet'
   
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState(false)
+
+  const allHotspotMarkers = allHotspots.map(h => {
+    const assignedNode = allNodes.find(n => n.hotspot_details?.hotspot_id === h.hotspot_id)
+    return {
+      latitude: h.latitude,
+      longitude: h.longitude,
+      label: assignedNode ? `${assignedNode.node_name}` : h.name,
+      condition: assignedNode ? 'Occupied' : 'Available',
+      sublabel: assignedNode ? `Occupying: ${h.name}` : "Available hotspot",
+      usePin: !!assignedNode,
+      barangay_id: h.barangay_details?.barangay_id ?? null,
+    }
+  })
 
   // summary cards — derived from the latest health log per node (this month)
   const totalOnline = allNodes.filter(n => n.status !== 'Maintenance' && n.is_online).length
@@ -195,7 +235,10 @@ export default function Health() {
   const sensorFailing = latestLogs.filter(l => l.sensor_continuity === false).length
 
   const isUnderMaintenance = selectedNode?.node_details.status === 'Maintenance'
-  
+
+  const nodeToFix = selectedNode
+    ? allNodes.find(n => n.node_id === selectedNode.node_details.node_id) ?? null
+    : null  
 
   const fetchNodes = async () => {
     try {
@@ -244,6 +287,20 @@ export default function Health() {
     fetchAlerts()
   }, [])
 
+  useEffect(() => {
+    const fetchBarangaysAndHotspots = async () => {
+      try {
+        const [bRes, hRes] = await Promise.all([
+          fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/barangays/`),
+          fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/hotspots/`),
+        ])
+        if (bRes.ok) { const d = await bRes.json(); setAllBarangays(d.results ?? d) }
+        if (hRes.ok) { const d = await hRes.json(); setAllHotspots(d.results ?? d) }
+      } catch {}
+    }
+    fetchBarangaysAndHotspots()
+  }, [])
+
   // handlers
   const handleSelectNode = async (nodeId: number) => {
     setSelectedNodeId(nodeId)
@@ -285,36 +342,139 @@ export default function Health() {
     }
   }
 
-  const handleMarkAvailable = async () => {
+  const handleFixDialogConfirm = (payload: AssignNodeDialogPayload) => {
+    setPendingFix(payload)
+    setFixDialogOpen(false)
+    setFixConfirmDialog(true)
+  }
+
+  const handleConfirmFix = async () => {
+    if (!selectedNode || !pendingFix) return
+    const nodeName = selectedNode.node_details.node_name
+    const nodeId = selectedNode.node_details.node_id
+
+    setFixConfirmDialog(false)
+    setLoadingDialog({ open: true, title: "Marking as Fixed", description: `Updating ${nodeName}. Please wait.` })
+
+    try {
+      await api.post(`/api/sensor-nodes/${nodeId}/mark-available/`, {
+        hotspot: parseInt(pendingFix.hotspot),
+        installed_at: pendingFix.installedAt ? new Date(pendingFix.installedAt).toISOString() : undefined,
+      })
+      setPendingFix(null)
+      await Promise.all([fetchNodes(), handleSelectNode(nodeId)])
+      setLoadingDialog({ open: false })
+      setSuccessDialog({ open: true, message: `${nodeName} has been marked as fixed and reassigned.` })
+    } catch (err: any) {
+      setLoadingDialog({ open: false })
+      setErrorDialog({ open: true, message: err?.error ?? err?.detail ?? `Failed to mark ${nodeName} as fixed.` })
+    }
+  }
+
+  const handleSkipAssign = async () => {
     if (!selectedNode) return
     const nodeName = selectedNode.node_details.node_name
     const nodeId = selectedNode.node_details.node_id
 
-    setAvailableDialog(false)
-    setLoadingDialog({ open: true, title: "Marking as Available", description: `Updating ${nodeName}. Please wait.` })
+    setSkipAssignDialog(false)
+    setLoadingDialog({ open: true, title: "Marking as Fixed", description: `Updating ${nodeName}. Please wait.` })
 
     try {
-      await api.post(`/api/sensor-nodes/${nodeId}/mark-available/`, {})
+      await api.post(`/api/sensor-nodes/${nodeId}/mark-available/`, { skip_assignment: true })
       await Promise.all([fetchNodes(), handleSelectNode(nodeId)])
       setLoadingDialog({ open: false })
-      setSuccessDialog({ open: true, message: `${nodeName} has been marked as available.` })
+      setSuccessDialog({ open: true, message: `${nodeName} has been marked as fixed.` })
     } catch (err: any) {
       setLoadingDialog({ open: false })
-      setErrorDialog({ open: true, message: err?.error ?? err?.detail ?? `Failed to mark ${nodeName} as available.` })
+      setErrorDialog({ open: true, message: err?.error ?? err?.detail ?? `Failed to mark ${nodeName} as fixed.` })
     }
   }
 
-  const { requestExport, ExportDialogs } = useExportDialog(async () => {
-    try {
-      await exportPdf(
-        "/api/system-health/export/",
-        {},
-        "system-health.pdf"
-      )
-    } catch {
-      addToast("Failed to export system health.", "error")
+  const SLEEP_PRESETS = [
+    { label: '30 min', minutes: 30 },
+    { label: '1 hour', minutes: 60 },
+    { label: '3 hours', minutes: 180 },
+    { label: '6 hours', minutes: 360 },
+    { label: '12 hours', minutes: 720 },
+    { label: '24 hours', minutes: 1440 },
+  ]
+
+  const handleForceSleep = async () => {
+    if (!selectedNode) return
+    const nodeName = selectedNode.node_details.node_name
+    const nodeId = selectedNode.node_details.node_id
+
+    let minutes = sleepMinutes
+    if (customHours.trim()) {
+      const h = parseFloat(customHours)
+      if (isNaN(h) || h <= 0) { setSleepError('Enter a valid number of hours.'); return }
+      if (h > 72) { setSleepError('Forced sleep cannot exceed 72 hours.'); return }
+      minutes = Math.round(h * 60)
     }
-  }, { description: "Are you sure you want to export the current system health summary as a PDF?" })
+    if (!minutes) { setSleepError('Pick a duration or enter a custom value.'); return }
+
+    setForceSleepDialogOpen(false)
+    setSleepMinutes(null)
+    setCustomHours('')
+    setSleepError('')
+    setLoadingDialog({ open: true, title: "Starting Forced Sleep", description: `Updating ${nodeName}. Please wait.` })
+
+    try {
+      await api.post(`/api/sensor-nodes/${nodeId}/force-sleep/`, { minutes })
+      await Promise.all([fetchNodes(), handleSelectNode(nodeId)])
+      setLoadingDialog({ open: false })
+      setSuccessDialog({ open: true, message: `${nodeName} has been forced to sleep.` })
+    } catch (err: any) {
+      setLoadingDialog({ open: false })
+      setErrorDialog({ open: true, message: err?.error ?? err?.detail ?? `Failed to force sleep on ${nodeName}.` })
+    }
+  }
+
+  const handleCancelForceSleep = async () => {
+    if (!selectedNode) return
+    const nodeName = selectedNode.node_details.node_name
+    const nodeId = selectedNode.node_details.node_id
+
+    setCancelSleepDialogOpen(false)
+    setLoadingDialog({ open: true, title: "Cancelling Forced Sleep", description: `Updating ${nodeName}. Please wait.` })
+
+    try {
+      await api.post(`/api/sensor-nodes/${nodeId}/cancel-force-sleep/`, {})
+      await Promise.all([fetchNodes(), handleSelectNode(nodeId)])
+      setLoadingDialog({ open: false })
+      setSuccessDialog({ open: true, message: `Forced sleep cancelled for ${nodeName}.` })
+    } catch (err: any) {
+      setLoadingDialog({ open: false })
+      setErrorDialog({ open: true, message: err?.error ?? err?.detail ?? `Failed to cancel forced sleep for ${nodeName}.` })
+    }
+  }
+
+  const printRows = allNodes
+    .filter(n => n.hotspot_details != null || n.status === 'Maintenance')
+    .sort((a, b) => a.node_name.localeCompare(b.node_name))
+    .map(n => {
+      const latest = latestHealthByNode.get(n.node_id)
+      if (!latest) {
+        return [n.node_name, n.barangay_details?.barangay_name ?? '—', n.status, '—', '—', '—', '—', 'No data yet']
+      }
+      return [
+        n.node_name,
+        n.barangay_details?.barangay_name ?? '—',
+        n.status,
+        latest.battery_voltage != null ? latest.battery_voltage.toFixed(1) : '—',
+        latest.battery_voltage != null ? `${getBatteryPct(latest.battery_voltage)}%` : '—',
+        latest.signal_strength != null ? `${latest.signal_strength}` : '—',
+        latest.sensor_continuity === true ? 'OK' : latest.sensor_continuity === false ? 'FAIL' : '—',
+        latest.checked_at ? new Date(latest.checked_at).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—',
+      ]
+    })
+
+  const currentUser = getUser()
+  const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Admin'
+
+  const handlePrint = () => {
+    printReport()
+  }
 
   if (loading) return <HealthSkeleton/>
 
@@ -326,9 +486,9 @@ export default function Health() {
         <div className="flex w-full mb-2 justify-between items-center">
           <p className="text-[#122A48] font-bold text-[15px]">Sensor Nodes Health</p>
 
-          <Button onClick={() => requestExport()} className="bg-[#2fd45b] hover:bg-[#28b54e] cursor-pointer">
+          <Button onClick={handlePrint} className="bg-[#2fd45b] hover:bg-[#28b54e] cursor-pointer">
             <FileDown size={16} className="mr-1" />
-            Export PDF
+            Export
           </Button>
         </div>
         
@@ -362,7 +522,7 @@ export default function Health() {
                 .map(n => ({
                   latitude:  n.latitude,
                   longitude: n.longitude,
-                  label:     n.node_name,
+                  label:     `${n.node_name} – ${n.barangay_details?.barangay_name ?? ''}`,
                   condition:
                     n.status === 'Maintenance' ? 'Maintenance' :
                     !n.is_online                ? 'Sleep' :
@@ -371,6 +531,7 @@ export default function Health() {
                 }))}
                 zoom={13}
                 colorMode="health"
+                showMarkerPopups={false}
               />
             </div>
           </div>
@@ -398,7 +559,7 @@ export default function Health() {
                   <p className="font-semibold">Hardware Details</p>
                 </div>
                 <div className="flex items-center gap-2 mx-3 mb-2 justify-between">
-                  <p className="text-xs">{selectedNode.node_details.node_name} - {selectedNode.node_details.barangay_details.barangay_name}</p>
+                  <p className="text-xs">{selectedNode.node_details.node_name} - {selectedNode.node_details.barangay_details?.barangay_name ?? '—'}</p>
 
                   {(() => {
                     const statusStyle: Record<string, { bg: string; text: string; dot: string }> = {
@@ -421,12 +582,20 @@ export default function Health() {
 
                 <div className="px-3 mb-3">
                   {selectedNode.node_details.status === 'Maintenance' ? (
-                    <button
-                      onClick={() => setAvailableDialog(true)}
-                      className="flex items-center justify-center gap-1.5 w-full rounded-full border border-[#2C7B3C] bg-white hover:bg-[#58D07120] text-[#2C7B3C] px-3 py-1.5 text-xs font-medium cursor-pointer"
-                    >
-                      <CheckCircle2 size={13} /> Mark as Available
-                    </button>
+                    <div className="flex flex-col gap-1.5">
+                      <button
+                        onClick={() => setFixDialogOpen(true)}
+                        className="flex items-center justify-center gap-1.5 w-full rounded-full border border-[#2C7B3C] bg-white hover:bg-[#58D07120] text-[#2C7B3C] px-3 py-1.5 text-xs font-medium cursor-pointer"
+                      >
+                        <CheckCircle2 size={13} /> Mark as Fixed
+                      </button>
+                      <button
+                        onClick={() => setSkipAssignDialog(true)}
+                        className="text-[10px] text-[#727272] hover:underline cursor-pointer"
+                      >
+                        Mark fixed without assigning
+                      </button>
+                    </div>
                   ) : (
                     <button
                       onClick={() => { setMaintenanceReason(""); setMaintenanceError(""); setMaintenanceDialog(true) }}
@@ -436,6 +605,31 @@ export default function Health() {
                     </button>
                   )}
                 </div>
+
+                {selectedNode.node_details.status !== 'Maintenance' && (
+                  <div className="px-3 mb-3">
+                    {nodeToFix?.is_force_sleeping ? (
+                      <div className="flex flex-col gap-1 rounded-lg border border-[#2563EB] bg-[#2563EB0D] px-3 py-2">
+                        <p className="text-[11px] text-[#2563EB] font-medium">
+                          Forced sleep until {nodeToFix.forced_sleep_until ? new Date(nodeToFix.forced_sleep_until).toLocaleString() : '—'}
+                        </p>
+                        <button
+                          onClick={() => setCancelSleepDialogOpen(true)}
+                          className="text-[10px] text-[#D81010] hover:underline cursor-pointer self-start"
+                        >
+                          Cancel forced sleep
+                        </button>
+                      </div>
+                    ) : nodeToFix?.hotspot_details ? (
+                      <button
+                        onClick={() => { setSleepMinutes(null); setCustomHours(''); setSleepError(''); setForceSleepDialogOpen(true) }}
+                        className="flex items-center justify-center gap-1.5 w-full rounded-full border border-[#2563EB] bg-white hover:bg-[#2563EB20] text-[#2563EB] px-3 py-1.5 text-xs font-medium cursor-pointer"
+                      >
+                        <Moon size={13} /> Force Deep Sleep
+                      </button>
+                    ) : null}
+                  </div>
+                )}
 
                 {isUnderMaintenance ? (
                   <div className="flex flex-col items-center justify-center gap-2 p-6 text-center flex-1">
@@ -708,19 +902,106 @@ export default function Health() {
         </DialogContent>
       </Dialog>
 
-      {/* Mark as Available confirm */}
+      {/* Force Deep Sleep duration picker */}
+      <Dialog open={forceSleepDialogOpen} onOpenChange={setForceSleepDialogOpen}>
+        <DialogContent className="text-[#122A48] w-[380px]">
+          <DialogHeader>
+            <DialogTitle className="font-bold text-base">Force Deep Sleep</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <p className="text-xs text-[#727272]">
+              {selectedNode?.node_details.node_name} will stop reporting until the sleep period ends or it's cancelled.
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {SLEEP_PRESETS.map(p => (
+                <button
+                  key={p.minutes}
+                  onClick={() => { setSleepMinutes(p.minutes); setCustomHours(''); setSleepError('') }}
+                  className={`text-xs rounded-lg border px-2 py-1.5 cursor-pointer ${
+                    sleepMinutes === p.minutes && !customHours
+                      ? 'border-[#2563EB] bg-[#2563EB1A] text-[#2563EB] font-medium'
+                      : 'border-[#C6C6C8] text-[#727272] hover:bg-[#F0F0F0]'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <Field className="flex gap-1.5 flex-col">
+              <FieldLabel className="text-[#122A48] text-xs">Custom (hours, max 72)</FieldLabel>
+              <input
+                type="number"
+                min={0}
+                max={72}
+                value={customHours}
+                onChange={e => { setCustomHours(e.target.value); setSleepMinutes(null); if (sleepError) setSleepError('') }}
+                placeholder="e.g. 48"
+                className="w-full rounded-lg bg-[#1565BC05] border border-[#727272] p-2 text-xs"
+              />
+            </Field>
+            <FieldError className="text-xs">{sleepError}</FieldError>
+            <div className="flex gap-2 justify-end mt-2">
+              <Button onClick={() => setForceSleepDialogOpen(false)} className="cursor-pointer bg-[#FAFCFD] border border-[#C6C6C8] text-[#727272] text-xs px-4 py-2">
+                Cancel
+              </Button>
+              <Button onClick={handleForceSleep} className="cursor-pointer bg-[#2563EB] hover:bg-[#1e50c2] text-xs px-4 py-2">
+                Start Sleep
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel forced sleep confirm */}
       <DialogModal
-        open={availableDialog}
-        onClose={() => setAvailableDialog(false)}
-        onConfirm={handleMarkAvailable}
+        open={cancelSleepDialogOpen}
+        onClose={() => setCancelSleepDialogOpen(false)}
+        onConfirm={handleCancelForceSleep}
+        color={DIALOG_COLOR.lightred}
+        icon={X}
+        iconColor={DIALOG_COLOR.red}
+        title="Cancel Forced Sleep"
+        description={<>Wake <strong>{selectedNode?.node_details.node_name}</strong> up and resume normal reporting?</>}
+        cancelLabel="Back"
+        confirmLabel="Confirm"
+      />
+
+      {/* Mark as Fixed — assign a hotspot */}
+      <AssignNodeDialog
+        open={fixDialogOpen}
+        node={nodeToFix}
+        allBarangays={allBarangays}
+        allHotspotMarkers={allHotspotMarkers}
+        onCancel={() => setFixDialogOpen(false)}
+        onConfirm={handleFixDialogConfirm}
+      />
+
+      {/* Confirm the picked hotspot */}
+      <DialogModal
+        open={fixConfirmDialog}
+        onClose={() => setFixConfirmDialog(false)}
+        onConfirm={handleConfirmFix}
         color={DIALOG_COLOR.lightgreen}
         icon={CheckCircle2}
         iconColor={DIALOG_COLOR.green}
-        title="Mark as Available"
-        description={<>Are you sure <strong>{selectedNode?.node_details.node_name}</strong> has been reinstalled and is ready to resume active monitoring?</>}
+        title="Confirm Assignment"
+        description={<>Mark <strong>{selectedNode?.node_details.node_name}</strong> as fixed and assign it to the selected hotspot?</>}
         cancelLabel="Cancel"
         confirmLabel="Confirm"
-        loading={availableSubmitting}
+      />
+
+      {/* Mark fixed without assigning */}
+      <DialogModal
+        open={skipAssignDialog}
+        onClose={() => setSkipAssignDialog(false)}
+        onConfirm={handleSkipAssign}
+        color={DIALOG_COLOR.lightgreen}
+        icon={CheckCircle2}
+        iconColor={DIALOG_COLOR.green}
+        title="Mark Fixed Without Assigning"
+        description={<><strong>{selectedNode?.node_details.node_name}</strong> will be marked fixed and returned to the unassigned pool. You can assign it a hotspot later from Node Assignment.</>}
+        cancelLabel="Cancel"
+        confirmLabel="Confirm"
       />
 
       {/* Loading dialog */}
@@ -758,7 +1039,13 @@ export default function Health() {
       />
 
       <Toast toasts={toasts} onRemove={removeToast} />
-      {ExportDialogs}
+
+      <PrintReport
+        reportTitle="System Health Summary"
+        columns={["Node", "Barangay", "Status", "Battery (V)", "Battery %", "Signal (dBm)", "Sensor", "Last Checked"]}
+        rows={printRows}
+        generatedBy={generatedBy}
+      />
      </>
    )
  }

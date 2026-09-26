@@ -24,13 +24,15 @@ import { useToast } from "@/components/hooks/useToast"
 import { Toast } from "@/components/Toast"
 import { AnalyticsSkeleton } from "@/components/Skeleton/Menro/AnalyticsSkeleton";
 import { useFillRows } from "@/components/hooks/useFillRows";
+import { PrintReport } from "@/components/PrintReport/PrintReport"
 
 // lib
-import { exportPdf } from "@/lib/exportPDF"
 import { useWebSocket } from "@/lib/hooks/useWebSocket"
 import { usePolling } from "@/components/hooks/usePolling"
 import { usePageCache } from "@/components/hooks/usePageCache";
 import { SpinnerIcon } from "@/components/SpinnerIcon";
+import { printReport } from "@/lib/printReport";
+import { getUser } from "@/lib/auth";
 
 
 type WasteClassification = {
@@ -155,7 +157,7 @@ export default function Analytics() {
   const wasteByBarangay = allBarangays
     .map(b => {
       const total = wasteClassification
-        .filter(w => w.node_details.barangay_details.barangay_id === b.barangay_id)
+        .filter(w => w.node_details.barangay_details?.barangay_id === b.barangay_id)
         .reduce((sum, w) => sum + (w.estimated_volume || 0), 0)
       return { barangay_id: b.barangay_id, barangay_name: b.barangay_name, total }
     })
@@ -171,19 +173,25 @@ export default function Analytics() {
     { name: "Special Waste", value: totalSpecialWaste, color: "#E87C7C" },
   ]
 
-  const handleExport = async () => {
-    setExporting(true)
-    try {
-      await exportPdf(
-        "/api/waste-classifications/export/",
-        { month: selectedMonth },
-        `waste-classification-${selectedMonth}.pdf`
-      )
-    } catch {
-      addToast("Failed to export waste analytics.", "error")
-    } finally {
-      setExporting(false)
-    }
+  const printRows = filtered.map(c => [
+    c.classification_id,
+    c.node_details?.node_name ?? '—',
+    c.node_details?.barangay_details?.barangay_name ?? '—',
+    c.dominant_waste_type,
+    `${Number(c.recyclable_pct).toFixed(2)}%`,
+    `${Number(c.biodegradable_pct).toFixed(2)}%`,
+    `${Number(c.residual_pct).toFixed(2)}%`,
+    `${Number(c.special_waste_pct).toFixed(2)}%`,
+    `${Number(c.confidence).toFixed(2)}%`,
+    `${Number(c.estimated_volume).toFixed(2)} kg`,
+    c.timestamp ? new Date(c.timestamp).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—',
+  ])
+
+  const currentUser = getUser()
+  const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Admin'
+
+  const handlePrint = () => {
+    printReport()
   }
 
   useEffect(() => {
@@ -231,10 +239,10 @@ useWebSocket({
               </SelectContent>
             </Select>
 
-              <Button onClick={handleExport} disabled={exporting} className="bg-[#2fd45b] hover:bg-[#28b54e] cursor-pointer">
-                <FileDown size={16} className="mr-1" />
-                {exporting ? "Exporting..." : "Export PDF"}
-              </Button>
+            <Button onClick={handlePrint} className="bg-[#2fd45b] hover:bg-[#28b54e] cursor-pointer">
+              <FileDown size={16} className="mr-1" />
+              Export
+            </Button>
           </div>
         </div>
 
@@ -446,6 +454,13 @@ useWebSocket({
       </div>
 
       <Toast toasts={toasts} onRemove={removeToast} />
+
+      <PrintReport
+        reportTitle="Waste Classification Analytics"
+        columns={["ID", "Node", "Location", "Dominant Type", "Recyclable", "Biodegradable", "Residual", "Special Waste", "Confidence", "Est. Volume", "Timestamp"]}
+        rows={printRows}
+        generatedBy={generatedBy}
+      />
     </>
   )
 }

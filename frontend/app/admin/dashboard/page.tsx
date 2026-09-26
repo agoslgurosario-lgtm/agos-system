@@ -6,14 +6,15 @@ import type { ReactNode } from "react"
 import { useRouter } from "next/navigation"
 
 // icons
-import { Leaf, Recycle, Trash2, Biohazard, RadioTower, Droplets, TriangleAlert, MapPinned, Siren, Activity, Battery, Signal, ScanSearch, X} from "lucide-react"
+import { Leaf, Recycle, Trash2, Biohazard, RadioTower, Droplets, TriangleAlert, MapPinned, Siren, Activity, Battery, Signal, ScanSearch, X, MapPin, Waves, Droplet} from "lucide-react"
 
 // shadcn
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 // components
 import AgosMapWrapper from "@/components/Map/AgosMapWrapper"
-import ReportProgressBar from "@/components/MonthlyReportProgressBar"
+import ReportOutcomeBar from "@/components/ReportOutcomeBar"
+import FollowUpDialog from "@/components/ReportOutcomeBar/FollowUpDialog"
 import { ALERT_STYLE, WASTE_STYLE } from '@/lib/constant'
 import { usePolling } from "@/components/hooks/usePolling"
 import { useFillRows } from "@/components/hooks/useFillRows"
@@ -21,6 +22,8 @@ import { DashboardSkeleton } from "@/components/Skeleton/Admin/DashboardSkeleton
 
 // auth
 import { fetchWithAuth } from "@/lib/auth"
+import { monthOf, formatMonthLabel } from "@/lib/reportOptions"
+import type { CanalMonitoringReport } from "@/types/report"
 import { useWebSocket } from "@/lib/hooks/useWebSocket"
 import { usePageCache } from "@/components/hooks/usePageCache"
 
@@ -42,6 +45,22 @@ const WASTE_ICONS: Record<string, ReactNode> = {
   None:            <Trash2 size={18} />,
 }
 
+function getStatusBadge(status: string) {
+  const styles: Record<string, string> = {
+    Normal:   "bg-[#58D07159] text-[#2C7B3C]",
+    Warning:  "bg-[#D8921059] text-[#D48A00]",
+    Critical: "bg-[#D8101059] text-[#D81010]",
+    Maintenance: "bg-[#7C3AED29] text-[#7C3AED]",
+  }
+  const style = styles[status] ?? "bg-gray-100 text-gray-500"
+
+  return (
+    <span className={`text-xs font-medium px-3 py-1 rounded-full ${style}`}>
+      {status}
+    </span>
+  )
+}
+
 
 type SensorNodes = {
   node_id: number
@@ -56,6 +75,11 @@ type SensorNodes = {
   water_flow_rate: number | null
   clog_pct: number | null
   health_status: string
+  latitude: number | null
+  longitude: number | null
+  is_online: boolean
+  is_force_sleeping: boolean
+  last_reading_at: string | null
 }
 
 type ClogEvents = {
@@ -84,20 +108,6 @@ type Alert = {
   timestamp: string
   is_read: boolean
   alert_context?: Record<string, any> 
-}
-
-type BarangayReports = {
-  monthly_report_id: number
-  barangay: number
-  report_month: string
-  submitted_by: number | null
-  verified_by: number | null
-  submitted_at: string
-  status: 'Draft' | 'Pending' | 'Reviewed'
-  barangay_details: {
-    barangay_id: number
-    barangay_name: string
-  } | null
 }
 
 type NodeHealth = {
@@ -194,21 +204,19 @@ export default function Dashboard() {
   const [continuityDialog, setContinuityDialog] = useState(false)
 
   const now = new Date()
-  const getMonthOptions = () => {
-    const months = []
-    const year = now.getFullYear()
-    for (let m = 0; m < 12; m++) {
-      const d = new Date(year, m, 1)
-      months.push({
-        value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-        label: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
-      })
-    }
-    return months
-  }
-  const monthOptions = getMonthOptions()
+
   const currentMonthValue = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthValue)
+  const currentMonthLabel = formatMonthLabel(currentMonthValue)
+
+  const [selectedNode, setSelectedNode] = useState<SensorNodes | null>(null)
+  const [nodeDialog, setNodeDialog] = useState({ open: false })
+
+  const handleSelectNode = (nodeId: number) => {
+    const node = sensorNodes.data.find(n => n.node_id === nodeId)
+    if (!node) return
+    setSelectedNode(node)
+    setNodeDialog({ open: true })
+  }
 
   // fetchers — each returns its parsed data instead of only calling setState
   const fetchSensorNodesRaw = async (): Promise<SensorNodes[]> => {
@@ -220,9 +228,9 @@ export default function Dashboard() {
     } catch { return [] }
   }
 
-  const fetchMonthlyReportsRaw = async (): Promise<BarangayReports[]> => {
+  const fetchReportsRaw = async (): Promise<CanalMonitoringReport[]> => {
     try {
-      const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/barangay-reports/`)
+      const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/canal-reports/`)
       if (!res.ok) throw new Error()
       const data = await res.json()
       return data.results ?? data
@@ -276,7 +284,7 @@ export default function Dashboard() {
 
   // cached data, all fetched together via refetchAll below (autoFetch: false)
   const sensorNodes = usePageCache('dashboard:sensorNodes', fetchSensorNodesRaw, [] as SensorNodes[], { autoFetch: false })
-  const barangayReports = usePageCache('dashboard:barangayReports', fetchMonthlyReportsRaw, [] as BarangayReports[], { autoFetch: false })
+  const barangayReports = usePageCache('dashboard:canalReports', fetchReportsRaw, [] as CanalMonitoringReport[], { autoFetch: false })
   const alerts = usePageCache('dashboard:alerts', fetchAlertsRaw, [] as Alert[], { autoFetch: false })
   const nodeHealth = usePageCache('dashboard:nodeHealth', fetchNodeHealthRaw, [] as NodeHealth[], { autoFetch: false })
   const clogEvents = usePageCache('dashboard:clogEvents', fetchClogEventsRaw, [] as ClogEvents[], { autoFetch: false })
@@ -315,9 +323,7 @@ export default function Dashboard() {
   })
   const resolvedClog = resolvedClogsThisMonth.length
 
-  const reviewedReportsThisMonth = barangayReports.data.filter(
-    r => r.report_month.startsWith(selectedMonth) && r.status === 'Reviewed'
-  )
+  const reportsThisMonth = barangayReports.data.filter(r => monthOf(r) === currentMonthValue)
 
   // health helpers
   const latestHealthByNode = new Map<number, NodeHealth>()
@@ -470,27 +476,28 @@ export default function Dashboard() {
               <div className="flex-1 overflow-hidden rounded-b-lg">
                 <AgosMapWrapper
                   markers={sensorNodes.data
-                    .filter(n => n.hotspot_details?.latitude != null && n.hotspot_details?.longitude != null)
-                    .filter(n => n.availability_status === 'Occupied')
+                    .filter(n => n.latitude != null && n.longitude != null)
+                    .filter(n => n.availability_status === 'Occupied' || n.status === 'Maintenance')
                     .map(n => ({
-                      latitude:  n.hotspot_details!.latitude,
-                      longitude: n.hotspot_details!.longitude,
+                      latitude:  n.latitude!,
+                      longitude: n.longitude!,
                       label:     `${n.node_name} – ${n.barangay_details?.barangay_name ?? ''}`,
-                      condition: n.condition ?? 'Normal',
+                      condition:
+                        n.status === 'Maintenance'            ? 'Maintenance' :
+                        (n.is_force_sleeping || !n.is_online) ? 'Sleep' :
+                        (n.condition ?? 'Normal'),
                       sublabel: `Water: ${n.water_level ?? '—'}cm | Clog: ${n.clog_pct ?? '—'}%`,
+                      onMarkerClick: () => handleSelectNode(n.node_id),
                     }))}
                   zoom={13}
+                  showMarkerPopups={false}
                 />
               </div>
             </div>
 
-            {/* monthly report progress */}
+            {/* cleanup outcomes this month */}
             <div onClick={() => setReportProgressDialog(true)} className="cursor-pointer hover:opacity-80">
-              <ReportProgressBar
-                reports={reviewedReportsThisMonth}
-                totalBarangays={barangays.data.length}
-                month={monthOptions.find(m => m.value === selectedMonth)?.label ?? selectedMonth}
-              />
+              <ReportOutcomeBar reports={reportsThisMonth} periodLabel={currentMonthLabel} />
             </div>
           </div>
           
@@ -912,6 +919,85 @@ export default function Dashboard() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Node Dialog */}
+      <Dialog open={nodeDialog.open} onOpenChange={(open) => setNodeDialog({ open })}>
+          <DialogContent className="w-[300px] text-[#122A48]">
+          <DialogHeader className="pr-8 -mb-2">
+            <DialogTitle className="flex items-center justify-between gap-2 font-bold">
+              <div className="flex gap-2">
+                <MapPin size={18} />
+                <p className="text-sm">{selectedNode?.barangay_details?.barangay_name}</p>
+              </div>
+              <div>
+                <p className="text-sm">{selectedNode?.node_name}</p>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+          <hr />
+          
+          <div className="flex flex-col gap-1 -mt-1">
+            <div className="flex justify-between">
+              <p>Status:</p>
+              {selectedNode?.status === 'Maintenance'
+                ? getStatusBadge('Maintenance')
+                : getStatusBadge(selectedNode?.condition ?? 'Normal')}
+            </div>
+            <div className="flex justify-between">
+              <p>Clog Detection:</p>
+              <p>{selectedNode?.clog_pct != null ? `${selectedNode.clog_pct}%` : '— %'}</p>
+            </div>
+            <div className="flex justify-between">
+              <p>Last Updated:</p>
+              <p>
+                {selectedNode?.last_reading_at
+                  ? new Date(selectedNode.last_reading_at).toLocaleString('en-PH', {
+                      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                    })
+                  : '—'}
+              </p>
+            </div>
+          </div>
+
+          <hr />
+
+          <div className="flex gap-7 -mt-1">
+            {/* water level */}
+            <div>
+              <div className="flex gap-1 items-center border-r">
+                <Droplet size={20} className="text-[#1565BC]"/>
+                <p className="text-center">Water Level:</p>
+              </div>
+
+              <div className="flex justify-center mt-2">
+                <p className="font-medium">
+                  {selectedNode?.water_level != null
+                    ? `${selectedNode.water_level} cm`
+                    : '— cm'}
+                </p>
+              </div>
+
+            </div>
+            
+            {/* water flow rate */}
+            <div>
+              <div className="flex gap-1 items-center border-l">
+                <Waves size={20} className="text-[#1565BC]"/>
+                <p className="text-center">Water Flow:</p>
+              </div>
+
+              <div className="flex justify-center mt-2">
+                <p className="font-medium">
+                  {selectedNode?.water_flow_rate != null
+                    ? `${Number(selectedNode.water_flow_rate).toFixed(5)} m/s`
+                    : '— m/s'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+        </DialogContent>
+      </Dialog>
       
       {/* Waste Classification Detail Dialog */}
       <Dialog open={wasteDialog} onOpenChange={setWasteDialog}>
@@ -985,49 +1071,14 @@ export default function Dashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Report Progress Dialog */}
-      <Dialog open={reportProgressDialog} onOpenChange={setReportProgressDialog}>
-        <DialogContent className="[&>button]:hidden text-[#122A48] w-[420px]">
-          <DialogHeader>
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-[#2C7B3C29]">
-                  <MapPinned size={16} color="#2C7B3C" />
-                </div>
-                <p className="font-bold text-sm">
-                  Reviewed Reports — {monthOptions.find(m => m.value === selectedMonth)?.label ?? selectedMonth} ({reviewedReportsThisMonth.length})
-                </p>
-              </div>
-              <button onClick={() => setReportProgressDialog(false)} className="cursor-pointer">
-                <X size={16} />
-              </button>
-            </div>
-          </DialogHeader>
-
-          <DialogTitle className="sr-only">Reviewed Barangay Reports</DialogTitle>
-          <hr />
-
-          <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto">
-            {reviewedReportsThisMonth.length === 0 ? (
-              <p className="text-xs text-[#727272] text-center py-6">No reviewed reports yet this month.</p>
-            ) : (
-              reviewedReportsThisMonth.map(report => (
-                <div key={report.monthly_report_id} className="flex items-center justify-between gap-3 p-2 rounded-lg border border-[#E5E5E6]">
-                  <p className="text-xs font-semibold">{report.barangay_details?.barangay_name ?? '—'}</p>
-                  <div className="flex flex-col items-end">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#DCFCE7] text-[#166534]">Reviewed</span>
-                    <p className="text-[10px] text-[#727272] mt-1">
-                      {new Date(report.submitted_at).toLocaleString('en-PH', {
-                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
-                      })}
-                    </p>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Needs follow-up dialog */}
+      <FollowUpDialog
+        open={reportProgressDialog}
+        onOpenChange={setReportProgressDialog}
+        reports={reportsThisMonth}
+        periodLabel={currentMonthLabel}
+        onView={(r) => router.push(`/admin/history/barangay-reports/view-barangay-report/?id=${r.report_id}`)}
+      />
 
       {/* Battery Voltage Dialog */}
       <Dialog open={batteryDialog} onOpenChange={setBatteryDialog}>

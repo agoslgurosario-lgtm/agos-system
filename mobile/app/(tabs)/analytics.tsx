@@ -73,7 +73,7 @@ export default function AnalyticsScreen() {
             <Text className="text-[#D81010] font-semibold text-sm mb-3">
               Failed to load analytics. Please try again.
             </Text>
-            <Pressable onPress={refetch} className="border border-slate-300 rounded-lg px-4 py-2">
+            <Pressable onPress={() => refetch()} className="border border-slate-300 rounded-lg px-4 py-2">
               <Text className="text-slate-600 text-sm">Retry</Text>
             </Pressable>
           </View>

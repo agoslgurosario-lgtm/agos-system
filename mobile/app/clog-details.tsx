@@ -38,6 +38,8 @@ export default function ClogDetails() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
 
+  const [isOpeningReport, setIsOpeningReport] = useState(false)
+
   useEffect(() => {
     if (!selectedEvent) {
       router.replace('/clogs')
@@ -98,15 +100,38 @@ export default function ClogDetails() {
     }
   }
 
-  const handleProceedToReport = () => {
-    const reportMonth = selectedEvent.detected_at.slice(0, 7) + '-01' // 'YYYY-MM-01'
-    router.push({
-      pathname: '/new-report',
-      params: {
-        barangay: String(selectedEvent.barangay),
-        report_month: reportMonth,
-      },
-    })
+  const handleProceedToReport = async () => {
+    setError('')
+    setIsOpeningReport(true)
+    try {
+      // if a report already exists for this clog event, open it instead of creating a duplicate
+      const res = await api.get('/api/canal-reports/mine/')
+      const reports = res.results ?? res
+      const existing = Array.isArray(reports)
+        ? reports.find((r: { clog_event: number | null }) => r.clog_event === selectedEvent.event_id)
+        : null
+
+      if (existing?.is_submitted) {
+        router.push({
+          pathname: '/view-report',
+          params: { id: String(existing.report_id) },
+        } as any)
+      } else if (existing) {
+        router.push({
+          pathname: '/new-report',
+          params: { report_id: String(existing.report_id) },
+        } as any)
+      } else {
+        router.push({
+          pathname: '/new-report',
+          params: { clog_event_id: String(selectedEvent.event_id) },
+        } as any)
+      }
+    } catch (err: any) {
+      setError(err?.detail ?? err?.error ?? 'Could not open the report form. Please try again.')
+    } finally {
+      setIsOpeningReport(false)
+    }
   }
 
   return (
@@ -355,8 +380,16 @@ export default function ClogDetails() {
             )}
 
             {isClearedDone && (
-              <Pressable onPress={handleProceedToReport} className="bg-[#1F9D55] py-3.5 rounded-xl items-center mt-2">
-                <Text className="text-white font-bold text-sm">Proceed to Fill Report Form</Text>
+              <Pressable
+                onPress={handleProceedToReport}
+                disabled={isOpeningReport}
+                className="bg-[#1F9D55] py-3.5 rounded-xl items-center mt-2"
+              >
+                {isOpeningReport ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text className="text-white font-bold text-sm">Proceed to Fill Report Form</Text>
+                )}
               </Pressable>
             )}
           </View>

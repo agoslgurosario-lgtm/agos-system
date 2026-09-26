@@ -47,6 +47,7 @@ function getStatusBadge(status: string) {
     Normal:   "bg-[#58D07159] text-[#2C7B3C]",
     Warning:  "bg-[#D8921059] text-[#D48A00]",
     Critical: "bg-[#D8101059] text-[#D81010]",
+    Maintenance: "bg-[#7C3AED29] text-[#7C3AED]",
   }
   const style = styles[status] ?? "bg-gray-100 text-gray-500"
 
@@ -76,7 +77,7 @@ type SensorNodes = {
     hotspot_id: number
     latitude: number
     longitude: number
-  }
+  } | null
   node_name: string
   status: string
   installed_at: string
@@ -86,6 +87,12 @@ type SensorNodes = {
   clog_pct: number | null
   health_status: string
   health?: NodeHealth
+  availability_status: string
+  latitude: number | null
+  longitude: number | null
+  is_online: boolean
+  is_force_sleeping: boolean
+  last_reading_at: string | null
 }
 
 type NodeHealth = {
@@ -311,15 +318,19 @@ export default function Map() {
             <div className="flex-1 overflow-hidden">
               <AgosMapWrapper
                 markers={allSensorNodes
-                .filter(n => n.hotspot_details?.latitude != null && n.hotspot_details?.longitude != null)
-                .map(n => ({
-                  latitude:      n.hotspot_details!.latitude,
-                  longitude:     n.hotspot_details!.longitude,
-                  label:         n.node_name,
-                  condition:     n.condition ?? 'Normal',
-                  onMarkerClick: () => handleSelectNode(n.node_id),
-                }))}
+                  .filter(n => n.latitude != null && n.longitude != null)
+                  .map(n => ({
+                    latitude:  n.latitude!,
+                    longitude: n.longitude!,
+                    label: `${n.node_name} – ${n.barangay_details?.barangay_name ?? ''}`,
+                    condition:
+                      n.status === 'Maintenance'            ? 'Maintenance' :
+                      (n.is_force_sleeping || !n.is_online) ? 'Sleep' :
+                      (n.condition ?? 'Normal'),
+                    onMarkerClick: () => handleSelectNode(n.node_id),
+                  }))}
                 zoom={13}
+                showMarkerPopups={false}
               />
             </div>
 
@@ -429,7 +440,9 @@ export default function Map() {
           <div className="flex flex-col gap-1 -mt-1">
             <div className="flex justify-between">
               <p>Status:</p>
-              {getStatusBadge(selectedNode?.condition ?? 'Normal')}
+              {selectedNode?.status === 'Maintenance'
+                ? getStatusBadge('Maintenance')
+                : getStatusBadge(selectedNode?.condition ?? 'Normal')}
             </div>
             <div className="flex justify-between">
               <p>Clog Detection:</p>
@@ -437,7 +450,13 @@ export default function Map() {
             </div>
             <div className="flex justify-between">
               <p>Last Updated:</p>
-              {/* .... */}
+              <p>
+                {selectedNode?.last_reading_at
+                  ? new Date(selectedNode.last_reading_at).toLocaleString('en-PH', {
+                      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                    })
+                  : '—'}
+              </p>
             </div>
           </div>
 

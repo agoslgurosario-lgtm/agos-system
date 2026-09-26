@@ -4,6 +4,7 @@ from apps.barangay.serializers import BarangaySerializer
 from apps.users.serializers import UserSerializer
 from apps.waste_classification.serializers import WasteClassificationSerializer
 from apps.sensor_nodes.serializers import get_node_identity
+from apps.sensor_nodes.serializers import get_node_identity_as_of
 
 
 class ClogEventSerializer(serializers.ModelSerializer):
@@ -19,7 +20,7 @@ class ClogEventSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def get_node_details(self, obj):
-        return get_node_identity(obj.node)
+        return get_node_identity_as_of(obj.node, obj.detected_at)
 
     def get_reading_details(self, obj):
         # The reading that actually triggered this clog event, via the

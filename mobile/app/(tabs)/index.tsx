@@ -138,7 +138,7 @@ export default function TabOneScreen() {
             <View className="items-center justify-center p-10">
               <Text className="mb-2.5 font-semibold text-[#D81010]">Failed to load map data.</Text>
               <Pressable
-                onPress={refetch}
+                onPress={() => refetch()}
                 className="rounded-lg border border-[#D8DCE2] px-4 py-2"
               >
                 <Text className="text-[13px] text-[#5B6472]">Retry</Text>

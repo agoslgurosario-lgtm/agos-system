@@ -9,13 +9,14 @@ import { useToast } from "@/components/hooks/useToast"
 import { Toast } from "@/components/Toast"
 import { WasteSkeleton } from "@/components/Skeleton/Admin/HistorySkeleton/WasteSkeleton"
 import { useFillRows } from "@/components/hooks/useFillRows"
-import { useExportDialog } from "@/components/ExportDialog/useExportDialog"
 import { SpinnerIcon } from "@/components/SpinnerIcon"
+import { PrintReport } from "@/components/PrintReport/PrintReport"
 
 // lib
-import { exportPdf } from "@/lib/exportPDF"
 import { useWebSocket } from "@/lib/hooks/useWebSocket"
 import { usePageCache } from "@/components/hooks/usePageCache"
+import { printReport } from "@/lib/printReport"
+import { getUser } from "@/lib/auth"
 
 // react
 import { useEffect, useState, useCallback } from "react"
@@ -159,22 +160,26 @@ export default function Waste() {
 
   usePolling(refetchAll, 30000)
 
-  const { requestExport, ExportDialogs } = useExportDialog(async () => {
-    try {
-      await exportPdf(
-        "/api/waste-classifications/export/",
-        {
-          search,
-          barangay: barangayFilterOpt !== "All Barangay" ? barangayFilterOpt : undefined,
-          waste_type: dominantWaste !== "All Waste" ? dominantWaste : undefined,
-          node: sensorNode !== "All Nodes" ? sensorNode : undefined,
-        },
-        "waste-classification.pdf"
-      )
-    } catch {
-      addToast("Failed to export waste classification.", "error")
-    }
-  }, { description: "Are you sure you want to export the waste classification shown here as a PDF?" })
+  const printRows = filtered.map(c => [
+    c.classification_id,
+    c.node_details?.node_name ?? '—',
+    c.node_details?.barangay_details?.barangay_name ?? '—',
+    c.dominant_waste_type,
+    `${Number(c.recyclable_pct).toFixed(2)}%`,
+    `${Number(c.biodegradable_pct).toFixed(2)}%`,
+    `${Number(c.residual_pct).toFixed(2)}%`,
+    `${Number(c.special_waste_pct).toFixed(2)}%`,
+    `${Number(c.confidence).toFixed(2)}%`,
+    `${Number(c.estimated_volume).toFixed(2)} kg`,
+    c.timestamp ? new Date(c.timestamp).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—',
+  ])
+
+  const currentUser = getUser()
+  const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Admin'
+
+  const handlePrint = () => {
+    printReport()
+  }
 
   useWebSocket({
     path: "/ws/waste-classification/",
@@ -259,9 +264,9 @@ export default function Waste() {
           </div>
 
           <div>
-            <Button onClick={() => requestExport()} disabled={exporting} className="bg-[#2fd45b] hover:bg-[#28b54e] cursor-pointer">
+            <Button onClick={handlePrint} className="bg-[#2fd45b] hover:bg-[#28b54e] cursor-pointer">
               <FileDown size={16} className="mr-1" />
-              {exporting ? "Exporting..." : "Export PDF"}
+              Export
             </Button>
           </div>
 
@@ -448,7 +453,7 @@ export default function Waste() {
                   {/* location */}
                   <div className="flex justify-between text-xs mt-1">
                     <p>Location</p>
-                    <p className="text-left">{selectedWaste.node_details.barangay_details.barangay_name}</p>
+                    <p className="text-left">{selectedWaste.node_details.barangay_details?.barangay_name ?? '—'}</p>
                   </div>
                   {/* reading id */}
                   <div className="flex justify-between text-xs mt-1">
@@ -500,7 +505,12 @@ export default function Waste() {
 
         <Toast toasts={toasts} onRemove={removeToast} />
 
-        {ExportDialogs}
+        <PrintReport
+          reportTitle="Waste Classification"
+          columns={["ID", "Node", "Location", "Dominant Type", "Recyclable", "Biodegradable", "Residual", "Special Waste", "Confidence", "Est. Volume", "Timestamp"]}
+          rows={printRows}
+          generatedBy={generatedBy}
+        />
 
       </div>
     

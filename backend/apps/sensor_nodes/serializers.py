@@ -1,6 +1,6 @@
 import re
 from rest_framework import serializers
-from .models import SensorNode, SystemHealthLog, MaintenanceLog
+from .models import SensorNode, SystemHealthLog, MaintenanceLog, NodeAssignmentHistory
 from apps.barangay.models import Barangay
 from apps.hotspots.models import Hotspot
 from apps.sensor_readings.models import SensorReading
@@ -36,6 +36,33 @@ def get_node_identity(node):
     }
 
 
+def get_node_identity_as_of(node, timestamp):
+    """Like get_node_identity, but resolves hotspot/barangay as of
+    `timestamp` via hotspot_at() (D1) — for readings, alerts and clog
+    events, which should keep showing the hotspot they happened at,
+    not the node's current one."""
+    if not node:
+        return None
+    from .services import hotspot_at
+    hotspot, hotspot_name, barangay, barangay_name = hotspot_at(node, timestamp)
+    return {
+        'node_id': node.node_id,
+        'node_name': node.node_name,
+        'status': node.status,
+        'availability_status': node.availability_status,
+        'barangay_details': {
+            'barangay_id': barangay.barangay_id if barangay else None,
+            'barangay_name': barangay_name,
+        } if barangay_name else None,
+        'hotspot_details': {
+            'hotspot_id': hotspot.hotspot_id if hotspot else None,
+            'name': hotspot_name,
+            'latitude': hotspot.latitude if hotspot else None,
+            'longitude': hotspot.longitude if hotspot else None,
+        } if hotspot_name else None,
+    }
+
+
 class SensorNodeSerializer(serializers.ModelSerializer):
     barangay = serializers.PrimaryKeyRelatedField(
         queryset=Barangay.objects.all(),
@@ -68,6 +95,7 @@ class SensorNodeSerializer(serializers.ModelSerializer):
     firmware_version = serializers.SerializerMethodField()
 
     last_reading_at = serializers.SerializerMethodField()
+    is_force_sleeping = serializers.SerializerMethodField()
 
     class Meta:
         model = SensorNode
@@ -76,7 +104,7 @@ class SensorNodeSerializer(serializers.ModelSerializer):
             'barangay', 'barangay_details',
             'hotspot', 'hotspot_details',
             'latitude', 'longitude',
-            'availability_status', 'status',
+            'availability_status', 'status', 'forced_sleep_until', 'is_force_sleeping',
             'installed_at',
             'water_level', 'water_flow_rate', 'clog_pct', 'condition',
             'health_status', 'is_online', 'last_seen', 'firmware_version',
@@ -85,6 +113,7 @@ class SensorNodeSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'node_name': {'read_only': True},
             'installed_at': {'required': False},
+            'forced_sleep_until': {'read_only': True},
         }
 
     def _latest(self, obj):
@@ -94,11 +123,15 @@ class SensorNodeSerializer(serializers.ModelSerializer):
         return SystemHealthLog.objects.filter(node=obj).order_by('-checked_at').first()
 
     def get_barangay_details(self, obj):
-        if not obj.barangay:
+        barangay = obj.barangay
+        if not barangay:
+            last = self._last_known_hotspot(obj)
+            barangay = last.barangay if last else None
+        if not barangay:
             return None
         return {
-            'barangay_id': obj.barangay.barangay_id,
-            'barangay_name': obj.barangay.barangay_name,
+            'barangay_id': barangay.barangay_id,
+            'barangay_name': barangay.barangay_name,
         }
 
     def get_hotspot_details(self, obj):
@@ -119,11 +152,38 @@ class SensorNodeSerializer(serializers.ModelSerializer):
             ),
         }
 
+    def _last_known_hotspot(self, obj):
+        """
+        For a node under maintenance (hotspot already stripped), the most
+        recent hotspot it was assigned to, so the map can keep showing it
+        at that location (purple) instead of dropping it entirely.
+        Cached on the instance since both get_latitude and get_longitude
+        need it — avoids querying twice per node.
+        """
+        if getattr(obj, '_last_known_hotspot_cache', 'unset') != 'unset':
+            return obj._last_known_hotspot_cache
+
+        result = None
+        if obj.status == 'Maintenance' and not obj.hotspot:
+            row = NodeAssignmentHistory.objects.filter(
+                node=obj, end_reason='Maintenance'
+            ).order_by('-started_at').first()
+            result = row.hotspot if row else None
+
+        obj._last_known_hotspot_cache = result
+        return result
+
     def get_latitude(self, obj):
-        return obj.hotspot.latitude if obj.hotspot else None
+        if obj.hotspot:
+            return obj.hotspot.latitude
+        last = self._last_known_hotspot(obj)
+        return last.latitude if last else None
 
     def get_longitude(self, obj):
-        return obj.hotspot.longitude if obj.hotspot else None
+        if obj.hotspot:
+            return obj.hotspot.longitude
+        last = self._last_known_hotspot(obj)
+        return last.longitude if last else None
 
     def get_water_level(self, obj):
         r = self._latest(obj)
@@ -159,6 +219,9 @@ class SensorNodeSerializer(serializers.ModelSerializer):
         if not latest:
             return False
         return (timezone.now() - latest.checked_at) <= timedelta(minutes=OFFLINE_THRESHOLD_MINUTES)
+
+    def get_is_force_sleeping(self, obj):
+        return bool(obj.forced_sleep_until and obj.forced_sleep_until > timezone.now())
 
     def get_last_seen(self, obj):
         latest = self._latest_health(obj)
@@ -196,6 +259,11 @@ class SensorNodeSerializer(serializers.ModelSerializer):
             if existing.exists():
                 raise serializers.ValidationError(
                     {'hotspot': 'This hotspot is already occupied by an active node.'}
+                )
+
+            if self.instance and self.instance.status == 'Maintenance':
+                raise serializers.ValidationError(
+                    {'hotspot': 'This node is under maintenance and cannot be assigned.'}
                 )
 
         node_code = attrs.get('node_code')
@@ -246,7 +314,7 @@ class MaintenanceLogSerializer(serializers.ModelSerializer):
         fields = [
             'maintenance_id', 'node', 'node_details',
             'reason', 'marked_by', 'marked_by_details',
-            'started_at', 'resolved_at',
+            'started_at', 'resolved_at', 'closed_reason',
         ]
         read_only_fields = ['node', 'marked_by', 'started_at']
 
@@ -261,3 +329,29 @@ class MaintenanceLogSerializer(serializers.ModelSerializer):
             'first_name': obj.marked_by.first_name,
             'last_name': obj.marked_by.last_name,
         }
+
+
+class NodeAssignmentHistorySerializer(serializers.ModelSerializer):
+    node_name = serializers.CharField(source='node.node_name', read_only=True)
+    assigned_by_name = serializers.SerializerMethodField()
+    ended_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = NodeAssignmentHistory
+        fields = [
+            'history_id', 'node', 'node_name',
+            'hotspot', 'hotspot_name', 'barangay', 'barangay_name',
+            'started_at', 'ended_at', 'end_reason',
+            'assigned_by', 'assigned_by_name', 'ended_by', 'ended_by_name',
+        ]
+
+    def _user_label(self, user):
+        if not user:
+            return None
+        return f"{user.first_name} {user.last_name}".strip() or user.email
+
+    def get_assigned_by_name(self, obj):
+        return self._user_label(obj.assigned_by)
+
+    def get_ended_by_name(self, obj):
+        return self._user_label(obj.ended_by)

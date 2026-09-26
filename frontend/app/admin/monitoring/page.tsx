@@ -42,6 +42,10 @@ type Nodes = {
   water_flow_rate: number | null
   clog_pct: number | null
   condition: string
+  latitude: number | null
+  longitude: number | null
+  is_online: boolean
+  is_force_sleeping: boolean
 }
 
 type Alert = {
@@ -81,6 +85,12 @@ const getDeviceStatusStyle = (status: string) => {
   return { text: 'text-[#727272]', dot: 'bg-[#727272]' } // Inactive / fallback
 }
 
+function getEffectiveStatus(node: Nodes): 'Active' | 'Inactive' | 'Maintenance' {
+  if (node.status === 'Maintenance') return 'Maintenance'
+  if (!node.is_online || node.is_force_sleeping) return 'Inactive'
+  return 'Active'
+}
+
 const ALERT_ICONS: Record<string, ReactNode> = {
   Water_Level_Rising: <Activity size={18} />,
   Critical_Clog:      <RadioTower size={18} />,
@@ -108,8 +118,7 @@ const fetchAlertsRaw = async (): Promise<Alert[]> => {
 function getFilteredNode(nodes: Nodes[], condition: string, search: string) {
   const q = search.toLowerCase()
   return nodes
-    .filter(b => b.hotspot_details != null)
-    .filter(b => b.availability_status === 'Occupied')
+    .filter(b => b.availability_status === 'Occupied' || b.status === 'Maintenance')
     .filter(b => condition === "All" || b.condition === condition)
     .filter(b =>
       [b.node_name, b.barangay_details?.barangay_name]
@@ -173,8 +182,8 @@ export default function Monitoring() {
   const warning = occupiedNodes.filter(n => n.condition === 'Warning').length
   const normal = occupiedNodes.filter(n => n.condition === 'Normal').length
 
-  const activeCount = nodes.data.filter(n => n.status === 'Active').length
-  const inactiveCount = nodes.data.filter(n => n.status === 'Inactive').length
+  const activeCount = occupiedNodes.filter(n => getEffectiveStatus(n) === 'Active').length
+  const inactiveCount = occupiedNodes.filter(n => getEffectiveStatus(n) === 'Inactive').length
   const maintenanceCount = nodes.data.filter(n => n.status === 'Maintenance').length
 
   // clock
@@ -322,11 +331,12 @@ export default function Monitoring() {
                         </TableCell>
                         <TableCell className='text-leftleft text-xs'>
                           {(() => {
-                            const s = getDeviceStatusStyle(node.status)
+                            const effectiveStatus = getEffectiveStatus(node)
+                            const s = getDeviceStatusStyle(effectiveStatus)
                             return (
                               <span className={`inline-flex items-center gap-1.5 font-semibold ${s.text}`}>
                                 <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-                                {node.status}
+                                {effectiveStatus}
                               </span>
                             )
                           })()}
@@ -520,12 +530,15 @@ export default function Monitoring() {
               latitude={viewMapDialog.node?.hotspot_details?.latitude}
               longitude={viewMapDialog.node?.hotspot_details?.longitude}
               markers={nodes.data
-                .filter(n => n.hotspot_details?.latitude != null && n.hotspot_details?.longitude != null)
+                .filter(n => n.latitude != null && n.longitude != null)
                 .map(n => ({
-                  latitude:  n.hotspot_details!.latitude,
-                  longitude: n.hotspot_details!.longitude,
+                  latitude:  n.latitude!,
+                  longitude: n.longitude!,
                   label:     `${n.node_name} – ${n.barangay_details?.barangay_name ?? ''}`,
-                  condition: n.condition ?? 'Normal',
+                  condition:
+                    n.status === 'Maintenance'            ? 'Maintenance' :
+                    (n.is_force_sleeping || !n.is_online) ? 'Sleep' :
+                    (n.condition ?? 'Normal'),
                   sublabel:  `Water: ${n.water_level ?? "—"}cm | Clog: ${n.clog_pct ?? "—"}%`,
                 }))}
               zoom={13}

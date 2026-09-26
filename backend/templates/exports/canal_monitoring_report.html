@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    @page {
+      size: a4 portrait;
+      margin: 1.5cm 1.5cm 2cm 1.5cm;
+      @frame footer_frame {
+        -pdf-frame-content: footer_content;
+        bottom: 0.8cm; margin-left: 1.5cm; margin-right: 1.5cm; height: 1cm;
+      }
+    }
+    body { font-family: Helvetica, sans-serif; font-size: 10px; color: #122A48; }
+
+    /* ── header: same block as base_report.html / the MRF report ── */
+    .header-wrap { width: 100%; border-collapse: collapse; border: none; margin-bottom: 3px; }
+    .header-wrap td { border: none; }
+    .header-table { width: 380px; border-collapse: collapse; border: none; }
+    .header-table td { border: none; padding: 0; vertical-align: middle; }
+    .logo-cell { width: 90px; }
+    .logo-cell img { width: 80px; height: 80px; border-radius: 50%; }
+    .header-text-cell { width: 255px; text-align: center; }
+    .header-text-cell p { margin: 2px 0; font-size: 13px; color: #122A48; }
+    .header-text-cell p.municipality { font-weight: bold; }
+
+    .divider-outer { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+    .divider-cell { background-color: #243E5D; height: 3px; padding: 0; font-size: 1px; line-height: 1px; }
+
+    .title-block { text-align: center; margin-bottom: 6px; }
+    .title-block p.office { font-weight: bold; font-size: 16px; margin: 0 0 3px 0; }
+    .title-block p.subtitle { font-size: 14px; margin: 0 0 3px 0; }
+    .title-block p.meta { color: #727272; font-size: 9px; margin: 0; }
+
+    /* ── section bars (the blue bars on the ICC form) ── */
+    p.section-bar {
+      background-color: #243E5D; color: #ffffff; font-weight: bold; font-size: 10px;
+      padding: 4px 8px; margin: 9px 0 3px 0; text-transform: uppercase;
+      -pdf-keep-with-next: true;
+    }
+
+    /* ── label / underlined-value fields ── */
+    table.fields { width: 100%; border-collapse: collapse; }
+    table.fields td { padding: 3px 6px 3px 0; vertical-align: top; border: none; }
+    div.lbl { font-size: 7px; color: #727272; font-weight: bold; text-transform: uppercase; margin-bottom: 1px; }
+    div.val { font-size: 10px; font-weight: bold; border-bottom: 1px solid #122A48; padding: 2px 0 2px 0; }
+    p.lbl { font-size: 7px; color: #727272; font-weight: bold; text-transform: uppercase; margin: 0 0 1px 0; }
+    p.keep { -pdf-keep-with-next: true; }
+    div.opts { font-size: 10px; padding: 2px 0 2px 0; }
+
+    /* ── boxed text (action taken, remarks) ── */
+    table.textbox { width: 100%; border-collapse: collapse; }
+    /* no fixed height here: xhtml2pdf shrinks the text to fit a fixed-height cell. Bottom padding gives the minimum box size instead. */
+    table.textbox td { border: 1px solid #122A48; padding: 5px 6px 12px 6px; vertical-align: top; font-size: 10px; }
+
+    /* ── waste composition: label + boxed kg total, like the form's item lists ── */
+    table.items { width: 100%; border-collapse: collapse; }
+    table.items td { padding: 3px 0; border-bottom: 1px solid #DDDDDD; vertical-align: middle; font-size: 10px; }
+    td.item-lbl { width: 30%; }
+    td.item-val { width: 16%; text-align: center; font-weight: bold; border: 1px solid #122A48; background-color: #F8F9FA; }
+    td.item-gap { width: 8%; border-bottom: none; }
+
+    /* ── photos ── */
+    p.group-title { font-weight: bold; font-size: 10px; margin: 6px 0 3px 0; -pdf-keep-with-next: true; }
+    table.photos { width: 100%; border-collapse: collapse; }
+    table.photos td { width: 50%; padding: 3px 6px 3px 0; vertical-align: top; text-align: left; border: none; }
+
+    /* ── signatories: 2 x 2 (nested so the whole block stays on one page) ── */
+    table.sig-outer { width: 100%; border-collapse: collapse; }
+    table.sig-outer td { border: none; padding: 0; }
+    table.sig-table { width: 100%; border-collapse: collapse; }
+    table.sig-table td.sig-cell { width: 50%; text-align: center; padding: 6px 10px 10px 10px; vertical-align: top; border: none; }
+    div.sig-space { height: 34px; }
+    div.sig-name { font-weight: bold; font-size: 11px; text-decoration: underline; text-transform: uppercase; }
+    div.sig-name span.placeholder { color: #B0B7C0; }
+    div.sig-pos { font-size: 10px; margin-top: 2px; }
+
+    #footer_content { text-align: center; color: #727272; font-size: 8px; }
+    .generated-by { font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <table class="header-wrap">
+    <tr>
+      <td style="width: 48%;"></td>
+      <td style="width: 57%;">
+        <table class="header-table">
+          <tr>
+            <td class="logo-cell"><img src="{{ logo_data_uri }}" /></td>
+            <td class="header-text-cell">
+              <p>Republic of the Philippines</p>
+              <p>Province of La Union</p>
+              <p class="municipality">Municipality Of Rosario</p>
+              <p>Barangay {{ report.barangay.barangay_name }}</p>
+            </td>
+            <td style="width: 35px;"></td>
+          </tr>
+        </table>
+      </td>
+      <td style="width: 33%;"></td>
+    </tr>
+  </table>
+
+  <table class="divider-outer">
+    <tr>
+      <td style="width: 15%;"></td>
+      <td class="divider-cell">&nbsp;</td>
+      <td style="width: 15%;"></td>
+    </tr>
+  </table>
+
+  <div class="title-block">
+    <p class="office">Municipal Environmental and Natural Resources Office</p>
+    <p class="subtitle">Canal Monitoring Report</p>
+    <p class="meta">
+      Report No. {{ report.report_id }}
+      {% if report.reported_by %}&nbsp;|&nbsp; Filed by <span class="generated-by">{{ report.reported_by.first_name }} {{ report.reported_by.last_name }}</span>{% endif %}
+      &nbsp;|&nbsp; Exported by <span class="generated-by">{{ generated_by }}</span>, {% now "M d, Y g:i A" %}
+    </p>
+  </div>
+
+  <!-- ═════════ MONITORING SITE INFORMATION ═════════ -->
+  <p class="section-bar">Monitoring Site Information</p>
+  <table class="fields">
+    <tr>
+      <td style="width: 50%;">
+        <div class="lbl">Canal Name / ID</div>
+        <div class="val">{{ report.canal_name|default:"—" }}</div>
+      </td>
+      <td style="width: 50%;">
+        <div class="lbl">Barangay</div>
+        <div class="val">{{ report.barangay.barangay_name }}</div>
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <div class="lbl">City / Municipality</div>
+        <div class="val">Rosario</div>
+      </td>
+      <td>
+        <div class="lbl">Province</div>
+        <div class="val">La Union</div>
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <div class="lbl">GPS Coordinates (Lat, Long)</div>
+        <div class="val">{% if report.latitude is not None and report.longitude is not None %}{{ report.latitude|floatformat:6 }}, {{ report.longitude|floatformat:6 }}{% else %}—{% endif %}</div>
+      </td>
+      <td>
+        <div class="lbl">Nearest Landmark</div>
+        <div class="val">{{ report.nearest_landmark|default:"—" }}</div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- ═════════ DETECTION SUMMARY ═════════ -->
+  <p class="section-bar">Detection Summary</p>
+  <table class="fields">
+    <tr>
+      <td style="width: 50%;">
+        <div class="lbl">Date / Time Observed</div>
+        <div class="val">{% if report.date_observed %}{{ report.date_observed|date:"F j, Y  g:i A" }}{% else %}—{% endif %}</div>
+      </td>
+      <td style="width: 50%;">
+        <div class="lbl">Severity (choose one)</div>
+        <div class="opts">{% for o in severity_options %}{% if o.checked %}[X]{% else %}[&nbsp;&nbsp;&nbsp;]{% endif %}&nbsp;{{ o.label }}&nbsp;&nbsp;&nbsp;{% endfor %}</div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- ═════════ CANAL CONDITION ═════════ -->
+  <p class="section-bar">Canal Condition</p>
+  <table class="fields">
+    <tr>
+      <td style="width: 50%;">
+        <div class="lbl">Water Level (choose one)</div>
+        <div class="opts">{% for o in water_level_options %}{% if o.checked %}[X]{% else %}[&nbsp;&nbsp;&nbsp;]{% endif %}&nbsp;{{ o.label }}&nbsp;&nbsp;&nbsp;{% endfor %}</div>
+      </td>
+      <td style="width: 50%;">
+        <div class="lbl">Water Flow Condition (choose one)</div>
+        <div class="opts">{% for o in flow_options %}{% if o.checked %}[X]{% else %}[&nbsp;&nbsp;&nbsp;]{% endif %}&nbsp;{{ o.label }}&nbsp;&nbsp;&nbsp;{% endfor %}</div>
+      </td>
+    </tr>
+    <tr>
+      <td colspan="2">
+        <div class="lbl">Obstruction Coverage (choose one)</div>
+        <div class="opts">{% for o in coverage_options %}{% if o.checked %}[X]{% else %}[&nbsp;&nbsp;&nbsp;]{% endif %}&nbsp;{{ o.label }}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{% endfor %}</div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- ═════════ WASTE COMPOSITION ═════════ -->
+  <p class="section-bar">Waste Composition (kg)</p>
+  <table class="items">
+    <tr>
+      <td class="item-lbl">Plastic</td>
+      <td class="item-val">{{ report.waste_plastic_kg|default_if_none:0|floatformat:2 }}</td>
+      <td class="item-gap"></td>
+      <td class="item-lbl">Food Wrapper</td>
+      <td class="item-val">{{ report.waste_food_wrapper_kg|default_if_none:0|floatformat:2 }}</td>
+    </tr>
+    <tr>
+      <td class="item-lbl">Paper / Cardboard</td>
+      <td class="item-val">{{ report.waste_paper_cardboard_kg|default_if_none:0|floatformat:2 }}</td>
+      <td class="item-gap"></td>
+      <td class="item-lbl">Glass</td>
+      <td class="item-val">{{ report.waste_glass_kg|default_if_none:0|floatformat:2 }}</td>
+    </tr>
+    <tr>
+      <td class="item-lbl">Organic</td>
+      <td class="item-val">{{ report.waste_organic_kg|default_if_none:0|floatformat:2 }}</td>
+      <td class="item-gap"></td>
+      <td class="item-lbl">Metal</td>
+      <td class="item-val">{{ report.waste_metal_kg|default_if_none:0|floatformat:2 }}</td>
+    </tr>
+    <tr>
+      <td class="item-lbl">Foam</td>
+      <td class="item-val">{{ report.waste_foam_kg|default_if_none:0|floatformat:2 }}</td>
+      <td class="item-gap"></td>
+      <td class="item-lbl">Clothes / Textiles</td>
+      <td class="item-val">{{ report.waste_textile_kg|default_if_none:0|floatformat:2 }}</td>
+    </tr>
+    <tr>
+      <td class="item-lbl">E-waste</td>
+      <td class="item-val">{{ report.waste_ewaste_kg|default_if_none:0|floatformat:2 }}</td>
+      <td class="item-gap"></td>
+      <td class="item-lbl">Other{% if report.waste_other_label %} ({{ report.waste_other_label }}){% endif %}</td>
+      <td class="item-val">{{ report.waste_other_kg|default_if_none:0|floatformat:2 }}</td>
+    </tr>
+  </table>
+
+  <!-- ═════════ BARANGAY RESPONSE ═════════ -->
+  <p class="section-bar">Barangay Response</p>
+  <table class="fields">
+    <tr>
+      <td style="width: 50%;">
+        <div class="lbl">Assigned Personnel</div>
+        <div class="val">{{ report.assigned_personnel|default:"—" }}</div>
+      </td>
+      <td style="width: 50%;">
+        <div class="lbl">Date / Time Responded</div>
+        <div class="val">{% if report.date_responded %}{{ report.date_responded|date:"F j, Y  g:i A" }}{% else %}—{% endif %}</div>
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <div class="lbl">Waste Collected</div>
+        <div class="val">{% if report.waste_collected_amount is not None %}{{ report.waste_collected_amount|floatformat:2 }} kg{% else %}—{% endif %}</div>
+      </td>
+      <td>
+        <div class="lbl">Final Canal Condition (choose one)</div>
+        <div class="opts">{% for o in final_condition_options %}{% if o.checked %}[X]{% else %}[&nbsp;&nbsp;&nbsp;]{% endif %}&nbsp;{{ o.label }}&nbsp;&nbsp;{% endfor %}</div>
+      </td>
+    </tr>
+  </table>
+
+  <p class="lbl keep" style="margin-top: 5px;">Action Taken</p>
+  <table class="textbox">
+    <tr><td>{{ report.action_taken|default:"—"|linebreaksbr }}</td></tr>
+  </table>
+
+  <p class="lbl keep" style="margin-top: 6px;">Remarks</p>
+  <table class="textbox">
+    <tr><td>{{ report.remarks|default:"—"|linebreaksbr }}</td></tr>
+  </table>
+
+  <!-- ═════════ PHOTO DOCUMENTATION ═════════ -->
+  {% if photo_groups %}
+  <p class="section-bar">Photo Documentation</p>
+  {% for group in photo_groups %}
+    <p class="group-title">{{ group.label }}</p>
+    <table class="photos">
+      {% for row in group.rows %}
+      <tr>
+        {% for photo in row %}
+        <td><img src="{{ photo.uri }}" width="{{ photo.w }}" height="{{ photo.h }}" /></td>
+        {% endfor %}
+        {% if row|length == 1 %}<td></td>{% endif %}
+      </tr>
+      {% endfor %}
+    </table>
+  {% endfor %}
+  {% endif %}
+
+  <!-- ═════════ SIGNATORIES ═════════ -->
+  <div style="height: 10px;">&nbsp;</div>
+  <table class="sig-outer">
+    <tr>
+      <td>
+        <table class="sig-table">
+          {% for row in signatory_rows %}
+          <tr>
+            {% for s in row %}
+            <td class="sig-cell">
+              <div class="sig-space">&nbsp;</div>
+              <div class="sig-name">{% if s.name %}{{ s.name }}{% else %}<span class="placeholder">Name of Signatory</span>{% endif %}</div>
+              <div class="sig-pos">{{ s.position }}</div>
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </table>
+      </td>
+    </tr>
+  </table>
+
+  <div id="footer_content">AGOS — Automated Geo-Based Obstruction Sensing System &nbsp;|&nbsp; Page <pdf:pagenumber /> of <pdf:pagecount /></div>
+</body>
+</html>

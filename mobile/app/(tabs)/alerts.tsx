@@ -100,7 +100,7 @@ export default function AlertsScreen() {
                     Failed to load alerts. Please try again.
                   </Text>
                   <Pressable
-                    onPress={refetch}
+                    onPress={() => refetch()}
                     className="border border-slate-300 rounded-lg px-4 py-2"
                   >
                     <Text className="text-slate-600 text-sm">Retry</Text>

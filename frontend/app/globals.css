@@ -132,3 +132,69 @@
     font-size: 16px;
   }
 }
+
+/* ---- Print report ---- */
+.print-report { display: none; }
+
+@media print {
+  body * { visibility: hidden; }
+  .print-report, .print-report * { visibility: visible; }
+  .print-report {
+    display: block !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+}
+
+.print-header { display: flex; justify-content: center; align-items: center; gap: 12px; margin-bottom: 3px; }
+.print-logo { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; }
+.print-header-text p { margin: 2px 0; font-size: 13px; color: #122A48; text-align: center; }
+.print-municipality { font-weight: bold; }
+.print-divider { background-color: #243E5D; height: 3px; margin-bottom: 8px; }
+.print-title-block { text-align: center; margin-bottom: 10px; }
+.print-office { font-weight: bolder; font-size: 23px; margin: 0 0 3px 0; color: #122A48; }
+.print-meta { color: #727272; font-size: 13px; margin: 0; }
+.print-generated-by { font-weight: bold; }
+.print-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-family: Helvetica, Arial, sans-serif; color: #122A48; }
+.print-table th { background-color: #243E5D; color: #fff; padding: 8px 10px; text-align: left; font-size: 11px; text-transform: uppercase; }
+.print-table td { padding: 8px 10px; border-bottom: 1px solid #DDDDDD; font-size: 11px; }
+.print-table tr:nth-child(even) { background-color: #F8F9FA; }
+.print-footer { text-align: center; color: #727272; font-size: 8px; margin-top: 12px; }
+
+.print-canal-title { text-align: center; margin-bottom: 10px; }
+.print-canal-office { font-weight: bold; font-size: 18px; margin: 0 0 3px 0; color: #122A48; }
+.print-canal-subtitle { font-size: 15px; margin: 0 0 3px 0; color: #122A48; }
+.print-canal-meta { color: #727272; font-size: 11px; margin: 0; }
+
+.print-canal-section-bar {
+  background-color: #243E5D; color: #fff; font-weight: bold; font-size: 11px;
+  padding: 5px 10px; margin: 12px 0 4px 0; text-transform: uppercase;
+}
+
+.print-canal-fields { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+.print-canal-fields td { padding: 4px 8px 4px 0; vertical-align: top; width: 50%; }
+.print-canal-lbl { font-size: 9px; color: #727272; font-weight: bold; text-transform: uppercase; margin-bottom: 2px; }
+.print-canal-val { font-size: 12px; font-weight: bold; border-bottom: 1px solid #122A48; padding: 3px 0; color: #122A48; }
+.print-canal-opts { font-size: 12px; padding: 3px 0; color: #122A48; }
+
+.print-canal-textbox-label { font-size: 9px; color: #727272; font-weight: bold; text-transform: uppercase; margin: 6px 0 2px 0; }
+.print-canal-textbox { width: 100%; border: 1px solid #122A48; padding: 6px 8px; min-height: 40px; font-size: 12px; color: #122A48; box-sizing: border-box; white-space: pre-wrap; }
+
+.print-canal-items { width: 100%; border-collapse: collapse; margin-top: 4px; }
+.print-canal-items td { padding: 4px 0; border-bottom: 1px solid #DDDDDD; vertical-align: middle; font-size: 12px; color: #122A48; }
+.print-canal-item-lbl { width: 30%; }
+.print-canal-item-val { width: 16%; text-align: center; font-weight: bold; border: 1px solid #122A48; background-color: #F8F9FA; }
+.print-canal-item-gap { width: 8%; border-bottom: none; }
+
+.print-canal-group-title { font-weight: bold; font-size: 12px; margin: 8px 0 4px 0; color: #122A48; }
+.print-canal-photos { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 6px; }
+.print-canal-photo { max-width: 280px; max-height: 200px; object-fit: contain; border: 1px solid #DDDDDD; }
+
+.print-canal-sig-grid { display: flex; flex-wrap: wrap; margin-top: 14px; }
+.print-canal-sig-cell { width: 50%; text-align: center; padding: 8px 10px 10px 10px; box-sizing: border-box; }
+.print-canal-sig-space { height: 34px; }
+.print-canal-sig-name { font-weight: bold; font-size: 13px; text-decoration: underline; text-transform: uppercase; color: #122A48; }
+.print-canal-sig-name-placeholder { color: #B0B7C0; }
+.print-canal-sig-pos { font-size: 11px; margin-top: 2px; color: #122A48; }

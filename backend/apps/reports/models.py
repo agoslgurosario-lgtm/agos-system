@@ -1,77 +1,116 @@
 from django.db import models
-from apps.barangay.models import Barangay
 from django.conf import settings
+from apps.barangay.models import Barangay
 
-class BarangayMonthlyReport(models.Model):
-    STATUS_CHOICES = [
-        ('Draft', 'Draft'),
-        ('Pending', 'Pending'),
-        ('Reviewed', 'Reviewed'),
+
+class CanalMonitoringReport(models.Model):
+    SEVERITY_CHOICES = [
+        ('Critical', 'Critical'),
+        ('Medium', 'Medium'),
+        ('Low', 'Low'),
+    ]
+    WATER_LEVEL_CHOICES = [
+        ('Low', 'Low'),
+        ('Moderate', 'Moderate'),
+        ('High', 'High'),
+    ]
+    OBSTRUCTION_COVERAGE_CHOICES = [
+        ('Under_25', '<25%'),
+        ('25_50', '25–50%'),
+        ('50_75', '50–75%'),
+        ('Over_75', '>75%'),
+    ]
+    WATER_FLOW_CHOICES = [
+        ('Normal', 'Normal'),
+        ('Reduced', 'Reduced'),
+        ('Blocked', 'Blocked'),
+    ]
+    CANAL_CONDITION_CHOICES = [
+        ('Clear', 'Clear'),
+        ('Partially_Clear', 'Partially Clear'),
+        ('Still_Obstructed', 'Still Obstructed'),
+    ]
+    WASTE_UNIT_CHOICES = [
+        ('kg', 'kg'),
+        ('L', 'L'),
+        ('Other', 'Other'),
     ]
 
-    monthly_report_id = models.AutoField(primary_key=True)
+    report_id = models.AutoField(primary_key=True)
+    is_submitted = models.BooleanField(default=False)
+
+    # Monitoring Site Information
     barangay = models.ForeignKey(
         Barangay,
         on_delete=models.CASCADE,
         db_column='barangay_id'
     )
-    municipal_report = models.ForeignKey(
-        'MunicipalMonthlyReport',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        db_column='municipal_report_id'
-    )
-    report_month = models.DateField()
-    clearing_date = models.DateField()
+    canal_name = models.CharField(max_length=150, null=True, blank=True)
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
+    nearest_landmark = models.CharField(max_length=255, blank=True)
 
-    bote_kg = models.FloatField(default=0)
-    bakal_kg = models.FloatField(default=0)
-    papel_kg = models.FloatField(default=0)
-    plastic_kg = models.FloatField(default=0)
-    karton_kg = models.FloatField(default=0)
+    # Detection Summary
+    date_observed = models.DateTimeField(null=True, blank=True)
+    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, null=True, blank=True)
 
-    recyclables_kg = models.FloatField(default=0)
-    biodegradable_kg = models.FloatField(default=0)
-    residual_waste_kg = models.FloatField(default=0)
-    special_waste_kg = models.FloatField(null=True, blank=True)
+    # Canal Condition
+    water_level = models.CharField(max_length=10, choices=WATER_LEVEL_CHOICES, null=True, blank=True)
+    obstruction_coverage = models.CharField(max_length=10, choices=OBSTRUCTION_COVERAGE_CHOICES, null=True, blank=True)
+    water_flow_condition = models.CharField(max_length=10, choices=WATER_FLOW_CHOICES, null=True, blank=True)
 
-    amount_sold_bote_plastic = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    amount_sold_bakal = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    amount_sold_papel_karton = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    amount_sold = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    # Waste Composition — estimated amount per category (kg)
+    waste_plastic_kg = models.FloatField(null=True, blank=True)
+    waste_food_wrapper_kg = models.FloatField(null=True, blank=True)  # snack / junk-food packaging
+    waste_paper_cardboard_kg = models.FloatField(null=True, blank=True)
+    waste_glass_kg = models.FloatField(null=True, blank=True)
+    waste_organic_kg = models.FloatField(null=True, blank=True)
+    waste_metal_kg = models.FloatField(null=True, blank=True)
+    waste_foam_kg = models.FloatField(null=True, blank=True)
+    waste_textile_kg = models.FloatField(null=True, blank=True)  # clothes, towels, etc.
+    waste_ewaste_kg = models.FloatField(null=True, blank=True)  # batteries, vapes, electronics
+    waste_other_kg = models.FloatField(null=True, blank=True)
+    waste_other_label = models.CharField(max_length=100, blank=True)
 
-    remarks = models.TextField(null=True, blank=True)
-    submitted_by = models.ForeignKey(
+    # Barangay Response
+    assigned_personnel = models.CharField(max_length=150, null=True, blank=True)
+    date_responded = models.DateTimeField(null=True, blank=True)
+    action_taken = models.TextField(null=True, blank=True)
+    waste_collected_amount = models.FloatField(null=True, blank=True)
+    waste_collected_unit = models.CharField(max_length=10, choices=WASTE_UNIT_CHOICES, default='kg')
+    final_canal_condition = models.CharField(max_length=20, choices=CANAL_CONDITION_CHOICES, null=True, blank=True)
+    remarks = models.TextField(blank=True)
+
+    # Relationships / metadata
+    reported_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
-        related_name='submitted_reports',
-        db_column='submitted_by'
+        related_name='canal_reports',
+        db_column='reported_by'
     )
-    verified_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
+    clog_event = models.ForeignKey(
+        'clog_events.ClogEvent',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='verified_reports',
-        db_column='verified_by'
+        db_column='clog_event_id'
     )
-    submitted_at = models.DateTimeField(auto_now_add=True)
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='Pending')
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        db_table = 'tbl_barangay_monthly_report'
-        unique_together = ('barangay', 'report_month')
+        db_table = 'tbl_canal_monitoring_reports'
 
     def __str__(self):
-        return f"Report - {self.barangay.barangay_name} - {self.report_month}"
+        when = self.date_observed.date() if self.date_observed else "draft"
+        return f"Report {self.report_id} — {self.barangay.barangay_name} ({when})"
 
 
 def report_media_upload_path(instance, filename):
     category_folder = {
         'Before_Clearing': 'before_clearing',
         'After_Clearing': 'after_clearing',
+        'Additional_Evidence': 'additional_evidence',
     }.get(instance.media_category, 'other')
     return f'report_media/{category_folder}/{filename}'
 
@@ -83,29 +122,22 @@ class ReportMedia(models.Model):
     ]
 
     MEDIA_CATEGORY_CHOICES = [
-        ('Sensor_Detection', 'Sensor Detection'),
         ('Before_Clearing', 'Before Clearing'),
         ('After_Clearing', 'After Clearing'),
+        ('Additional_Evidence', 'Additional Evidence'),
     ]
 
     media = models.AutoField(primary_key=True)
-    monthly_report = models.ForeignKey(
-        BarangayMonthlyReport,
-        on_delete=models.SET_NULL,
+    report = models.ForeignKey(
+        CanalMonitoringReport,
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
-        db_column='monthly_report_id'
+        db_column='report_id'
     )
-    clog_event_id = models.ForeignKey(
-        'clog_events.ClogEvent',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        db_column='event_id'
-    )
-    media_category = models.CharField(max_length=20, choices=MEDIA_CATEGORY_CHOICES, default='Sensor_Detection')
+    media_category = models.CharField(max_length=20, choices=MEDIA_CATEGORY_CHOICES, default='Additional_Evidence')
     file_path = models.FileField(upload_to=report_media_upload_path, null=True, blank=True)
-    media_type = models.CharField(max_length=10, choices=MEDIA_TYPE_CHOICES)
+    media_type = models.CharField(max_length=10, choices=MEDIA_TYPE_CHOICES, default='Image')
     uploaded_at = models.DateTimeField(auto_now_add=True)
     uploaded_by = models.ForeignKey(
         'users.User',
@@ -119,40 +151,4 @@ class ReportMedia(models.Model):
         db_table = 'tbl_report_media'
 
     def __str__(self):
-        return f"Media {self.media_id} - {self.media_type}"
-
-
-class MunicipalMonthlyReport(models.Model):
-    STATUS_CHOICES = [
-        ('Draft', 'Draft'),
-        ('Finalized', 'Finalized'),
-    ]
-
-    municipal_report_id = models.AutoField(primary_key=True)
-    report_month = models.DateField(unique=True)
-
-    total_bote_kg = models.FloatField(default=0)
-    total_bakal_kg = models.FloatField(default=0)
-    total_papel_kg = models.FloatField(default=0)
-    total_plastic_kg = models.FloatField(default=0)
-    total_karton_kg = models.FloatField(default=0)
-
-    total_biodegradable_kg = models.FloatField(default=0)
-    total_residual_waste_kg = models.FloatField(default=0)
-    total_special_waste_kg = models.FloatField(null=True, blank=True)
-    total_amount_sold = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    total_barangays_reported = models.IntegerField(default=0)
-    generated_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        db_column='generated_by'
-    )
-    generated_at = models.DateTimeField(auto_now_add=True)
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='Draft')
-
-    class Meta:
-        db_table = 'tbl_municipal_monthly_report'
-
-    def __str__(self):
-        return f"Municipal Report - {self.report_month}"
+        return f"Media {self.media} - {self.media_type}"

@@ -47,7 +47,7 @@ export function BarangayReportsSkeleton() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper">
-              <SelectItem value="All" className="p-2 py-1 text-[#122A48]">All Status</SelectItem>
+              <SelectItem value="All" className="p-2 py-1 text-[#122A48]">All Severity</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -62,10 +62,12 @@ export function BarangayReportsSkeleton() {
             <Table>
               <TableHeader className="bg-[#e8eef1b4] border border-[#CFD8DC]">
                 <TableRow>
-                  <TableHead className="font-semibold text-left text-xs text-[#727272]">DATE</TableHead>
+                  <TableHead className="font-semibold text-left text-xs text-[#727272]">DATE OBSERVED</TableHead>
                   <TableHead className="font-semibold text-left text-xs text-[#727272]">BARANGAY</TableHead>
-                  <TableHead className="font-semibold text-left text-xs text-[#727272]">SUBMITTED BY</TableHead>
-                  <TableHead className="font-semibold text-left text-xs text-[#727272]">STATUS</TableHead>
+                  <TableHead className="font-semibold text-left text-xs text-[#727272]">CANAL</TableHead>
+                  <TableHead className="font-semibold text-left text-xs text-[#727272]">SEVERITY</TableHead>
+                  <TableHead className="font-semibold text-left text-xs text-[#727272]">FINAL CONDITION</TableHead>
+                  <TableHead className="font-semibold text-left text-xs text-[#727272]">FILED BY</TableHead>
                   <TableHead className="font-semibold text-left text-xs text-[#727272]">ACTIONS</TableHead>
                 </TableRow>
               </TableHeader>
@@ -75,7 +77,9 @@ export function BarangayReportsSkeleton() {
                     <TableCell className="h-14"><Skeleton className="h-3.5 w-20" /></TableCell>
                     <TableCell className="h-14"><Skeleton className="h-3.5 w-24" /></TableCell>
                     <TableCell className="h-14"><Skeleton className="h-3.5 w-28" /></TableCell>
-                    <TableCell className="h-14"><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
+                    <TableCell className="h-14"><Skeleton className="h-6 w-16 rounded-full" /></TableCell>
+                    <TableCell className="h-14"><Skeleton className="h-6 w-24 rounded-full" /></TableCell>
+                    <TableCell className="h-14"><Skeleton className="h-3.5 w-24" /></TableCell>
                     <TableCell className="h-14">
                       <div className="flex gap-3">
                         <Skeleton className="h-9 w-16 rounded-lg" />

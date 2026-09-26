@@ -23,6 +23,7 @@ type Props = {
   colorMode?: 'clog' | 'health' | 'availability'
   showLegend?: boolean
   boundaryGeoJson?: any
+  showMarkerPopups?: boolean
 }
 
 

@@ -20,27 +20,18 @@ def create_health_alert(sender, instance, created, **kwargs):
     if not created:
         return
 
-    alert_type = None
-
-    # Check battery voltage — below 30% capacity on the 3.0V–4.2V scale
+    # Battery voltage — below 25% capacity on the 3.0V–4.2V scale
     if instance.battery_voltage is not None and get_battery_pct(instance.battery_voltage) < LOW_BATTERY_PCT_THRESHOLD:
-        alert_type = 'Low_Battery'
+        Alert.objects.create(node=instance.node, health_log=instance, alert_type='Low_Battery')
 
-    # Check signal strength (RSSI — more negative = weaker)
-    elif instance.signal_strength is not None and instance.signal_strength < -90:
-        alert_type = 'Weak_Signal'
+    # Signal strength (RSSI — more negative = weaker)
+    if instance.signal_strength is not None and instance.signal_strength < -90:
+        Alert.objects.create(node=instance.node, health_log=instance, alert_type='Weak_Signal')
 
-    # Check sensor continuity
-    elif instance.sensor_continuity is False:
-        alert_type = 'Sensor_Failure'
+    # Sensor continuity
+    if instance.sensor_continuity is False:
+        Alert.objects.create(node=instance.node, health_log=instance, alert_type='Sensor_Failure')
 
-    # Check node status
-    elif instance.status == 'Critical':
-        alert_type = 'Node_Offline'
-
-    if alert_type:
-        Alert.objects.create(
-            node=instance.node,
-            health_log=instance,
-            alert_type=alert_type
-        )
+    # Node status
+    if instance.status == 'Critical':
+        Alert.objects.create(node=instance.node, health_log=instance, alert_type='Node_Offline')

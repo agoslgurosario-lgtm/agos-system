@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Alert, AlertRead
+from apps.sensor_nodes.services import hotspot_at
 
 
 class AlertSerializer(serializers.ModelSerializer):
@@ -19,8 +20,11 @@ class AlertSerializer(serializers.ModelSerializer):
         return obj.node.node_name if obj.node else None
 
     def get_barangay_name(self, obj):
-        return obj.node.barangay.barangay_name if obj.node and obj.node.barangay else None
-
+        if not obj.node:
+            return None
+        _, _, _, barangay_name = hotspot_at(obj.node, obj.timestamp)
+        return barangay_name or None
+    
     def get_is_read(self, obj):
         user = self.context['request'].user
         return obj.reads.filter(user=user).exists()
@@ -74,7 +78,7 @@ class AlertSerializer(serializers.ModelSerializer):
                     'signal_strength': health.signal_strength,
                     'sensor_continuity': health.sensor_continuity,
                     'health_status': health.status,
-                    'checked_at': health.checked_at,
+                    'checked_at': health.checked_at.isoformat() if health.checked_at else None,
                 }
             return {}
 

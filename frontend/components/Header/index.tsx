@@ -45,8 +45,6 @@ const pageTitles: Record<string, string> = {
   "/admin/history/waste": "Waste Classification",
   "/admin/history/barangay-reports": "Barangay Reports",
   "/admin/history/barangay-reports/view-barangay-report": "Barangay Reports",
-  "/admin/history/monthly-reports": "Municipal Reports",
-  "/admin/history/monthly-reports/view-monthly-reports": "Municipal Reports",
   "/admin/health": "Sensor Nodes Health",
   "/admin/audit": "System Audit Logs",
   "/admin/settings": "Settings",
@@ -58,7 +56,6 @@ const pageTitles: Record<string, string> = {
   "/menro/hotspots": "Canal Hotspot Management",
   "/menro/barangay-reports": "Barangay Reports",
   "/menro/barangay-reports/view-barangay-report": "Barangay Reports",
-  "/menro/reports": "Compiled Monthly Reports",
   "/menro/manual": "MENRO User Manual",
 }
 

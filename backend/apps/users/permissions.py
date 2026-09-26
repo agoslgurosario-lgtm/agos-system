@@ -1,4 +1,4 @@
-from rest_framework.permissions import BasePermission
+from rest_framework.permissions import BasePermission, SAFE_METHODS
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from django.contrib.auth.hashers import check_password
@@ -108,63 +108,62 @@ class IsIoTDevice(BasePermission):
         )
 
 
-class CanAccessOwnBarangayReport(BasePermission):
+class CanAccessOwnCanalReport(BasePermission):
     """
-    Used for BarangayMonthlyReportDetailView.
-    Admin/MENRO: full access to any report.
-    Barangay: GET/PATCH only on their own barangay's report;
-    PATCH is only allowed while status is still 'Draft' (locked once
-    submitted); PUT and DELETE are blocked entirely for this role.
+    Used for CanalMonitoringReportDetailView and the export view.
+    Admin/MENRO/MENRO_Staff: read-only, and only on submitted reports
+    (they receive reports, they don't edit or approve them).
+    Barangay: GET/PATCH/DELETE on their own barangay's reports while
+    still in progress; once submitted, read/export only. A submitted
+    report is the record.
     """
     def has_permission(self, request, view):
         user = request.user
         if not user.is_authenticated:
             return False
         if user.user_role in ['Admin', 'MENRO', 'MENRO_Staff']:
-            return True
+            return request.method in SAFE_METHODS
         if user.user_role == 'Barangay':
-            return request.method in ['GET', 'PATCH']
+            return True
         return False
 
     def has_object_permission(self, request, view, obj):
         user = request.user
         if user.user_role in ['Admin', 'MENRO', 'MENRO_Staff']:
-            return True
+            return obj.is_submitted
         if user.user_role == 'Barangay':
             if obj.barangay_id != user.barangay_id:
                 return False
-            if request.method == 'PATCH':
-                return obj.status == 'Draft'
-            return True 
+            return (not obj.is_submitted) or request.method in SAFE_METHODS
         return False
 
 
-class CanAccessOwnBarangayReportMedia(BasePermission):
+class CanAccessOwnCanalReportMedia(BasePermission):
     """
-    Used for ReportMediaDetailView (delete-only, for now).
-    Admin/MENRO: full access.
-    Barangay: DELETE only on media attached to their own barangay's
-    report, and only while that report is still 'Draft'.
+    Used for ReportMediaDetailView.
+    Admin/MENRO/MENRO_Staff: read-only, and never on photos of an
+    unsubmitted report.
+    Barangay: GET/DELETE on media attached to their own barangay's
+    report; once that report is submitted, read-only.
     """
     def has_permission(self, request, view):
         user = request.user
         if not user.is_authenticated:
             return False
         if user.user_role in ['Admin', 'MENRO', 'MENRO_Staff']:
-            return True
+            return request.method in SAFE_METHODS
         if user.user_role == 'Barangay':
             return request.method in ['GET', 'DELETE']
         return False
 
     def has_object_permission(self, request, view, obj):
         user = request.user
+        report = obj.report
         if user.user_role in ['Admin', 'MENRO', 'MENRO_Staff']:
-            return True
+            # media with no report is clog-event evidence, which stays visible
+            return report is None or report.is_submitted
         if user.user_role == 'Barangay':
-            report = obj.monthly_report
             if not report or report.barangay_id != user.barangay_id:
                 return False
-            if request.method == 'DELETE':
-                return report.status == 'Draft'
-            return True
+            return (not report.is_submitted) or request.method in SAFE_METHODS
         return False

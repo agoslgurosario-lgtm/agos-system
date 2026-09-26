@@ -16,6 +16,7 @@ const CONDITION_COLORS: Record<string, string> = {
   Critical: "#D81010",
   Warning:  "#FF9705",
   Normal:   "#1565BC",
+  Maintenance: "#7C3AED", 
   default:  "#727272",
 }
 
@@ -121,6 +122,7 @@ function MapLegend() {
               { color: '#1565BC', label: 'Normal' },
               { color: '#FF9705', label: 'Warning' },
               { color: '#D81010', label: 'Critical' },
+              { color: '#7C3AED', label: 'Under Maintenance' },
             ].map(({ color, label }) => `
               <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
                 <span style="
@@ -314,9 +316,10 @@ type Props = {
   colorMode?: 'clog' | 'health' | 'availability'
   showLegend?: boolean
   boundaryGeoJson?: any
+  showMarkerPopups?: boolean
 }
 
-export default function AgosMap({ latitude, longitude, label, zoom = 14, markers, onMapClick, colorMode = 'clog', showLegend = true, boundaryGeoJson }: Props) {
+export default function AgosMap({ latitude, longitude, label, zoom = 14, markers, onMapClick, colorMode = 'clog', showLegend = true, boundaryGeoJson, showMarkerPopups = true }: Props) {
   const colorMap = colorMode === 'health'
     ? HEALTH_COLORS
     : colorMode === 'availability'
@@ -391,10 +394,12 @@ export default function AgosMap({ latitude, longitude, label, zoom = 14, markers
                 click: () => m.onMarkerClick?.()
               }}
             >
-            <Popup>
-              <div className="text-xs font-semibold">{m.label ?? "Node"}</div>
-              {m.sublabel && <div className="text-xs text-gray-500 mt-0.5">{m.sublabel}</div>}
-            </Popup>
+            {showMarkerPopups && (
+              <Popup>
+                <div className="text-xs font-semibold">{m.label ?? "Node"}</div>
+                {m.sublabel && <div className="text-xs text-gray-500 mt-0.5">{m.sublabel}</div>}
+              </Popup>
+            )}
           </Marker>
         )
       })}

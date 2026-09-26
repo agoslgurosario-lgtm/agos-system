@@ -67,21 +67,19 @@ export function BarangayReportsSkeleton() {
       {/* monthly report progress */}
       <div className="mt-2 flex gap-2 w-full">
         <div className="flex-[3]">
-          <div className="bg-[#FAFCFD] border border-[#C2C1C1] rounded-lg p-4 flex flex-col gap-4">
-            <Skeleton className="h-4 w-48" />
-            <div className="flex items-center gap-3 -mt-2">
-              <Skeleton className="h-3 w-full rounded-full" />
-              <Skeleton className="h-6 w-10 flex-shrink-0" />
+          <div className="bg-[#FAFCFD] border border-[#C2C1C1] rounded-lg p-4 flex flex-col gap-3">
+            <div className="flex items-start justify-between">
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-6 w-24" />
             </div>
-            <div className="flex gap-8 -mt-1">
-              <div className="flex items-center gap-2">
-                <Skeleton className="h-2 w-2 rounded-full" />
-                <Skeleton className="h-3 w-24" />
-              </div>
-              <div className="flex items-center gap-2">
-                <Skeleton className="h-2 w-2 rounded-full" />
-                <Skeleton className="h-3 w-24" />
-              </div>
+            <Skeleton className="h-3 w-full rounded-full" />
+            <div className="flex gap-8">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Skeleton className="h-2 w-2 rounded-full" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -103,10 +101,12 @@ export function BarangayReportsSkeleton() {
           <Table>
             <TableHeader className="bg-[#e8eef1b4] border border-[#CFD8DC] h-12 rounded-lg">
               <TableRow>
-                <TableHead className="font-semibold text-left text-xs text-[#727272]">DATE</TableHead>
+                <TableHead className="font-semibold text-left text-xs text-[#727272]">DATE OBSERVED</TableHead>
                 <TableHead className="font-semibold text-left text-xs text-[#727272]">BARANGAY</TableHead>
-                <TableHead className="font-semibold text-left text-xs text-[#727272]">SUBMITTED BY</TableHead>
-                <TableHead className="font-semibold text-left text-xs text-[#727272]">STATUS</TableHead>
+                <TableHead className="font-semibold text-left text-xs text-[#727272]">CANAL</TableHead>
+                <TableHead className="font-semibold text-left text-xs text-[#727272]">SEVERITY</TableHead>
+                <TableHead className="font-semibold text-left text-xs text-[#727272]">FINAL CONDITION</TableHead>
+                <TableHead className="font-semibold text-left text-xs text-[#727272]">FILED BY</TableHead>
                 <TableHead className="font-semibold text-left text-xs text-[#727272]">ACTIONS</TableHead>
               </TableRow>
             </TableHeader>
@@ -116,7 +116,9 @@ export function BarangayReportsSkeleton() {
                   <TableCell className="h-14"><Skeleton className="h-3.5 w-20" /></TableCell>
                   <TableCell className="h-14"><Skeleton className="h-3.5 w-24" /></TableCell>
                   <TableCell className="h-14"><Skeleton className="h-3.5 w-28" /></TableCell>
-                  <TableCell className="h-14"><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
+                  <TableCell className="h-14"><Skeleton className="h-6 w-16 rounded-full" /></TableCell>
+                  <TableCell className="h-14"><Skeleton className="h-6 w-24 rounded-full" /></TableCell>
+                  <TableCell className="h-14"><Skeleton className="h-3.5 w-24" /></TableCell>
                   <TableCell className="h-14">
                     <div className="flex gap-3">
                       <Skeleton className="h-9 w-16 rounded-lg" />

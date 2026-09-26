@@ -59,6 +59,7 @@ class ClogEvent(models.Model):
         blank=True,
         related_name='responded_events',
     )
+    auto_cleared = models.BooleanField(default=False)
 
     class Meta:
         db_table = 'tbl_clog_events'

@@ -9,6 +9,7 @@ export const setSuppressInactiveRedirect = (value: boolean) => {
 export const shouldSuppressInactiveRedirect = () => suppressInactiveRedirect
 
 export const getUser = () => {
+  if (typeof window === "undefined") return null
   const user = localStorage.getItem("user")
   return user ? JSON.parse(user) : null
 }
@@ -35,6 +36,7 @@ export const logout = async () => {
 }
 
 export const isAuthenticated = (): boolean => {
+  if (typeof window === "undefined") return false
   return !!localStorage.getItem("user")
 }
 

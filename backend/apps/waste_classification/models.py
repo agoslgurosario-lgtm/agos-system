@@ -38,8 +38,6 @@ class WasteClassification(models.Model):
     estimated_volume = models.FloatField()
     timestamp = models.DateTimeField(auto_now_add=True)
 
-    
-
     class Meta:
         db_table = 'tbl_waste_classification'
 

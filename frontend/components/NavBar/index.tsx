@@ -76,8 +76,7 @@ const navItems: Record<string, NavItem[]> = {
       children: [
         { label: "Clog Events",              href: "/admin/history/clog-events",      icon: <TriangleAlert size={14} /> },
         { label: "Waste Classification",     href: "/admin/history/waste",            icon: <Package size={14} /> },
-        { label: "Barangay Monthly Reports", href: "/admin/history/barangay-reports", icon: <FileBarChart size={14} /> },
-        { label: "Compiled Barangay Reports",          href: "/admin/history/monthly-reports",  icon: <CalendarDays size={14} /> },
+        { label: "Barangay Reports", href: "/admin/history/barangay-reports", icon: <FileBarChart size={14} /> },
       ]
     },
     {
@@ -100,7 +99,7 @@ const navItems: Record<string, NavItem[]> = {
     { label: "Waste Analytics",  href: "/menro/analytics",        icon: <ChartNoAxesCombined size={18} /> },
     { label: "Resource Optimization",        href: "/menro/resources",        icon: <Package size={18} /> },
     { label: "Canal Hotspots",        href: "/menro/hotspots",        icon: <Target size={18} /> },
-    { label: "Compiled Barnagay\nReports",  href: "/menro/reports",          icon: <CalendarDays size={18} /> },
+    { label: "Barangay Reports", href: "/menro/barangay-reports", icon: <FileBarChart size={18} /> },
     { label: "User Manual",    href: "/menro/manual",  icon: <Book size={14} /> },
   ],
   MENRO_Staff: [

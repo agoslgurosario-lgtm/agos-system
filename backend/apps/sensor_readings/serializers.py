@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from .models import SensorReading
 from apps.sensor_nodes.models import SensorNode
+from apps.sensor_nodes.serializers import get_node_identity_as_of
+
 
 class SensorReadingSerializer(serializers.ModelSerializer):
     node = serializers.PrimaryKeyRelatedField(
@@ -18,18 +20,4 @@ class SensorReadingSerializer(serializers.ModelSerializer):
         ]
 
     def get_node_details(self, obj):
-        node = obj.node
-        return {
-            'node_id': node.node_id,
-            'node_name': node.node_name,
-            'barangay_details': {
-                'barangay_id': node.barangay.barangay_id,
-                'barangay_name': node.barangay.barangay_name,
-            } if node.barangay else None,
-            'hotspot_details': {
-                'hotspot_id': node.hotspot.hotspot_id,
-                'name': node.hotspot.name,
-                'latitude': node.hotspot.latitude,
-                'longitude': node.hotspot.longitude,
-            } if node.hotspot else None,
-        }
+        return get_node_identity_as_of(obj.node, obj.timestamp)

@@ -1,11 +1,11 @@
-import React, { useState, useCallback, useRef  } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
 import { api } from "@/lib/api";
-import { useAuth } from "@/lib/AuthContext";
-import { BarangayMonthlyReport } from "@/types/reports";
+import { CanalMonitoringReport } from "@/types/reports";
+import { SEVERITY_COLORS } from "@/constants/reports";
 import AlertBellButton from "@/components/alerts/AlertBellButton";
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -35,44 +35,43 @@ function MetricCard({ label, value }: { label: string; value: number }) {
   );
 }
 
-function StatusBadge({ status }: { status: "Draft" | "Pending" | "Reviewed" }) {
-  let bgColor = "#e0f2fe";
-  let textColor = "#0369a1";
-
-  if (status === "Draft") {
-    bgColor = "#fef3c7";
-    textColor = "#b45309";
-  } else if (status === "Reviewed") {
-    bgColor = "#dcfce7";
-    textColor = "#15803d";
-  }
+function SeverityBadge({ severity }: { severity: CanalMonitoringReport["severity"] }) {
+  if (!severity) return null;
+  const colors = SEVERITY_COLORS[severity];
 
   return (
     <View
       className="shrink-0 self-start rounded-xl px-2.5 py-1"
-      style={{ backgroundColor: bgColor }}
+      style={{ backgroundColor: colors.bg }}
     >
-      <Text className="text-[11px] font-semibold" style={{ color: textColor }}>
-        {status}
+      <Text className="text-[11px] font-semibold" style={{ color: colors.text }}>
+        {severity}
       </Text>
     </View>
   );
 }
 
-function formatMonth(reportMonth: string) {
-  const d = new Date(reportMonth);
-  if (isNaN(d.getTime())) return reportMonth;
-  return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+function InProgressBadge() {
+  return (
+    <View className="shrink-0 self-start rounded-xl bg-[#fef3c7] px-2.5 py-1">
+      <Text className="text-[11px] font-semibold text-[#b45309]">In progress</Text>
+    </View>
+  );
 }
 
+function formatObserved(report: CanalMonitoringReport) {
+  if (!report.date_observed) return "No date yet";
+  const d = new Date(report.date_observed);
+  if (isNaN(d.getTime())) return "No date yet";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
 
 export default function ReportsListScreen() {
   const router = useRouter();
-  const { user } = useAuth();
   const hasLoadedOnce = useRef(false);
   const insets = useSafeAreaInsets()
 
-  const [reports, setReports] = useState<BarangayMonthlyReport[]>([]);
+  const [reports, setReports] = useState<CanalMonitoringReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -87,7 +86,7 @@ export default function ReportsListScreen() {
     }
     setError("");
     try {
-      const res = await api.get("/api/barangay-reports/");
+      const res = await api.get("/api/canal-reports/mine/");
       setReports(res.results ?? res);
       hasLoadedOnce.current = true;
     } catch (err: any) {
@@ -104,37 +103,39 @@ export default function ReportsListScreen() {
   );
 
   const totalReports = reports.length;
-  const draftsCount = reports.filter((r) => r.status === "Draft").length;
-  const submittedCount = reports.filter((r) => r.status !== "Draft").length;
-  const pendingCount = reports.filter((r) => r.status === "Pending").length;
+  const submittedCount = reports.filter((r) => r.is_submitted).length;
+  const inProgressCount = reports.filter((r) => !r.is_submitted).length;
+
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const thisMonthCount = reports.filter(
+    (r) => r.is_submitted && (r.date_observed ?? "").startsWith(currentMonth)
+  ).length;
 
   const sortedReports = [...reports].sort(
-    (a, b) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
 
-  const getTotalKg = (r: BarangayMonthlyReport) =>
-    r.recyclables_kg + r.biodegradable_kg + r.residual_waste_kg + (r.special_waste_kg ?? 0);
-
-  const goToReport = (report: BarangayMonthlyReport) => {
-    if (report.status === "Draft") {
+  const goToReport = (report: CanalMonitoringReport) => {
+    if (!report.is_submitted) {
       router.push({
         pathname: "/new-report",
-        params: { barangay: String(report.barangay), report_month: report.report_month },
+        params: { report_id: String(report.report_id) },
       } as any);
     } else {
       router.push({
         pathname: "/view-report",
-        params: { id: String(report.monthly_report_id) },
+        params: { id: String(report.report_id) },
       } as any);
     }
   };
 
-  const handleExport = async (report: BarangayMonthlyReport) => {
-    setExportingId(report.monthly_report_id);
+  const handleExport = async (report: CanalMonitoringReport) => {
+    setExportingId(report.report_id);
     try {
       await exportPdf(
-        `/api/barangay-reports/${report.monthly_report_id}/export/`,
-        `${report.barangay_details?.barangay_name ?? "barangay"}-MRF-${report.report_month}.pdf`
+        `/api/canal-reports/${report.report_id}/export/`,
+        `${report.barangay_details?.barangay_name ?? "barangay"}-Canal-Report-${report.report_id}.pdf`
       );
     } catch {
       Alert.alert("Export failed", "Could not generate the PDF. Please try again.");
@@ -162,7 +163,7 @@ export default function ReportsListScreen() {
       >
         <View className="mb-4 flex-row items-center justify-between gap-3">
           <Text className="flex-1 text-lg font-bold text-[#122A48]" numberOfLines={2}>
-            Clearing Operations Report
+            Canal Monitoring Reports
           </Text>
 
           <AlertBellButton />
@@ -176,8 +177,8 @@ export default function ReportsListScreen() {
             <MetricCard label="Submitted" value={submittedCount} />
           </View>
           <View className="flex-row gap-2.5">
-            <MetricCard label="Drafts" value={draftsCount} />
-            <MetricCard label="Pending review" value={pendingCount} />
+            <MetricCard label="In progress" value={inProgressCount} />
+            <MetricCard label="This month" value={thisMonthCount} />
           </View>
         </View>
 
@@ -185,18 +186,19 @@ export default function ReportsListScreen() {
 
         <View className="gap-3">
           {sortedReports.length === 0 && (
-            <Text className="mt-5 text-center text-[13px] text-[#94a3b8]">No reports yet this period.</Text>
+            <Text className="mt-5 text-center text-[13px] text-[#94a3b8]">
+              No reports yet. Tap "Add report" to file one.
+            </Text>
           )}
 
           {sortedReports.map((report) => {
-            const isDraft = report.status === "Draft";
-            const monthLabel = formatMonth(report.report_month);
-            const totalKg = getTotalKg(report);
-            const filesCount = report.media.length;
+            const isDraft = !report.is_submitted;
+            const filesCount = report.media?.length ?? 0;
+            const collected = report.waste_collected_amount;
 
             return (
               <TouchableOpacity
-                key={report.monthly_report_id}
+                key={report.report_id}
                 activeOpacity={0.9}
                 onPress={() => goToReport(report)}
                 style={{
@@ -217,17 +219,25 @@ export default function ReportsListScreen() {
                       style={{ marginTop: 2 }}
                     />
                     <Text className="flex-1 shrink text-sm font-semibold leading-5 text-[#122A48]">
-                      {monthLabel} Report
+                      {report.canal_name || "Untitled canal"}
                     </Text>
                   </View>
-                  <StatusBadge status={report.status} />
+                  {isDraft ? <InProgressBadge /> : <SeverityBadge severity={report.severity} />}
                 </View>
 
-                <View className="mb-3.5 flex-row items-center gap-3">
+                <View className="mb-2 flex-row flex-wrap items-center gap-3">
                   <View className="flex-row items-center gap-1">
-                    <MaterialCommunityIcons name="scale-balance" size={14} color="#64748b" />
-                    <Text className="text-[11px] text-[#64748b]">{totalKg.toFixed(2)} kg</Text>
+                    <MaterialCommunityIcons name="calendar-outline" size={14} color="#64748b" />
+                    <Text className="text-[11px] text-[#64748b]">{formatObserved(report)}</Text>
                   </View>
+                  {collected != null && (
+                    <View className="flex-row items-center gap-1">
+                      <MaterialCommunityIcons name="scale-balance" size={14} color="#64748b" />
+                      <Text className="text-[11px] text-[#64748b]">
+                        {collected} kg
+                      </Text>
+                    </View>
+                  )}
                   <View className="flex-row items-center gap-1">
                     <MaterialCommunityIcons name="paperclip" size={14} color="#64748b" />
                     <Text className="text-[11px] text-[#64748b]">
@@ -235,6 +245,15 @@ export default function ReportsListScreen() {
                     </Text>
                   </View>
                 </View>
+
+                {report.nearest_landmark ? (
+                  <View className="mb-2 flex-row items-center gap-1">
+                    <MaterialCommunityIcons name="map-marker-outline" size={14} color="#94a3b8" />
+                    <Text className="flex-1 text-[11px] text-[#94a3b8]" numberOfLines={1}>
+                      {report.nearest_landmark}
+                    </Text>
+                  </View>
+                ) : null}
 
                 <View className="mb-3 h-px bg-[#f1f5f9]" />
 
@@ -254,28 +273,31 @@ export default function ReportsListScreen() {
                       color={isDraft ? "white" : "#475569"}
                     />
                     <Text className={`text-xs font-semibold ${isDraft ? "text-white" : "text-[#475569] font-medium"}`}>
-                      {isDraft ? "Continue draft" : "View"}
+                      {isDraft ? "Continue report" : "View"}
                     </Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      handleExport(report);
-                    }}
-                    disabled={exportingId === report.monthly_report_id}
-                    className="flex-1 flex-row items-center justify-center gap-1 rounded-md border border-[#cbd5e1] py-1.5"
-                    style={exportingId === report.monthly_report_id ? { opacity: 0.6 } : undefined}
-                  >
-                    {exportingId === report.monthly_report_id ? (
-                      <ActivityIndicator size="small" color="#475569" />
-                    ) : (
-                      <MaterialCommunityIcons name="tray-arrow-up" size={14} color="#475569" />
-                    )}
-                    <Text className="text-xs font-medium text-[#475569]">
-                      {exportingId === report.monthly_report_id ? "Exporting..." : "Export"}
-                    </Text>
-                  </TouchableOpacity>
+                  {/* Export only on submitted reports — the backend PDF needs date_observed, which a draft may not have yet */}
+                  {!isDraft && (
+                    <TouchableOpacity
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleExport(report);
+                      }}
+                      disabled={exportingId === report.report_id}
+                      className="flex-1 flex-row items-center justify-center gap-1 rounded-md border border-[#cbd5e1] py-1.5"
+                      style={exportingId === report.report_id ? { opacity: 0.6 } : undefined}
+                    >
+                      {exportingId === report.report_id ? (
+                        <ActivityIndicator size="small" color="#475569" />
+                      ) : (
+                        <MaterialCommunityIcons name="tray-arrow-up" size={14} color="#475569" />
+                      )}
+                      <Text className="text-xs font-medium text-[#475569]">
+                        {exportingId === report.report_id ? "Exporting..." : "Export"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </TouchableOpacity>
             );
@@ -291,14 +313,7 @@ export default function ReportsListScreen() {
           style={{ borderRadius: 16 }}
         >
           <TouchableOpacity
-            onPress={() => {
-              const now = new Date();
-              const reportMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-              router.push({
-                pathname: "/new-report",
-                params: { barangay: String(user?.barangay_id ?? ""), report_month: reportMonth },
-              } as any);
-            }}
+            onPress={() => router.push("/new-report" as any)}
             className="flex-row items-center gap-2 rounded-2xl bg-[#1d4ed8] px-4 py-3.5"
           >
             <MaterialCommunityIcons name="plus" size={20} color="white" />
