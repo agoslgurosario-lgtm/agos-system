@@ -76,4 +76,6 @@ export type CanalMonitoringReport = {
   barangay_details: ReportBarangay | null
   reported_by_details: ReportUser | null
   media: ReportMedia[]
+
+  signatory_snapshot: Record<string, string> | null
 }

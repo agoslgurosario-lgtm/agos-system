@@ -6,6 +6,7 @@ import type { CanalMonitoringReport } from "@/types/report"
 type PrintCanalReportProps = {
   report: CanalMonitoringReport
   generatedBy: string
+  signatoryNames: Record<string, string>
 }
 
 const SEVERITY_OPTIONS: [string, string][] = [['Critical', 'Critical'], ['Medium', 'Medium'], ['Low', 'Low']]
@@ -35,7 +36,7 @@ function kg(v: number | null) {
   return v != null ? Number(v).toFixed(2) : '0.00'
 }
 
-export function PrintCanalReport({ report, generatedBy }: PrintCanalReportProps) {
+export function PrintCanalReport({ report, generatedBy, signatoryNames }: PrintCanalReportProps) {
   if (typeof document === "undefined") return null
 
   const photoGroups = PHOTO_LABELS
@@ -144,13 +145,18 @@ export function PrintCanalReport({ report, generatedBy }: PrintCanalReportProps)
       )}
 
       <div className="print-canal-sig-grid">
-        {SIGNATORY_POSITIONS.map(pos => (
-          <div key={pos} className="print-canal-sig-cell">
-            <div className="print-canal-sig-space" />
-            <div className="print-canal-sig-name print-canal-sig-name-placeholder">Name of Signatory</div>
-            <div className="print-canal-sig-pos">{pos}</div>
-          </div>
-        ))}
+        {SIGNATORY_POSITIONS.map(pos => {
+          const name = signatoryNames[pos]
+          return (
+            <div key={pos} className="print-canal-sig-cell">
+              <div className="print-canal-sig-space" />
+              <div className={`print-canal-sig-name ${!name ? 'print-canal-sig-name-placeholder' : ''}`}>
+                {name || 'Name of Signatory'}
+              </div>
+              <div className="print-canal-sig-pos">{pos}</div>
+            </div>
+          )
+        })}
       </div>
 
       <div className="print-footer">AGOS — Automated Geo-Based Obstruction Sensing System</div>

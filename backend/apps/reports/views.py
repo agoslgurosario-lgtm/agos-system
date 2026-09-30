@@ -19,7 +19,8 @@ from apps.audit_logs.utils import log_action
 from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
 from agos_backend.pdf_utils import render_custom_pdf, get_logo_data_uri
-
+from apps.signatories.models import Signatory
+from apps.alerts.models import Alert
 
 
 PHOTO_LABELS = [
@@ -70,12 +71,33 @@ def _photo_groups(report):
 
 def _signatory_rows(report):
     """
-    Placeholder until signatory management exists: the same four positions as the MRF
-    form, names left blank. Later, build this list from the barangay's saved signatories
-    instead. The template renders whatever comes back here, two per row.
+    Pulls each position's current active signatory for the report's barangay.
+    Positions with no signatory set yet fall back to a blank name, same as
+    before signatory management existed — so older/unset barangays don't
+    break the PDF.
     """
-    signatories = [{'name': '', 'position': p} for p in DEFAULT_SIGNATORY_POSITIONS]
+    if report.signatory_snapshot:
+        active_by_position = report.signatory_snapshot
+    else:
+        active_by_position = {
+            s.position: s.name
+            for s in Signatory.objects.filter(barangay=report.barangay, status='Active')
+        }
+    signatories = [
+        {'name': active_by_position.get(p, ''), 'position': p}
+        for p in DEFAULT_SIGNATORY_POSITIONS
+    ]
     return [signatories[i:i + 2] for i in range(0, len(signatories), 2)]
+
+
+def _snapshot_signatories(barangay):
+    """{position: name} for the barangay's current active signatories, taken
+    at the moment a report becomes submitted — so a later staffing change
+    doesn't rewrite history on an already-signed report."""
+    return {
+        s.position: s.name
+        for s in Signatory.objects.filter(barangay=barangay, status='Active')
+    }
 
 
 class CanalMonitoringReportListView(generics.ListCreateAPIView):
@@ -98,10 +120,13 @@ class CanalMonitoringReportListView(generics.ListCreateAPIView):
         return CanalMonitoringReport.objects.filter(is_submitted=True).order_by('-date_observed')
 
     def perform_create(self, serializer):
-        serializer.save(
+        report = serializer.save(
             barangay=self.request.user.barangay,
             reported_by=self.request.user,
         )
+        if report.is_submitted:
+            report.signatory_snapshot = _snapshot_signatories(report.barangay)
+            report.save(update_fields=['signatory_snapshot'])
 
 
 class CanalMonitoringReportDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -114,6 +139,9 @@ class CanalMonitoringReportDetailView(generics.RetrieveUpdateDestroyAPIView):
         was_submitted = serializer.instance.is_submitted
         report = serializer.save()
         if report.is_submitted and not was_submitted:
+            report.signatory_snapshot = _snapshot_signatories(report.barangay)
+            report.save(update_fields=['signatory_snapshot'])
+            Alert.objects.create(report=report, alert_type='Report_Submitted')
             log_action(
                 user=self.request.user,
                 action='Filed Canal Monitoring Report',

@@ -84,6 +84,7 @@ INSTALLED_APPS = [
     # apps
     'apps.users',
     'apps.barangay',
+    'apps.signatories',
     'apps.sensor_nodes',
     'apps.sensor_readings',
     'apps.waste_classification',

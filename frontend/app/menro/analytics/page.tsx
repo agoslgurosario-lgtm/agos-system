@@ -227,10 +227,10 @@ useWebSocket({
           </div>
           <div className="flex gap-2">
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="cursor-pointer w-40 px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+              <SelectTrigger className="cursor-pointer px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent position="popper" className='w-40 min-w-0 !max-h-70 overflow-y-auto'>
+              <SelectContent position="popper" className='min-w-0 !max-h-70 overflow-y-auto'>
                 {monthOptions.map(m => (
                   <SelectItem key={m.value} className="p-2 py-1 cursor-pointer text-[#122A48]" value={m.value}>
                     {m.label}

@@ -202,10 +202,10 @@ export default function Waste() {
 
             {/* barangay filter */}
             <Select value={barangayFilterOpt} onValueChange={setBarangayFilterOpt}>
-              <SelectTrigger className="text-xs cursor-pointer w-35 px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+              <SelectTrigger className="text-xs cursor-pointer px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                 <SelectValue placeholder="All Barangay" />
               </SelectTrigger>
-              <SelectContent position="popper" className='w-35 min-w-0'>
+              <SelectContent position="popper" className='min-w-0'>
                 <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="All Barangay">All Barangay</SelectItem>
                 {[...allBarangays]
                   .sort((a, b) => a.barangay_name.localeCompare(b.barangay_name))
@@ -219,10 +219,10 @@ export default function Waste() {
             
             {/* dominant waste type filter */}
             <Select value={dominantWaste} onValueChange={setDominantWaste}>
-              <SelectTrigger className="text-xs cursor-pointer w-30 px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+              <SelectTrigger className="text-xs cursor-pointer px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                 <SelectValue placeholder="All Barangay" />
               </SelectTrigger>
-              <SelectContent position="popper" className='w-30 min-w-0'>
+              <SelectContent position="popper" className='min-w-0'>
                 <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="All Waste">All Waste</SelectItem>
                 <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="Recyclable">Recyclable</SelectItem>
                 <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="Biodegradable">Biodegradable</SelectItem>
@@ -233,10 +233,10 @@ export default function Waste() {
 
             {/* sensor node filter */}
             <Select value={sensorNode} onValueChange={setSensorNode}>
-              <SelectTrigger className="text-xs cursor-pointer w-27 px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+              <SelectTrigger className="text-xs cursor-pointer px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                 <SelectValue placeholder="All Nodes" />
               </SelectTrigger>
-              <SelectContent position="popper" className='w-27 min-w-0'>
+              <SelectContent position="popper" className='min-w-0'>
                 <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="All Nodes">All Nodes</SelectItem>
                 {[...allSensorNodes]
                   .sort((a, b) => a.node_name.localeCompare(b.node_name))
@@ -249,10 +249,10 @@ export default function Waste() {
             </Select>
 
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="text-xs cursor-pointer w-35 px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+              <SelectTrigger className="text-xs cursor-pointer px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent position="popper" className="text-xs p-2 w-35 min-w-0 !max-h-70 overflow-y-auto">
+              <SelectContent position="popper" className="text-xs min-w-0 !max-h-70 overflow-y-auto">
                 <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="All">All Months</SelectItem>
                 {monthOptions.map(m => (
                   <SelectItem key={m.value} className="text-xs cursor-pointer p-2 text-[#122A48]" value={m.value}>

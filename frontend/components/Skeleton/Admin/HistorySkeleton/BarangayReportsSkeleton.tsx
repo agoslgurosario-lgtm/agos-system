@@ -32,7 +32,7 @@ export function BarangayReportsSkeleton() {
           </div>
 
           <Select value={filterBarangay} onValueChange={setFilterBarangay}>
-            <SelectTrigger className="text-xs cursor-pointer w-40 px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+            <SelectTrigger className="text-xs cursor-pointer px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper">
@@ -41,7 +41,7 @@ export function BarangayReportsSkeleton() {
           </Select>
 
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="cursor-pointer text-xs w-40 px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+            <SelectTrigger className="cursor-pointer text-xs px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper">

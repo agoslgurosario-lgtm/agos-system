@@ -74,6 +74,7 @@ export default function BarangayReports() {
   const [filterSeverity, setFilterSeverity] = useState("All")
 
   const [printingReport, setPrintingReport] = useState<CanalMonitoringReport | null>(null)
+  const [signatoryNames, setSignatoryNames] = useState<Record<string, string>>({})
 
   const monthOptions = buildMonthOptions(reports)
 
@@ -105,6 +106,24 @@ export default function BarangayReports() {
   useEffect(() => {
     if (!printingReport) return
 
+    const resolveSignatories = async (): Promise<Record<string, string>> => {
+      if (printingReport.signatory_snapshot) {
+        return printingReport.signatory_snapshot
+      }
+      const barangayId = printingReport.barangay_details?.barangay_id
+      if (!barangayId) return {}
+      try {
+        const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/signatories/?barangay=${barangayId}`)
+        if (!res.ok) return {}
+        const slots = await res.json()
+        const names: Record<string, string> = {}
+        slots.forEach((s: any) => { if (s.active) names[s.position] = s.active.name })
+        return names
+      } catch {
+        return {}
+      }
+    }
+
     const urls = [
       '/ROS-logo.jpg',
       ...printingReport.media.filter(m => m.file_url).map(m => m.file_url!),
@@ -118,13 +137,17 @@ export default function BarangayReports() {
       printReport()
     }
 
-    urls.forEach(url => {
-      const img = new window.Image()
-      img.onload = img.onerror = () => {
-        remaining -= 1
-        if (remaining === 0) finish()
-      }
-      img.src = url
+    resolveSignatories().then(names => {
+      setSignatoryNames(names)
+      if (remaining === 0) { finish(); return }
+      urls.forEach(url => {
+        const img = new window.Image()
+        img.onload = img.onerror = () => {
+          remaining -= 1
+          if (remaining === 0) finish()
+        }
+        img.src = url
+      })
     })
 
     const timeout = setTimeout(finish, 4000)
@@ -147,10 +170,10 @@ export default function BarangayReports() {
 
             {/* month filter */}
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="cursor-pointer w-40 px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+              <SelectTrigger className="cursor-pointer px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent position="popper" className='w-40 min-w-0 !max-h-70 overflow-y-auto'>
+              <SelectContent position="popper" className='min-w-0 !max-h-70 overflow-y-auto'>
                 <SelectItem className="p-2 py-1 cursor-pointer text-[#122A48]" value="All">All Months</SelectItem>
                 {monthOptions.map(m => (
                   <SelectItem key={m.value} className="p-2 py-1 cursor-pointer text-[#122A48]" value={m.value}>
@@ -162,7 +185,7 @@ export default function BarangayReports() {
 
             {/* barangay filter (all barangay regardless if they are registered or not) */}
             <Select value={filterBarangay} onValueChange={setFilterBarangay}>
-              <SelectTrigger className="cursor-pointer w-40 px-3 py-2 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+              <SelectTrigger className="cursor-pointer px-3 py-2 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                 <SelectValue placeholder="All Barangays" />
               </SelectTrigger>
               <SelectContent position="popper" className="!max-h-70 overflow-y-auto">
@@ -179,10 +202,10 @@ export default function BarangayReports() {
 
             {/* severity filter */}
             <Select value={filterSeverity} onValueChange={setFilterSeverity}>
-              <SelectTrigger className="cursor-pointer w-40 px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+              <SelectTrigger className="cursor-pointer px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent position="popper" className="w-40 min-w-0">
+              <SelectContent position="popper" className="min-w-0">
                 <SelectItem value="All" className="p-2 py-1 cursor-pointer text-[#122A48]">All Severity</SelectItem>
                 {SEVERITY_FILTERS.map(s => (
                   <SelectItem key={s} value={s} className="p-2 py-1 cursor-pointer text-[#122A48]">{s}</SelectItem>
@@ -313,7 +336,7 @@ export default function BarangayReports() {
       </div>
 
       <Toast toasts={toasts} onRemove={removeToast} />
-      {printingReport && <PrintCanalReport report={printingReport} generatedBy={generatedBy} />}
+      {printingReport && <PrintCanalReport report={printingReport} generatedBy={generatedBy} signatoryNames={signatoryNames} />}
     </>
   )
 }

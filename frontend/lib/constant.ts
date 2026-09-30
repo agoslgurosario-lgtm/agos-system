@@ -91,6 +91,11 @@ export const ALERT_STYLE: Record<string, { border: string; icon: string; shadow:
     icon: "bg-[#DACDE3] text-[#582579]",
     shadow: "shadow-[0_0_3px_rgba(88,37,121,0.45)]"
   },
+  Report_Submitted: {
+    border: "border-[#A7E3C4]",
+    icon: "bg-[#D6F5E3] text-[#1E8A5F]",
+    shadow: "shadow-[0_0_3px_rgba(30,138,95,0.45)]"
+  },
   default: {
     border: "border-[#C6C6C8]",
     icon: "bg-[#E5E5E6] text-[#727272]",

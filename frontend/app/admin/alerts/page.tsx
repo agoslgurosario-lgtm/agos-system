@@ -28,6 +28,7 @@ import { ALERT_STYLE } from "@/lib/constant"
 import { SearchFilter } from "@/components/SearchFilter"
 import { AlertsSkeleton } from "@/components/Skeleton/Admin/AlertsSkeleton"
 import { SpinnerIcon } from "@/components/SpinnerIcon"
+import { AlertDetailDialog } from "@/components/Alerts/AlertDetailDialog"
 
 
 type Alert = {
@@ -182,10 +183,10 @@ export default function Alerts() {
             <div className="flex gap-3">
               {/* barangay filter */}
               <Select value={barangay} onValueChange={setBarangay}>
-                <SelectTrigger className="cursor-pointer text-xs w-40 px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+                <SelectTrigger className="cursor-pointer text-xs px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
-                <SelectContent position="popper" className='w-40 min-w-0'>
+                <SelectContent position="popper" className='min-w-0'>
                   <SelectItem className="cursor-pointer p-2 text-xs" value="All Barangay">All Barangay</SelectItem>
                     {barangays.map(b => (
                       <SelectItem className="cursor-pointer p-2 text-xs" key={b.barangay_id} value={String(b.barangay_id)}>
@@ -197,10 +198,10 @@ export default function Alerts() {
 
               {/* date filter */}
               <Select value={dateFilter} onValueChange={setDateFilter}>
-                <SelectTrigger className="cursor-pointer text-xs w-35 px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+                <SelectTrigger className="cursor-pointer text-xs px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
-                <SelectContent position="popper" className='w-35 min-w-0'>
+                <SelectContent position="popper" className='min-w-0'>
                   <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="Today">Today</SelectItem>
                   <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="7Days">Last 7 days</SelectItem>
                   <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="30Days">Last 30 days</SelectItem>
@@ -322,60 +323,12 @@ export default function Alerts() {
       </div>
 
       {/* Alert Detail Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="[&>button]:hidden text-[#122A48] w-[380px]">
-          {selectedAlert && (() => {
-            const meta = ALERT_META[selectedAlert.alert_type] ?? { label: selectedAlert.alert_type.replace(/_/g, " "), Icon: null }
-            const style = ALERT_STYLE[selectedAlert.alert_type] ?? ALERT_STYLE.default
-            const Icon = meta.Icon
-            return (
-              <>
-                <DialogHeader>
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                      <div className={`p-2 rounded-lg ${style.icon}`}>
-                        {Icon && <Icon size={16} />}
-                      </div>
-                      <p className="font-bold text-sm">{meta.label}</p>
-                    </div>
-                    <button onClick={() => setDialogOpen(false)} className="cursor-pointer">
-                      <X size={16} />
-                    </button>
-                  </div>
-                </DialogHeader>
-
-                <DialogTitle className="sr-only">Alert Details</DialogTitle>
-                <hr />
-
-                <div className="flex flex-col gap-2 text-sm">
-                  <div className="flex justify-between">
-                    <p className="text-[#727272]">Node</p>
-                    <p className="font-medium">{selectedAlert.node_name ?? "—"}</p>
-                  </div>
-                  <div className="flex justify-between">
-                    <p className="text-[#727272]">Barangay</p>
-                    <p className="font-medium">{selectedAlert.barangay_name ?? "—"}</p>
-                  </div>
-                  <div className="flex justify-between">
-                    <p className="text-[#727272]">Detected</p>
-                    <p className="font-medium">
-                      {new Date(selectedAlert.timestamp).toLocaleString("en-PH", {
-                        month: "short", day: "numeric", year: "numeric",
-                        hour: "2-digit", minute: "2-digit", hour12: true
-                      })}
-                    </p>
-                  </div>
-
-                  <hr />
-                  <p className="font-semibold text-xs text-[#727272]">DETAILS</p>
-                  <ContextRow alertType={selectedAlert.alert_type} ctx={selectedAlert.alert_context} />
-                </div>
-              </>
-            )
-          })()}
-        </DialogContent>
-      </Dialog>
-     
-     </>
-   )
- }
+      <AlertDetailDialog
+        alert={selectedAlert}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+      />
+    
+    </>
+  )
+}

@@ -58,7 +58,7 @@ export function NodeSkeleton() {
               </div>
 
               <Select value={availabilityFilter} onValueChange={setAvailabilityFilter}>
-                <SelectTrigger className="text-xs cursor-pointer w-36 px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+                <SelectTrigger className="text-xs cursor-pointer px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent position="popper">

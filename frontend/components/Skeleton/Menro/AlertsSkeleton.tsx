@@ -43,7 +43,7 @@ export function AlertsSkeleton() {
           </Select>
 
           <Select value={dateFilter} onValueChange={setDateFilter}>
-            <SelectTrigger className="text-xs w-35 px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+            <SelectTrigger className="text-xs px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper">

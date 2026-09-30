@@ -158,7 +158,8 @@ const fetchAlertsRaw = async (): Promise<Alert[]> => {
   const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/alerts/`)
   if (!res.ok) throw new Error()
   const data = await res.json()
-  return data.results ?? data
+  const alerts: Alert[] = data.results ?? data
+  return alerts.filter(a => a.alert_type !== "Report_Submitted")
 }
 
 const fetchNodeHealthRaw = async (): Promise<NodeHealth[]> => {
@@ -278,6 +279,7 @@ export default function Map() {
   useWebSocket({
     path: "/ws/alerts/",
     onMessage: (newAlert) => {
+      if (newAlert.alert_type === "Report_Submitted") return
       alertsCache.setData(prev => [newAlert, ...prev])
     },
   })

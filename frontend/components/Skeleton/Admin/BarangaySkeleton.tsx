@@ -55,7 +55,7 @@ export function BarangaySkeleton() {
               </div>
 
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="cursor-pointer py-3 w-40 text-xs border border-[#C6C6C8] bg-[#FAFCFD] rounded-lg">
+                <SelectTrigger className="cursor-pointer py-3 text-xs border border-[#C6C6C8] bg-[#FAFCFD] rounded-lg">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent position="popper">

@@ -12,6 +12,7 @@ class Alert(models.Model):
         ('Low_Battery',         'Low Battery'),
         ('Weak_Signal',         'Weak Signal'),
         ('Sensor_Failure',      'Sensor Failure'),
+        ('Report_Submitted',    'Report Submitted'),
     ]
 
     alert_id = models.AutoField(primary_key=True)
@@ -19,6 +20,13 @@ class Alert(models.Model):
         ClogEvent,
         on_delete=models.CASCADE,
         db_column='event_id',
+        null=True,
+        blank=True,
+    )
+    report = models.ForeignKey(
+        'reports.CanalMonitoringReport',
+        on_delete=models.CASCADE,
+        db_column='report_id',
         null=True,
         blank=True,
     )

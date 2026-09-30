@@ -243,7 +243,7 @@ export default function Barangay() {
               <SearchFilter value={search} onChange={setSearch} placeholder='Search Barangay...' width="w-50" height="h-8" />
 
               <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
-                <SelectTrigger className="cursor-pointer py-3 w-40 text-xs border border-[#C6C6C8] bg-[#FAFCFD] rounded-lg">
+                <SelectTrigger className="cursor-pointer py-3 text-xs border border-[#C6C6C8] bg-[#FAFCFD] rounded-lg">
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
                 <SelectContent position="popper">

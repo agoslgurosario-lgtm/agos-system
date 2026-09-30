@@ -566,7 +566,7 @@ export default function Page() {
                 <div className="flex items-center justify-between">
                   <label className="text-[#122A48] text-xs font-medium">Frequency</label>
                   <Select value={frequencyInput} onValueChange={(v) => setFrequencyInput(v as any)}>
-                    <SelectTrigger className="cursor-pointer w-36 h-8 text-xs border-[#C6C6C8]">
+                    <SelectTrigger className="cursor-pointer h-8 text-xs border-[#C6C6C8]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent position="popper">

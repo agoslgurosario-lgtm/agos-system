@@ -20,6 +20,8 @@ class AlertSerializer(serializers.ModelSerializer):
         return obj.node.node_name if obj.node else None
 
     def get_barangay_name(self, obj):
+        if obj.report:
+            return obj.report.barangay.barangay_name
         if not obj.node:
             return None
         _, _, _, barangay_name = hotspot_at(obj.node, obj.timestamp)
@@ -39,8 +41,20 @@ class AlertSerializer(serializers.ModelSerializer):
         Low_Battery         → battery_voltage
         Weak_Signal         → signal_strength
         Sensor_Failure      → sensor_continuity
+        Report_Submitted    → report_id, canal_name, severity, final_canal_condition, date_observed
         """
         t = obj.alert_type
+
+        if t == 'Report_Submitted':
+            if not obj.report:
+                return {}
+            return {
+                'report_id': obj.report.report_id,
+                'canal_name': obj.report.canal_name,
+                'severity': obj.report.severity,
+                'final_canal_condition': obj.report.final_canal_condition,
+                'date_observed': obj.report.date_observed.isoformat() if obj.report.date_observed else None,
+            }
 
         if t == 'Critical_Clog' or t in ('Low_Clog_Alert', 'Moderate_Clog_Alert'):
             if obj.event and obj.event.classification:

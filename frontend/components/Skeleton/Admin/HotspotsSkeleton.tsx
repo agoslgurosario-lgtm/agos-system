@@ -54,7 +54,7 @@ export function HotspotsSkeleton() {
               </div>
 
               <Select value={barangayFilter} onValueChange={setBarangayFilter}>
-                <SelectTrigger className="cursor-pointer text-xs w-40 px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+                <SelectTrigger className="cursor-pointer text-xs px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent position="popper">

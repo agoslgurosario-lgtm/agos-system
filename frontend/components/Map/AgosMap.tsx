@@ -1,9 +1,12 @@
 "use client"
 
+// icons
+import { Plus, Minus, Map as MapIcon, Satellite } from "lucide-react"
+
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, GeoJSON } from "react-leaflet"
 import "leaflet/dist/leaflet.css"
 import L from "leaflet"
-import { useEffect, useRef  } from "react"
+import { useEffect, useRef, useState } from "react"
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -96,6 +99,32 @@ function MapClickHandler({ onMapClick }: { onMapClick?: (lat: number, lng: numbe
     }
   })
   return null
+}
+
+function ZoomControl() {
+  const map = useMap()
+  return (
+    <div className="leaflet-top leaflet-left" style={{ marginTop: '10px', marginLeft: '10px' }}>
+      <div className="leaflet-control flex flex-col rounded-lg overflow-hidden shadow-[0_1px_4px_rgba(0,0,0,0.15)] border border-[#C6C6C8]">
+        <button
+          type="button"
+          onClick={() => map.zoomIn()}
+          title="Zoom in"
+          className="bg-white hover:bg-gray-100 cursor-pointer w-[30px] h-[30px] flex items-center justify-center text-[#122A48] border-b border-[#C6C6C8]"
+        >
+          <Plus size={16} />
+        </button>
+        <button
+          type="button"
+          onClick={() => map.zoomOut()}
+          title="Zoom out"
+          className="bg-white hover:bg-gray-100 cursor-pointer w-[30px] h-[30px] flex items-center justify-center text-[#122A48]"
+        >
+          <Minus size={16} />
+        </button>
+      </div>
+    </div>
+  )
 }
 
 function MapLegend() {
@@ -327,6 +356,7 @@ export default function AgosMap({ latitude, longitude, label, zoom = 14, markers
     : CONDITION_COLORS
   const hasMultiple = markers && markers.length > 0
   const hasSingle   = !!latitude && !!longitude
+  const [mapType, setMapType] = useState<'street' | 'satellite'>('street')
 
   const center: [number, number] = hasSingle
     ? [latitude, longitude]
@@ -344,14 +374,54 @@ export default function AgosMap({ latitude, longitude, label, zoom = 14, markers
       maxBounds={ROSARIO_BOUNDS}
       maxBoundsViscosity={1.0}
       minZoom={13}
+      maxZoom={20}
       style={{ height: "100%", width: "100%" }}
       className="rounded-lg z-0"
+      zoomControl={false}
     >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+      {mapType === 'satellite' ? (
+        <TileLayer
+          attribution='&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url={`https://api.mapbox.com/styles/v1/xshvsha/cmuhvyfxq005201r59xq4b15e/tiles/256/{z}/{x}/{y}?access_token=${process.env.NEXT_PUBLIC_MAPBOX_TOKEN}`}
+          tileSize={256}
+          maxZoom={20}
+        />
+      ) : (
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          maxZoom={20}
+        />
+      )}
+
+      <div className="leaflet-top leaflet-right" style={{ marginTop: '10px', marginRight: '10px' }}>
+        <div className="leaflet-control flex rounded-lg overflow-hidden shadow-[0_1px_4px_rgba(0,0,0,0.15)] border border-[#C6C6C8]">
+          <button
+            type="button"
+            onClick={() => setMapType('street')}
+            title="Street view"
+            className={`cursor-pointer flex items-center gap-1.5 px-2.5 h-[30px] text-[11px] font-semibold transition-colors ${
+              mapType === 'street' ? "bg-[#1565BC] text-white" : "bg-white text-[#122A48] hover:bg-gray-100"
+            }`}
+          >
+            <MapIcon size={13} />
+            Map
+          </button>
+          <button
+            type="button"
+            onClick={() => setMapType('satellite')}
+            title="Satellite view"
+            className={`cursor-pointer flex items-center gap-1.5 px-2.5 h-[30px] text-[11px] font-semibold transition-colors border-l border-[#C6C6C8] ${
+              mapType === 'satellite' ? "bg-[#1565BC] text-white" : "bg-white text-[#122A48] hover:bg-gray-100"
+            }`}
+          >
+            <Satellite size={13} />
+            Sat
+          </button>
+        </div>
+      </div>
       <MapClickHandler onMapClick={onMapClick} />
+      <ZoomControl />
 
       {boundaryGeoJson && (
       <GeoJSON

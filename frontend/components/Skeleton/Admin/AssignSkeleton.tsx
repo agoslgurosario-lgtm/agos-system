@@ -59,7 +59,7 @@ export function AssignSkeleton() {
               </div>
 
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="cursor-pointer text-xs w-36 px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+                <SelectTrigger className="cursor-pointer text-xs px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent position="popper">

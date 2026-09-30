@@ -25,7 +25,7 @@ export function BarangayReportsSkeleton() {
       <div className="flex justify-between">
         <div className="flex gap-3">
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="cursor-pointer w-40 px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+            <SelectTrigger className="cursor-pointer px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper">
@@ -34,7 +34,7 @@ export function BarangayReportsSkeleton() {
           </Select>
 
           <Select value={filterBarangay} onValueChange={setFilterBarangay}>
-            <SelectTrigger className="w-40 px-3 py-2 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+            <SelectTrigger className="px-3 py-2 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper">
@@ -43,7 +43,7 @@ export function BarangayReportsSkeleton() {
           </Select>
 
           <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger className="cursor-pointer w-40 px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+            <SelectTrigger className="cursor-pointer px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper">

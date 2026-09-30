@@ -185,10 +185,10 @@ return (
 
               {/* date filter */}
               <Select value={dateFilter} onValueChange={setDateFilter}>
-                <SelectTrigger className="text-xs w-35 px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+                <SelectTrigger className="text-xs px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
-                <SelectContent position="popper" className='w-35 min-w-0'>
+                <SelectContent position="popper" className='min-w-0'>
                   <SelectItem className="p-2 text-xs text-[#122A48]" value="Today">Today</SelectItem>
                   <SelectItem className="p-2 text-xs text-[#122A48]" value="7Days">Last 7 days</SelectItem>
                   <SelectItem className="p-2 text-xs text-[#122A48]" value="30Days">Last 30 days</SelectItem>

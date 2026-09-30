@@ -25,7 +25,8 @@ class AlertListView(generics.ListAPIView):
         # barangay filter
         barangay_id = self.request.query_params.get('barangay')
         if barangay_id:
-            qs = qs.filter(node__barangay__barangay_id=barangay_id)
+            from django.db.models import Q
+            qs = qs.filter(Q(node__barangay__barangay_id=barangay_id) | Q(report__barangay__barangay_id=barangay_id))
 
         # alert type filter
         alert_type = self.request.query_params.get('alert_type')

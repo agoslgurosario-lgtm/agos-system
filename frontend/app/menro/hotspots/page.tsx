@@ -558,7 +558,7 @@ export default function HotspotManagement() {
                 <SearchFilter value={search} onChange={setSearch} placeholder="Search hotspot..." width="w-60" height="h-8" />
 
                 <Select value={filterBarangay} onValueChange={setFilterBarangay}>
-                  <SelectTrigger className="cursor-pointer text-xs w-40 px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+                  <SelectTrigger className="cursor-pointer text-xs px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                     <SelectValue placeholder="All Barangays" />
                   </SelectTrigger>
                   <SelectContent position="popper" className="max-h-60 overflow-y-auto">

@@ -97,6 +97,7 @@ class CanalMonitoringReport(models.Model):
         db_column='clog_event_id'
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    signatory_snapshot = models.JSONField(null=True, blank=True)
 
     class Meta:
         db_table = 'tbl_canal_monitoring_reports'

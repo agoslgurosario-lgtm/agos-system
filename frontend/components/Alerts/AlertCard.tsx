@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { FaWater, FaExclamationTriangle, FaPlug, FaBatteryQuarter, FaSignal, FaExclamationCircle, FaChevronRight, } from "react-icons/fa"
+import { FaWater, FaExclamationTriangle, FaPlug, FaBatteryQuarter, FaSignal, FaExclamationCircle, FaClipboardCheck, FaChevronRight, } from "react-icons/fa"
 
 import { api } from "@/lib/api"
 import { ALERT_STYLE } from "@/lib/constant"
@@ -38,7 +38,15 @@ type HighClogContext = {
   estimated_volume?: number
 }
 
-type AlertContext = ClogContext | WaterContext | HealthContext | Record<string, never>
+type ReportContext = {
+  report_id?: number
+  canal_name?: string | null
+  severity?: string | null
+  final_canal_condition?: string | null
+  date_observed?: string | null
+}
+
+type AlertContext = ClogContext | WaterContext | HealthContext | ReportContext | Record<string, never>
 
 export type Alert = {
   alert_id:      number
@@ -76,6 +84,7 @@ export const ALERT_META: Record<string, { label: string; Icon: React.ElementType
   Low_Battery:        { label: "Low Battery",            Icon: FaBatteryQuarter     },
   Weak_Signal:        { label: "Weak Signal",            Icon: FaSignal             },
   Sensor_Failure:     { label: "Sensor Failure",         Icon: FaExclamationCircle  },
+  Report_Submitted:   { label: "Report Submitted",       Icon: FaClipboardCheck     },
 }
 
 
@@ -97,6 +106,19 @@ function formatDate(ts: string) {
 
 
 export function  ContextRow({ alertType, ctx }: { alertType: string; ctx: AlertContext }) {
+  if (alertType === "Report_Submitted") {
+    const c = ctx as ReportContext
+    return (
+      <>
+        {c.canal_name && <p>Canal: <span className="font-semibold">{c.canal_name}</span></p>}
+        {c.severity && <p>Severity: <span className="font-semibold">{c.severity}</span></p>}
+        {c.final_canal_condition && (
+          <p>Final Condition: <span className="font-semibold">{c.final_canal_condition.replace(/_/g, " ")}</span></p>
+        )}
+      </>
+    )
+  }
+
   if (alertType === "Critical_Clog") {
     const c = ctx as WaterContext & HighClogContext & { clog_pct?: number }
     return (

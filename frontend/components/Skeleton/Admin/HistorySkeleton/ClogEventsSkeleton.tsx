@@ -34,7 +34,7 @@ export function ClogEventsSkeleton() {
           </div>
 
           <Select value={barangay} onValueChange={setBarangay}>
-            <SelectTrigger className="text-xs cursor-pointer w-35 px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+            <SelectTrigger className="text-xs cursor-pointer px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper">
@@ -43,7 +43,7 @@ export function ClogEventsSkeleton() {
           </Select>
 
           <Select value={severity} onValueChange={setSeverity}>
-            <SelectTrigger className="text-xs cursor-pointer w-35 px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+            <SelectTrigger className="text-xs cursor-pointer px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper">
@@ -52,7 +52,7 @@ export function ClogEventsSkeleton() {
           </Select>
 
           <Select value={status} onValueChange={setStatus}>
-            <SelectTrigger className="text-xs cursor-pointer w-35 px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+            <SelectTrigger className="text-xs cursor-pointer px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper">
@@ -61,7 +61,7 @@ export function ClogEventsSkeleton() {
           </Select>
 
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="text-xs cursor-pointer w-35 px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+            <SelectTrigger className="text-xs cursor-pointer px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper">

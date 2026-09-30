@@ -1,9 +1,12 @@
 "use client"
 
-import { X } from "lucide-react"
+import { X, FileText } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
 import { ALERT_STYLE } from "@/lib/constant"
+import { getUserRole } from "@/lib/auth"
 import { ALERT_META, ContextRow, type Alert } from "@/components/Alerts/AlertCard"
 
 interface AlertDetailDialogProps {
@@ -13,11 +16,26 @@ interface AlertDetailDialogProps {
 }
 
 export function AlertDetailDialog({ alert, open, onOpenChange }: AlertDetailDialogProps) {
+  const router = useRouter()
+
   if (!alert) return null
 
   const style = ALERT_STYLE[alert.alert_type] ?? ALERT_STYLE.default
   const meta  = ALERT_META[alert.alert_type]  ?? { label: alert.alert_type.replace(/_/g, " "), Icon: undefined }
   const Icon  = meta.Icon
+
+  const isReport = alert.alert_type === "Report_Submitted"
+  const reportId = isReport ? (alert.alert_context as { report_id?: number }).report_id : undefined
+
+  const handleViewReport = () => {
+    if (!reportId) return
+    const role = getUserRole()
+    const base = role === "MENRO" || role === "MENRO_Staff"
+      ? "/menro/barangay-reports/view-barangay-report"
+      : "/admin/history/barangay-reports/view-barangay-report"
+    onOpenChange(false)
+    router.push(`${base}/?id=${reportId}`)
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -40,10 +58,12 @@ export function AlertDetailDialog({ alert, open, onOpenChange }: AlertDetailDial
         <hr />
 
         <div className="flex flex-col gap-2 text-sm">
-          <div className="flex justify-between">
-            <p className="text-[#727272]">Node</p>
-            <p className="font-medium">{alert.node_name ?? "—"}</p>
-          </div>
+          {!isReport && (
+            <div className="flex justify-between">
+              <p className="text-[#727272]">Node</p>
+              <p className="font-medium">{alert.node_name ?? "—"}</p>
+            </div>
+          )}
           <div className="flex justify-between">
             <p className="text-[#727272]">Barangay</p>
             <p className="font-medium">{alert.barangay_name ?? "—"}</p>
@@ -61,6 +81,16 @@ export function AlertDetailDialog({ alert, open, onOpenChange }: AlertDetailDial
           <hr />
           <p className="font-semibold text-xs text-[#727272]">DETAILS</p>
           <ContextRow alertType={alert.alert_type} ctx={alert.alert_context} />
+
+          {isReport && reportId && (
+            <Button
+              onClick={handleViewReport}
+              className="mt-2 w-full bg-[#1565BC] hover:bg-[#124f96] cursor-pointer"
+            >
+              <FileText size={14} className="mr-1.5" />
+              View Report
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>

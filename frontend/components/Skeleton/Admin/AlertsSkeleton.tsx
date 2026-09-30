@@ -36,19 +36,19 @@ export function AlertsSkeleton() {
 
         <div className="flex gap-3">
           <Select value={barangay} onValueChange={setBarangay}>
-            <SelectTrigger className="cursor-pointer text-xs w-40 px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+            <SelectTrigger className="cursor-pointer text-xs px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent position="popper" className='w-40 min-w-0'>
+            <SelectContent position="popper" className='min-w-0'>
               <SelectItem className="p-2 text-xs" value="All Barangay">All Barangay</SelectItem>
             </SelectContent>
           </Select>
 
           <Select value={dateFilter} onValueChange={setDateFilter}>
-            <SelectTrigger className="cursor-pointer text-xs w-35 px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+            <SelectTrigger className="cursor-pointer text-xs px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent position="popper" className='w-35 min-w-0'>
+            <SelectContent position="popper" className='min-w-0'>
               <SelectItem className="p-2 text-xs text-[#122A48]" value="Today">Today</SelectItem>
             </SelectContent>
           </Select>

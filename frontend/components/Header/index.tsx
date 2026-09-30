@@ -26,6 +26,7 @@ const SEVERITY_MAP: Record<string, "critical" | "warning" | "info"> = {
   Low_Battery: "info",
   Weak_Signal: "info",
   Sensor_Failure: "info",
+  Report_Submitted: "info",
 }
 
 
@@ -36,6 +37,7 @@ const pageTitles: Record<string, string> = {
   "/admin/users/form": "User Management",
   "/admin/barangay": "Barangay Management",
   "/admin/barangay/form": "Barangay Management",
+  "/admin/signatories": "Signatory Management",
   "/admin/monitoring": "Monitoring",
   "/admin/alerts": "Alerts",
   "/admin/assign": "Node Assignment",

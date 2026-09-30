@@ -68,20 +68,20 @@ export function UsersSkeleton() {
 
               {/* user role filter */}
               <Select value={userRole} onValueChange={setUserRole}>
-                <SelectTrigger className="text-xs cursor-pointer w-27 px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+                <SelectTrigger className="text-xs cursor-pointer px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent position="popper" className='w-27 min-w-0'>
+                <SelectContent position="popper" className='min-w-0'>
                   <SelectItem className="text-xs p-2 text-[#122A48]" value="All">All Users</SelectItem>
                 </SelectContent>
               </Select>
 
               {/* user status filter */}
               <Select value={userStatus} onValueChange={setUserStatus}>
-                <SelectTrigger className="text-xs cursor-pointer w-28 px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+                <SelectTrigger className="text-xs cursor-pointer px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent position="popper" className='w-28 min-w-0'>
+                <SelectContent position="popper" className='min-w-0'>
                   <SelectItem className="text-xs p-2 text-[#122A48]" value="Active">Active</SelectItem>
                 </SelectContent>
               </Select>

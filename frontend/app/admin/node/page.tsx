@@ -622,10 +622,10 @@ export default function NodeManagement() {
                 <SearchFilter value={search} onChange={setSearch} placeholder="Search node..." width="w-60" height="h-8" />
 
                 <Select value={availabilityFilter} onValueChange={setAvailabilityFilter}>
-                  <SelectTrigger className="text-xs cursor-pointer w-36 px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+                  <SelectTrigger className="text-xs cursor-pointer px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                     <SelectValue placeholder="Availability" />
                   </SelectTrigger>
-                  <SelectContent position="popper" className="w-36 min-w-0">
+                  <SelectContent position="popper" className="min-w-0">
                     <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="All Status">All Status</SelectItem>
                     <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="Available">Available</SelectItem>
                     <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="Occupied">Occupied</SelectItem>
@@ -975,10 +975,10 @@ export default function NodeManagement() {
             <div className="flex flex-wrap gap-2 items-center p-2 md:p-3 border-b border-[#C6C6C8] justify-between">
               <div className="flex gap-3">
                 <Select value={readingsStatusFilter} onValueChange={setReadingsStatusFilter}>
-                  <SelectTrigger className="text-xs cursor-pointer w-32 px-3 py-2 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+                  <SelectTrigger className="text-xs cursor-pointer px-3 py-2 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
-                  <SelectContent position="popper" className="w-32 min-w-0">
+                  <SelectContent position="popper" className="min-w-0">
                     <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="All Status">All Status</SelectItem>
                     <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="Normal">Normal</SelectItem>
                     <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="Warning">Warning</SelectItem>
@@ -987,10 +987,10 @@ export default function NodeManagement() {
                 </Select>
 
                 <Select value={readingsHotspotFilter} onValueChange={setReadingsHotspotFilter}>
-                  <SelectTrigger className="text-xs cursor-pointer w-40 px-3 py-2 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+                  <SelectTrigger className="text-xs cursor-pointer px-3 py-2 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                     <SelectValue placeholder="Hotspot" />
                   </SelectTrigger>
-                  <SelectContent position="popper" className="w-40 min-w-0">
+                  <SelectContent position="popper" className="min-w-0">
                     <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="All Hotspots">All Hotspots</SelectItem>
                     {readingsHotspotOptions.map(name => (
                       <SelectItem key={name} className="cursor-pointer p-2 text-xs text-[#122A48]" value={name}>{name}</SelectItem>
@@ -1082,10 +1082,10 @@ export default function NodeManagement() {
               <div className="flex flex-wrap gap-2 items-center p-2 md:p-3 border-b border-[#C6C6C8] justify-between">
                 <div className="flex gap-2">
                   <Select value={healthStatusFilter || 'All Status'} onValueChange={v => setHealthStatusFilter(v === 'All Status' ? '' : v)}>
-                    <SelectTrigger className="text-xs cursor-pointer w-32 px-3 py-2 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+                    <SelectTrigger className="text-xs cursor-pointer px-3 py-2 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                       <SelectValue placeholder="Status" />
                     </SelectTrigger>
-                    <SelectContent position="popper" className="w-32 min-w-0">
+                    <SelectContent position="popper" className="min-w-0">
                       <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="All Status">All Status</SelectItem>
                       <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="Normal">Normal</SelectItem>
                       <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="Warning">Warning</SelectItem>
@@ -1187,10 +1187,10 @@ export default function NodeManagement() {
               <div className="flex gap-2 items-center p-2 md:p-3 border-b border-[#C6C6C8] justify-between">
                 <div>
                   <Select value={hotspotReasonFilter} onValueChange={setHotspotReasonFilter}>
-                    <SelectTrigger className="text-xs cursor-pointer w-36 px-3 py-2 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+                    <SelectTrigger className="text-xs cursor-pointer px-3 py-2 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                       <SelectValue placeholder="Reason" />
                     </SelectTrigger>
-                    <SelectContent position="popper" className="w-36 min-w-0">
+                    <SelectContent position="popper" className="min-w-0">
                       <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="All">All</SelectItem>
                       <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="current">Current</SelectItem>
                       <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="Reassigned">Reassigned</SelectItem>

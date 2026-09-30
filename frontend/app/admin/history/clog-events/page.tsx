@@ -259,10 +259,10 @@ export default function ClogEvents() {
             <SearchFilter value={search} onChange={setSearch} placeholder='Search clog event...' height="h-9" />
 
             <Select value={barangay} onValueChange={setBarangay}>
-              <SelectTrigger className="text-xs cursor-pointer w-35 px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+              <SelectTrigger className="text-xs cursor-pointer px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                 <SelectValue placeholder="All Barangay" />
               </SelectTrigger>
-              <SelectContent position="popper" className='w-35 min-w-0'>
+              <SelectContent position="popper" className='min-w-0'>
                 <SelectItem className="text-xs p-2 text-[#122A48]" value="All Barangay">All Barangay</SelectItem>
                 {[...allBarangays]
                   .sort((a, b) => a.barangay_name.localeCompare(b.barangay_name))
@@ -275,10 +275,10 @@ export default function ClogEvents() {
             </Select>
 
             <Select value={severity} onValueChange={setSeverity}>
-              <SelectTrigger className="text-xs cursor-pointer w-35 px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+              <SelectTrigger className="text-xs cursor-pointer px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                 <SelectValue placeholder="Select status" />
               </SelectTrigger>
-              <SelectContent position="popper" className='w-35 min-w-0'>
+              <SelectContent position="popper" className='min-w-0'>
                 <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="All Severity">All Severity</SelectItem>
                 <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="Low">Low</SelectItem>
                 <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="Medium">Medium</SelectItem>
@@ -287,10 +287,10 @@ export default function ClogEvents() {
             </Select>
 
             <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="text-xs cursor-pointer w-35 px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+              <SelectTrigger className="text-xs cursor-pointer px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                 <SelectValue placeholder="Select status" />
               </SelectTrigger>
-              <SelectContent position="popper" className='w-35 min-w-0'>
+              <SelectContent position="popper" className='min-w-0'>
                 <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="All Status">All Status</SelectItem>
                 <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="Detected">Detected</SelectItem>
                 <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="Cleared">Cleared</SelectItem>
@@ -298,10 +298,10 @@ export default function ClogEvents() {
             </Select>
 
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="text-xs cursor-pointer w-35 px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+              <SelectTrigger className="text-xs cursor-pointer px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent position="popper" className="text-xs p-2 w-35 min-w-0 !max-h-70 overflow-y-auto">
+              <SelectContent position="popper" className="text-xs min-w-0 !max-h-70 overflow-y-auto">
                 <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="All">All Months</SelectItem>
                 {monthOptions.map(m => (
                   <SelectItem key={m.value} className="text-xs cursor-pointer p-2 text-[#122A48]" value={m.value}>

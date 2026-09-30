@@ -22,7 +22,7 @@ import {
   Map, Package, FileBarChart, CalendarDays,
   MapPin, Wrench, LogOut, RadioTower, ChevronDown,
   SlidersHorizontal, Target, GitBranchPlus,
-  TriangleAlert, Settings, Book 
+  TriangleAlert, Settings, Book, FileSignature
 } from "lucide-react"
 
 // logo
@@ -85,6 +85,7 @@ const navItems: Record<string, NavItem[]> = {
       children: [
         { label: "User Management",     href: "/admin/users",   icon: <Users size={14} /> },
         { label: "Barangay Management", href: "/admin/barangay",icon: <MapPin size={14} /> },
+        { label: "Signatory Management", href: "/admin/signatories", icon: <FileSignature size={14} /> },
         { label: "IoT Health",          href: "/admin/health",  icon: <Activity size={14} /> },
         { label: "Maintenance Logs",    href: "/admin/maintenance-logs",  icon: <Wrench size={14} /> },
         { label: "Audit Logs",          href: "/admin/audit",   icon: <Stamp size={14} /> },
