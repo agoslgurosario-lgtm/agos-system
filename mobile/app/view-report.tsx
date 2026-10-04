@@ -5,10 +5,10 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import { api } from "@/lib/api";
 import { exportPdf } from "@/lib/exportPdf";
-import type { CanalMonitoringReport, FinalCanalCondition } from "@/types/reports";
+import type { CanalMonitoringReport } from "@/types/reports";
 import {
   SEVERITY_COLORS, WATER_LEVEL_OPTIONS, OBSTRUCTION_COVERAGE_OPTIONS,
-  WATER_FLOW_OPTIONS, FINAL_CONDITION_OPTIONS, optionLabel,
+  WATER_FLOW_OPTIONS, optionLabel,
 } from "@/constants/reports";
 import { PhotoPreviewModal } from "@/components/reports/PhotoPreviewModal";
 
@@ -24,12 +24,6 @@ const WASTE_ROWS: { key: keyof CanalMonitoringReport; label: string }[] = [
   { key: "waste_textile_kg", label: "Clothes / Textiles" },
   { key: "waste_ewaste_kg", label: "E-waste" },
 ];
-
-const FINAL_CONDITION_COLORS: Record<FinalCanalCondition, string> = {
-  Clear: "#15803d",
-  Partially_Clear: "#b45309",
-  Still_Obstructed: "#b91c1c",
-};
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return "—";
@@ -156,11 +150,6 @@ export default function ViewReportScreen() {
     ? SEVERITY_COLORS[report.severity]
     : { bg: "#e2e8f0", text: "#475569" };
 
-  const coordinates =
-    report.latitude != null && report.longitude != null
-      ? `${report.latitude.toFixed(6)}, ${report.longitude.toFixed(6)}`
-      : "";
-
   const wasteRows = [
     ...WASTE_ROWS.map((row) => ({ label: row.label, kg: Number(report[row.key] ?? 0) })),
     {
@@ -220,13 +209,11 @@ export default function ViewReportScreen() {
         >
           {/* SITE */}
           <SectionHeader icon="map-marker-radius-outline" title="MONITORING SITE" />
-          <DetailLabelValue label="CANAL NAME / ID" value={report.canal_name ?? ""} />
+          <DetailLabelValue label="PUROK" value={report.purok ? `Purok ${report.purok}` : ""} />
           <View className="flex-row">
             <DetailLabelValue label="BARANGAY" value={report.barangay_details?.barangay_name ?? ""} />
             <DetailLabelValue label="MUNICIPALITY" value="Rosario, La Union" />
           </View>
-          <DetailLabelValue label="GPS COORDINATES" value={coordinates} />
-          <DetailLabelValue label="NEAREST LANDMARK" value={report.nearest_landmark} />
 
           <View className="my-3 h-px bg-[#f1f5f9]" />
 
@@ -243,16 +230,16 @@ export default function ViewReportScreen() {
 
           <View className="my-3 h-px bg-[#f1f5f9]" />
 
-          {/* CANAL CONDITION */}
-          <SectionHeader icon="waves" title="CANAL CONDITION" />
+          {/* OVERALL CANAL CONDITION */}
+          <SectionHeader icon="waves" title="OVERALL CANAL CONDITION" />
           <View className="flex-row">
-            <DetailLabelValue label="WATER LEVEL" value={optionLabel(WATER_LEVEL_OPTIONS, report.water_level)} />
+            <DetailLabelValue label="WATER LEVEL" value={optionLabel(WATER_LEVEL_OPTIONS, report.overall_water_level)} />
             <DetailLabelValue
               label="OBSTRUCTION"
-              value={optionLabel(OBSTRUCTION_COVERAGE_OPTIONS, report.obstruction_coverage)}
+              value={optionLabel(OBSTRUCTION_COVERAGE_OPTIONS, report.overall_obstruction_coverage)}
             />
           </View>
-          <DetailLabelValue label="WATER FLOW" value={optionLabel(WATER_FLOW_OPTIONS, report.water_flow_condition)} />
+          <DetailLabelValue label="WATER FLOW" value={optionLabel(WATER_FLOW_OPTIONS, report.overall_water_flow_condition)} />
 
           <View className="my-3 h-px bg-[#f1f5f9]" />
 
@@ -273,19 +260,10 @@ export default function ViewReportScreen() {
           <DetailLabelValue label="ASSIGNED PERSONNEL" value={report.assigned_personnel ?? ""} />
           <DetailLabelValue label="DATE / TIME RESPONDED" value={formatDateTime(report.date_responded)} />
           <DetailLabelValue label="ACTION TAKEN" value={report.action_taken ?? ""} />
-          <View className="flex-row">
-            <DetailLabelValue
-              label="WASTE COLLECTED"
-              value={report.waste_collected_amount != null ? `${report.waste_collected_amount} kg` : ""}
-            />
-            <DetailLabelValue
-              label="FINAL CANAL CONDITION"
-              value={optionLabel(FINAL_CONDITION_OPTIONS, report.final_canal_condition)}
-              valueColor={
-                report.final_canal_condition ? FINAL_CONDITION_COLORS[report.final_canal_condition] : "#122A48"
-              }
-            />
-          </View>
+          <DetailLabelValue
+            label="WASTE COLLECTED"
+            value={report.waste_collected_amount != null ? `${report.waste_collected_amount} kg` : ""}
+          />
           {report.remarks ? <DetailLabelValue label="REMARKS" value={report.remarks} /> : null}
           <DetailLabelValue label="FILED BY" value={filedBy} />
 

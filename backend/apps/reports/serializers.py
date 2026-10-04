@@ -26,13 +26,13 @@ class CanalMonitoringReportSerializer(serializers.ModelSerializer):
     class Meta:
         model = CanalMonitoringReport
         fields = '__all__'
-        read_only_fields = ['barangay', 'reported_by']
+        read_only_fields = ['barangay', 'reported_by', 'submitted_at']
 
     SUBMIT_REQUIRED_FIELDS = [
-        'canal_name', 'latitude', 'longitude', 'date_observed', 'severity',
-        'water_level', 'obstruction_coverage', 'water_flow_condition',
+        'purok', 'date_observed', 'severity',
+        'overall_water_level', 'overall_obstruction_coverage', 'overall_water_flow_condition',
         'assigned_personnel', 'date_responded', 'action_taken',
-        'waste_collected_amount', 'final_canal_condition',
+        'waste_collected_amount',
     ]
 
     def validate_clog_event(self, event):

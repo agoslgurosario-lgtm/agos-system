@@ -1,4 +1,5 @@
 import random
+import secrets
 import string
 from django.core.mail import send_mail
 from django.conf import settings
@@ -9,7 +10,7 @@ from django.utils import timezone
 
 
 def generate_otp():
-    return ''.join(random.choices(string.digits, k=6))
+    return ''.join(secrets.choice(string.digits) for _ in range(6))
 
 def send_otp_email(email, otp):
     subject = 'Password Reset Code'

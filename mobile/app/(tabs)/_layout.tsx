@@ -56,6 +56,13 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="readings"
+          options={{
+            title: 'Readings',
+            tabBarIcon: ({ color }) => <IconSymbol size={24} name="waveform.path.ecg" color={color} />,
+          }}
+        />
+        <Tabs.Screen
           name="clogs"
           options={{
             title: 'Clog Events',

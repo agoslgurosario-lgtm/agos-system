@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { View, Text, ActivityIndicator, TouchableOpacity } from 'react-native'
 import { WebView } from 'react-native-webview'
 import { Feather } from '@expo/vector-icons'
@@ -32,6 +32,11 @@ const STATUS_COLORS: Record<CanalStatus, string> = {
 }
 const DEFAULT_COLOR = '#727272' // "Sleep Mode" — legend-only, never actually assigned to a live node
 
+type MapType = 'street' | 'satellite'
+const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? ''
+const SATELLITE_URL =
+  `https://api.mapbox.com/styles/v1/xshvsha/cmuhvyfxq005201r59xq4b15e/tiles/256/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`
+
 const LEGEND_ITEMS: { color: string; label: string }[] = [
   { color: DEFAULT_COLOR, label: 'Sleep Mode' },
   { color: STATUS_COLORS.Normal, label: 'Normal' },
@@ -39,7 +44,9 @@ const LEGEND_ITEMS: { color: string; label: string }[] = [
   { color: STATUS_COLORS.Critical, label: 'Critical' },
 ]
 
-function buildLeafletHtml(nodes: CanalNode[], centerLat: number, centerLng: number, zoom: number) {
+function buildLeafletHtml(
+  nodes: CanalNode[], centerLat: number, centerLng: number, zoom: number, initialType: MapType
+) {
   const markersJs = nodes
     .map((n) => {
       const color = STATUS_COLORS[n.status] ?? DEFAULT_COLOR
@@ -89,9 +96,24 @@ function buildLeafletHtml(nodes: CanalNode[], centerLat: number, centerLng: numb
     const map = L.map('map', { zoomControl: false, attributionControl: false })
       .setView([${centerLat}, ${centerLng}], ${zoom});
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-    }).addTo(map);
+    });
+    const satelliteLayer = L.tileLayer('${SATELLITE_URL}', {
+      tileSize: 256,
+      maxZoom: 20,
+    });
+
+    window.setMapType = function(type) {
+      if (type === 'satellite') {
+        map.removeLayer(streetLayer);
+        satelliteLayer.addTo(map);
+      } else {
+        map.removeLayer(satelliteLayer);
+        streetLayer.addTo(map);
+      }
+    };
+    window.setMapType('${initialType}');
 
     function buildMarkerHtml(color, label, animation) {
       var dotSize = 14;
@@ -129,11 +151,20 @@ export default function CanalMapScreen({
   onMarkerPress,
 }: CanalMapScreenProps) {
   const webviewRef = useRef<WebView>(null)
+  const [mapType, setMapType] = useState<MapType>('street')
+  // read when the HTML rebuilds (e.g. node data refresh) so it doesn't snap back to street
+  const mapTypeRef = useRef<MapType>(mapType)
+  mapTypeRef.current = mapType
 
   const html = useMemo(
-    () => buildLeafletHtml(nodes, centerLat, centerLng, zoom),
+    () => buildLeafletHtml(nodes, centerLat, centerLng, zoom, mapTypeRef.current),
     [nodes, centerLat, centerLng, zoom]
   )
+
+  const switchMapType = (type: MapType) => {
+    setMapType(type)
+    webviewRef.current?.injectJavaScript(`window.setMapType && window.setMapType('${type}'); true;`)
+  }
 
   const handleMessage = (event: any) => {
     try {
@@ -167,6 +198,42 @@ export default function CanalMapScreen({
             </View>
           )}
         />
+
+                {/* street / satellite toggle */}
+        <View
+          className="absolute left-3 top-3 m-[15px] flex-row overflow-hidden rounded-lg border border-[#C6C6C8] bg-white"
+          style={{
+            elevation: 3,
+            shadowColor: '#000',
+            shadowOpacity: 0.15,
+            shadowRadius: 4,
+            shadowOffset: { width: 0, height: 2 },
+          }}
+        >
+          {(['street', 'satellite'] as const).map((type, i) => {
+            const active = mapType === type
+            return (
+              <TouchableOpacity
+                key={type}
+                onPress={() => switchMapType(type)}
+                className={`h-[30px] flex-row items-center gap-1.5 px-2.5 ${
+                  active ? 'bg-[#1565BC]' : 'bg-white'
+                } ${i > 0 ? 'border-l border-[#C6C6C8]' : ''}`}
+              >
+                <Feather
+                  name={type === 'street' ? 'map' : 'globe'}
+                  size={13}
+                  color={active ? '#FFFFFF' : '#122A48'}
+                />
+                <Text
+                  className={`text-[11px] font-semibold ${active ? 'text-white' : 'text-[#122A48]'}`}
+                >
+                  {type === 'street' ? 'Map' : 'Sat'}
+                </Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
 
         {/* zoom in/out controls */}
         <View

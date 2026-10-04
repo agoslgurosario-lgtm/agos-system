@@ -219,7 +219,7 @@ export default function ReportsListScreen() {
                       style={{ marginTop: 2 }}
                     />
                     <Text className="flex-1 shrink text-sm font-semibold leading-5 text-[#122A48]">
-                      {report.canal_name || "Untitled canal"}
+                      {report.purok ? `Purok ${report.purok}` : "Untitled report"}
                     </Text>
                   </View>
                   {isDraft ? <InProgressBadge /> : <SeverityBadge severity={report.severity} />}
@@ -245,15 +245,6 @@ export default function ReportsListScreen() {
                     </Text>
                   </View>
                 </View>
-
-                {report.nearest_landmark ? (
-                  <View className="mb-2 flex-row items-center gap-1">
-                    <MaterialCommunityIcons name="map-marker-outline" size={14} color="#94a3b8" />
-                    <Text className="flex-1 text-[11px] text-[#94a3b8]" numberOfLines={1}>
-                      {report.nearest_landmark}
-                    </Text>
-                  </View>
-                ) : null}
 
                 <View className="mb-3 h-px bg-[#f1f5f9]" />
 

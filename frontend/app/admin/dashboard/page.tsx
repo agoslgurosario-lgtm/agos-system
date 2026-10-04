@@ -13,8 +13,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 
 // components
 import AgosMapWrapper from "@/components/Map/AgosMapWrapper"
-import ReportOutcomeBar from "@/components/ReportOutcomeBar"
-import FollowUpDialog from "@/components/ReportOutcomeBar/FollowUpDialog"
+import ReportProgressBar from "@/components/ReportProgressBar"
+import NotReportedDialog from "@/components/ReportProgressBar/NotReportedDialog"
 import { ALERT_STYLE, WASTE_STYLE } from '@/lib/constant'
 import { usePolling } from "@/components/hooks/usePolling"
 import { useFillRows } from "@/components/hooks/useFillRows"
@@ -497,9 +497,9 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* cleanup outcomes this month */}
+            {/* barangays reported this month */}
             <div onClick={() => setReportProgressDialog(true)} className="cursor-pointer hover:opacity-80">
-              <ReportOutcomeBar reports={reportsThisMonth} periodLabel={currentMonthLabel} />
+              <ReportProgressBar reports={reportsThisMonth} barangays={barangays.data} periodLabel={currentMonthLabel} />
             </div>
           </div>
           
@@ -1073,13 +1073,13 @@ export default function Dashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Needs follow-up dialog */}
-      <FollowUpDialog
+      {/* Barangay reporting dialog */}
+      <NotReportedDialog
         open={reportProgressDialog}
         onOpenChange={setReportProgressDialog}
         reports={reportsThisMonth}
+        barangays={barangays.data}
         periodLabel={currentMonthLabel}
-        onView={(r) => router.push(`/admin/history/barangay-reports/view-barangay-report/?id=${r.report_id}`)}
       />
 
       {/* Battery Voltage Dialog */}

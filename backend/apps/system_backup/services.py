@@ -138,6 +138,8 @@ def restore_backup_archive(zip_path):
         result = subprocess.run(
             [
                 'psql',
+                '-v', 'ON_ERROR_STOP=1',
+                '--single-transaction',
                 '-h', dump_host,
                 '-p', str(dump_port),
                 '-U', db_settings['USER'],

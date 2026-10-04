@@ -2,7 +2,6 @@ export type ReportSeverity = 'Critical' | 'Medium' | 'Low'
 export type WaterLevel = 'Low' | 'Moderate' | 'High'
 export type ObstructionCoverage = 'Under_25' | '25_50' | '50_75' | 'Over_75'
 export type WaterFlowCondition = 'Normal' | 'Reduced' | 'Blocked'
-export type FinalCanalCondition = 'Clear' | 'Partially_Clear' | 'Still_Obstructed'
 export type MediaCategory = 'Before_Clearing' | 'After_Clearing' | 'Additional_Evidence'
 
 export type ReportBarangay = {
@@ -37,17 +36,14 @@ export type CanalMonitoringReport = {
   is_submitted: boolean
 
   barangay: number
-  canal_name: string | null
-  latitude: number | null
-  longitude: number | null
-  nearest_landmark: string
+  purok: number | null
 
   date_observed: string | null
   severity: ReportSeverity | null
 
-  water_level: WaterLevel | null
-  obstruction_coverage: ObstructionCoverage | null
-  water_flow_condition: WaterFlowCondition | null
+  overall_water_level: WaterLevel | null
+  overall_obstruction_coverage: ObstructionCoverage | null
+  overall_water_flow_condition: WaterFlowCondition | null
 
   waste_plastic_kg: number | null
   waste_food_wrapper_kg: number | null
@@ -66,12 +62,12 @@ export type CanalMonitoringReport = {
   action_taken: string | null
   waste_collected_amount: number | null
   waste_collected_unit: string
-  final_canal_condition: FinalCanalCondition | null
   remarks: string
 
   reported_by: number | null
   clog_event: number | null
   created_at: string
+  submitted_at: string | null
 
   barangay_details: ReportBarangay | null
   reported_by_details: ReportUser | null

@@ -1,6 +1,8 @@
 "use client"
 
 export const ACCOUNT_INACTIVE_MESSAGE = 'Your account is not active. Please contact your administrator.'
+const CLIENT_HEADER = { 'X-Requested-With': 'agos-web' }
+
 
 let suppressInactiveRedirect = false
 export const setSuppressInactiveRedirect = (value: boolean) => {
@@ -27,6 +29,7 @@ export const logout = async () => {
   try {
     await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/logout/`, {
       method: 'POST',
+      headers: CLIENT_HEADER,
       credentials: 'include',
     })
   } catch {
@@ -51,6 +54,7 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}): Pro
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      ...CLIENT_HEADER,
       ...options.headers,
     },
   })
@@ -59,7 +63,7 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}): Pro
     try {
       const refreshRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/token/refresh/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...CLIENT_HEADER },
         credentials: 'include',
       })
 

@@ -1,17 +1,10 @@
-"""
-Single source of truth for node ↔ hotspot assignment changes.
-
-Every path that attaches or detaches a hotspot (the PATCH on
-sensor-nodes/<id>/, unassign/, retire/, mark-maintenance/,
-mark-available/) must go through here, or the assignment history
-will have gaps. Invariant: at most one open row (ended_at IS NULL)
-per node.
-"""
 from django.db import transaction
 from django.utils import timezone
 
 from django.db.models import Q
 from .models import NodeAssignmentHistory
+
+from django.utils.dateparse import parse_datetime
 
 
 def get_open_assignment(node):
@@ -40,6 +33,41 @@ def close_open_assignment(node, reason, user=None, when=None):
     return row
 
 
+def _to_datetime(value):
+    """Accepts a datetime, an ISO string or None; returns an aware datetime or None."""
+    if value is None or value == '':
+        return None
+    if isinstance(value, str):
+        parsed = parse_datetime(value)
+        if parsed is None:
+            raise ValueError(f"Invalid datetime: {value!r}")
+        value = parsed
+    if timezone.is_naive(value):
+        value = timezone.make_aware(value)
+    return value
+
+
+def _align_previous_row(row):
+    """
+    After a row's start moves (an install-date edit), keep the row before it
+    consistent: a direct hand-over ('Reassigned') stays contiguous, and any
+    other row is only trimmed if it now overlaps.
+    """
+    previous = NodeAssignmentHistory.objects.filter(
+        node=row.node, started_at__lt=row.started_at
+    ).exclude(pk=row.pk).order_by('-started_at').first()
+    if previous is None:
+        return
+
+    overlaps = previous.ended_at is None or previous.ended_at > row.started_at
+    handover = previous.end_reason == 'Reassigned'
+    if overlaps or handover:
+        previous.ended_at = row.started_at
+        if not previous.end_reason:
+            previous.end_reason = 'Reassigned'
+        previous.save(update_fields=['ended_at', 'end_reason'])
+
+
 def open_assignment(node, hotspot, started_at=None, user=None):
     """
     Opens a new row from the given hotspot, snapshotting the names so
@@ -64,9 +92,10 @@ def assign_node(node, hotspot, installed_at=None, user=None):
     opens a new one, and syncs the node's own fields. Used by the
     assign/move paths and by mark-available.
     """
-    started_at = installed_at or timezone.now()
+    started_at = _to_datetime(installed_at) or timezone.now()
 
-    close_open_assignment(node, reason='Reassigned', user=user)
+    # End the old row exactly where the new one begins so they never overlap.
+    close_open_assignment(node, reason='Reassigned', user=user, when=started_at)
 
     node.hotspot = hotspot
     node.barangay = hotspot.barangay
@@ -104,6 +133,7 @@ def sync_assignment_change(node, previous_hotspot_id, user=None, installed_at=No
     now against what it had before and writes the matching rows.
     """
     now_id = node.hotspot_id
+    installed_at = _to_datetime(installed_at)
 
     if previous_hotspot_id == now_id:
         # Same hotspot — only an install-date edit can matter here.
@@ -112,6 +142,7 @@ def sync_assignment_change(node, previous_hotspot_id, user=None, installed_at=No
             if row:
                 row.started_at = installed_at
                 row.save(update_fields=['started_at'])
+                _align_previous_row(row)
         return
 
     started_at = installed_at or node.installed_at or timezone.now()
@@ -120,11 +151,8 @@ def sync_assignment_change(node, previous_hotspot_id, user=None, installed_at=No
         close_open_assignment(node, reason='Unassigned', user=user)
         return
 
-    close_open_assignment(
-        node,
-        reason='Reassigned' if previous_hotspot_id else 'Reassigned',
-        user=user,
-    )
+    # End the old row exactly where the new one begins so they never overlap.
+    close_open_assignment(node, reason='Reassigned', user=user, when=started_at)
     open_assignment(node, node.hotspot, started_at=started_at, user=user)
 
 

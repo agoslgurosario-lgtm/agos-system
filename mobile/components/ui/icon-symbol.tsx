@@ -25,6 +25,8 @@ const MAPPING = {
   'exit': 'logout',
   'water-outline': 'opacity',
   'person.crop.circle': 'account-circle',
+  'water-outline': 'opacity',
+  'waveform.path.ecg': 'show-chart',
 } as IconMapping;
 
 /**

@@ -2,8 +2,8 @@
 
 // components
 import { SearchFilter } from "@/components/SearchFilter"
-import ReportOutcomeBar from "@/components/ReportOutcomeBar"
-import FollowUpDialog from "@/components/ReportOutcomeBar/FollowUpDialog"
+import ReportProgressBar from "@/components/ReportProgressBar"
+import NotReportedDialog from "@/components/ReportProgressBar/NotReportedDialog"
 import { BarangayReportsSkeleton } from "@/components/Skeleton/Admin/HistorySkeleton/BarangayReportsSkeleton"
 import { usePageCache } from "@/components/hooks/usePageCache"
 import { Toast } from "@/components/Toast"
@@ -18,7 +18,7 @@ import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 
 // icons
-import { Calendar as CalendarIcon, FileText, Trash2, TriangleAlert, MapPin, Radar, Eye, FileDown } from "lucide-react"
+import { Calendar as CalendarIcon, FileText, Trash2, Clock, MapPin, Radar, Eye, FileDown } from "lucide-react"
 
 // table pagination
 import { usePagination } from "@/components/hooks/usePagination";
@@ -32,8 +32,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, } from "
 // lib
 import { fetchWithAuth } from "@/lib/auth"
 import {
-  SEVERITY_STYLE, FINAL_CONDITION_LABEL, FINAL_CONDITION_STYLE,
-  formatDate, monthOf, filedByName, buildMonthOptions, formatMonthLabel,
+  SEVERITY_STYLE,
+  formatDate, filedByName, buildMonthOptions,
+  reportDate, monthOf, weekOf, weekMatches, buildWeekOptions, periodRangeLabel, periodTitle,
+  averageResponseMinutes, formatDuration,
 } from "@/lib/reportOptions"
 import { printReport } from "@/lib/printReport"
 import { getUser } from "@/lib/auth"
@@ -41,7 +43,7 @@ import { getUser } from "@/lib/auth"
 // types
 import type { CanalMonitoringReport, ReportBarangay } from "@/types/report"
 
-const sortKey = (r: CanalMonitoringReport) => new Date(r.date_observed ?? r.created_at).getTime()
+const sortKey = (r: CanalMonitoringReport) => new Date(reportDate(r)).getTime()
 
 // fetch raw data
 const fetchAllBarangaysRaw = async (): Promise<ReportBarangay[]> => {
@@ -65,6 +67,7 @@ export default function BarangayReports() {
   // filter states
   const [search, setSearch] = useState<string>('')
   const [filterBarangay, setFilterBarangay] = useState<string>('All')
+  const [selectedWeek, setSelectedWeek] = useState<string>('All')
 
   const now = new Date()
   const currentMonthValue = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
@@ -82,16 +85,27 @@ export default function BarangayReports() {
   const fetchError = barangaysCache.error || reportsCache.error
 
   const monthOptions = buildMonthOptions(reports)
+  const weekOptions = buildWeekOptions(selectedMonth)
 
-  // reports in scope of the barangay + month filters (search doesn't affect the cards or the bar)
+  const handleMonthChange = (value: string) => {
+    setSelectedMonth(value)
+    setSelectedWeek('All')
+  }
+
+  const barangaysInScope = filterBarangay === "All"
+    ? allBarangays
+    : allBarangays.filter(b => String(b.barangay_id) === filterBarangay)
+
+  // reports in scope of the barangay + month + week filters (search doesn't affect the cards or the bar)
   const scopedReports = reports
     .filter(r => filterBarangay === "All" || String(r.barangay_details?.barangay_id) === filterBarangay)
     .filter(r => selectedMonth === "All" || monthOf(r) === selectedMonth)
+    .filter(r => weekMatches(r, selectedWeek))
 
   const q = search.toLowerCase()
   const filtered = scopedReports
     .filter(r =>
-      [r.barangay_details?.barangay_name, r.canal_name, filedByName(r), r.assigned_personnel]
+      [r.barangay_details?.barangay_name, r.purok ? `Purok ${r.purok}` : null, filedByName(r), r.assigned_personnel]
         .some(field => field?.toLowerCase().includes(q))
     )
     .sort((a, b) => sortKey(b) - sortKey(a) || b.report_id - a.report_id)
@@ -106,29 +120,22 @@ export default function BarangayReports() {
   // summary cards
   const totalReports = scopedReports.length
   const totalCollectedKg = scopedReports.reduce((sum, r) => sum + Number(r.waste_collected_amount ?? 0), 0)
-  const criticalCount = scopedReports.filter(r => r.severity === "Critical").length
+  const avgResponse = averageResponseMinutes(scopedReports)
 
-  // every barangay files after its clearing operations, so the total is ALL barangays,
-  // not just the ones with a sensor
+  // a barangay counts once it has at least one submitted report in the period
   const reportingCount = new Set(scopedReports.map(r => r.barangay)).size
-  const barangayTotal = filterBarangay === "All" ? allBarangays.length : 1
+  const barangayTotal = barangaysInScope.length
 
   const cards = [
     { icon: <FileText size={20} color="#D48A00" />, bg: "bg-[#EED7AA]", value: String(totalReports), label: "Total Reports" },
     { icon: <Trash2 size={20} color="#582579" />, bg: "bg-[#E1CDE3]", value: totalCollectedKg.toLocaleString("en-US", { maximumFractionDigits: 2 }), label: "Waste Collected (kg)" },
-    { icon: <TriangleAlert size={20} color="#CC251F" />, bg: "bg-[#FDD1D2]", value: String(criticalCount), label: "Critical Incidents" },
-    { icon: <MapPin size={20} color="#1565BC" />, bg: "bg-[#1565BC61]", value: `${reportingCount} / ${barangayTotal}`, label: "Barangays Reporting" },
+    { icon: <Clock size={20} color="#1F8F6E" />, bg: "bg-[#D5F0E8]", value: formatDuration(avgResponse), label: "Avg. Response Time" },
+    { icon: <MapPin size={20} color="#1565BC" />, bg: "bg-[#1565BC61]", value: `${reportingCount} / ${barangayTotal}`, label: "Barangays Reported" },
   ]
 
   // labels for the bar and the reporting period card
-  const periodLabel = selectedMonth === "All" ? "Overall" : formatMonthLabel(selectedMonth)
-  const periodRange = (() => {
-    if (selectedMonth === "All") return "All months"
-    const [y, m] = selectedMonth.split('-').map(Number)
-    const lastDay = new Date(y, m, 0).getDate()
-    const label = new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long' })
-    return `${label} 1 - ${lastDay}, ${y}`
-  })()
+  const periodLabel = periodTitle(selectedMonth, selectedWeek)
+  const periodRange = periodRangeLabel(selectedMonth, selectedWeek)
 
   const refetchAll = useCallback(async () => {
     await Promise.allSettled([
@@ -226,7 +233,7 @@ export default function BarangayReports() {
             </Select>
 
             {/* month filter */}
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+            <Select value={selectedMonth} onValueChange={handleMonthChange}>
               <SelectTrigger className="cursor-pointer text-xs px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                 <SelectValue />
               </SelectTrigger>
@@ -235,6 +242,20 @@ export default function BarangayReports() {
                 {monthOptions.map(m => (
                   <SelectItem key={m.value} className="cursor-pointer text-xs p-2 text-[#122A48]" value={m.value}>
                     {m.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* week filter (only inside a single month) */}
+            <Select value={selectedWeek} onValueChange={setSelectedWeek} disabled={selectedMonth === "All"}>
+              <SelectTrigger className="cursor-pointer text-xs px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper" className="cursor-pointer text-xs min-w-0 !max-h-70 overflow-y-auto">
+                {weekOptions.map(w => (
+                  <SelectItem key={w.value} className="cursor-pointer text-xs p-2 text-[#122A48]" value={w.value}>
+                    {w.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -255,10 +276,10 @@ export default function BarangayReports() {
           ))}
         </div>
 
-        {/* cleanup outcomes + reporting period */}
+        {/* barangays reported + reporting period */}
         <div className="mt-2 flex gap-2 w-full">
           <div onClick={() => setOutcomeDialog(true)} className="flex-[3] cursor-pointer hover:opacity-80">
-            <ReportOutcomeBar reports={scopedReports} periodLabel={periodLabel} />
+            <ReportProgressBar reports={scopedReports} barangays={barangaysInScope} periodLabel={periodLabel} />
           </div>
 
           <div className="bg-[#58D07159] rounded-lg flex justify-center flex-1 min-w-[240px]">
@@ -278,11 +299,10 @@ export default function BarangayReports() {
             <Table>
               <TableHeader className='bg-[#e8eef1b4] border border-[#CFD8DC] h-12 rounded-lg'>
                 <TableRow>
-                  <TableHead className='font-semibold text-left text-xs text-[#727272]'>DATE OBSERVED</TableHead>
+                  <TableHead className='font-semibold text-left text-xs text-[#727272]'>DATE SUBMITTED</TableHead>
                   <TableHead className='font-semibold text-left text-xs text-[#727272]'>BARANGAY</TableHead>
-                  <TableHead className='font-semibold text-left text-xs text-[#727272]'>CANAL</TableHead>
+                  <TableHead className='font-semibold text-left text-xs text-[#727272]'>PUROK</TableHead>
                   <TableHead className='font-semibold text-left text-xs text-[#727272]'>SEVERITY</TableHead>
-                  <TableHead className='font-semibold text-left text-xs text-[#727272]'>FINAL CONDITION</TableHead>
                   <TableHead className='font-semibold text-left text-xs text-[#727272]'>FILED BY</TableHead>
                   <TableHead className='font-semibold text-left text-xs text-[#727272]'>ACTIONS</TableHead>
                 </TableRow>
@@ -291,20 +311,16 @@ export default function BarangayReports() {
               <TableBody>
                 {!fetchError && filtered.length > 0 && paginated.map(report => (
                   <TableRow key={report.report_id} className="border-b border-[#C6C6C8] text-xs">
-                    <TableCell className="text-[#122A48] text-left h-14">{formatDate(report.date_observed)}</TableCell>
-                    <TableCell className="text-[#122A48] text-left h-14">{report.barangay_details?.barangay_name}</TableCell>
-                    <TableCell className="text-[#122A48] text-left h-14 max-w-40 truncate">{report.canal_name}</TableCell>
                     <TableCell className="text-[#122A48] text-left h-14">
-                      {report.severity && <StyledBadge text={report.severity} style={SEVERITY_STYLE[report.severity]} size="md" />}
+                      <p>{formatDate(reportDate(report))}</p>
+                      <p className="text-[10px] text-[#727272]">Week {weekOf(report)}</p>
+                    </TableCell>
+                    <TableCell className="text-[#122A48] text-left h-14">{report.barangay_details?.barangay_name}</TableCell>
+                    <TableCell className="text-[#122A48] text-left h-14 max-w-40 truncate">
+                      {report.purok ? `Purok ${report.purok}` : "—"}
                     </TableCell>
                     <TableCell className="text-[#122A48] text-left h-14">
-                      {report.final_canal_condition && (
-                        <StyledBadge
-                          text={FINAL_CONDITION_LABEL[report.final_canal_condition]}
-                          style={FINAL_CONDITION_STYLE[report.final_canal_condition]}
-                          size="md"
-                        />
-                      )}
+                      {report.severity && <StyledBadge text={report.severity} style={SEVERITY_STYLE[report.severity]} size="md" />}
                     </TableCell>
                     <TableCell className="text-[#122A48] text-left h-14">{filedByName(report)}</TableCell>
                     <TableCell className="flex gap-3">
@@ -377,12 +393,12 @@ export default function BarangayReports() {
 
       {printingReport && <PrintCanalReport report={printingReport} generatedBy={generatedBy} signatoryNames={signatoryNames} />}
 
-      <FollowUpDialog
+      <NotReportedDialog
         open={outcomeDialog}
         onOpenChange={setOutcomeDialog}
         reports={scopedReports}
+        barangays={barangaysInScope}
         periodLabel={periodLabel}
-        onView={(r) => router.push(`/admin/history/barangay-reports/view-barangay-report/?id=${r.report_id}`)}
       />
     </>
   )

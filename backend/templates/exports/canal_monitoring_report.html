@@ -116,7 +116,7 @@
     <p class="meta">
       Report No. {{ report.report_id }}
       {% if report.reported_by %}&nbsp;|&nbsp; Filed by <span class="generated-by">{{ report.reported_by.first_name }} {{ report.reported_by.last_name }}</span>{% endif %}
-      &nbsp;|&nbsp; Exported by <span class="generated-by">{{ generated_by }}</span>, {% now "M d, Y g:i A" %}
+      &nbsp;|&nbsp; Prepared by <span class="generated-by">{{ generated_by }}</span>, {% now "M d, Y g:i A" %}
     </p>
   </div>
 
@@ -125,8 +125,8 @@
   <table class="fields">
     <tr>
       <td style="width: 50%;">
-        <div class="lbl">Canal Name / ID</div>
-        <div class="val">{{ report.canal_name|default:"—" }}</div>
+          <div class="lbl">Purok</div>
+          <div class="val">{{ report.purok|default:"—" }}</div>
       </td>
       <td style="width: 50%;">
         <div class="lbl">Barangay</div>
@@ -141,16 +141,6 @@
       <td>
         <div class="lbl">Province</div>
         <div class="val">La Union</div>
-      </td>
-    </tr>
-    <tr>
-      <td>
-        <div class="lbl">GPS Coordinates (Lat, Long)</div>
-        <div class="val">{% if report.latitude is not None and report.longitude is not None %}{{ report.latitude|floatformat:6 }}, {{ report.longitude|floatformat:6 }}{% else %}—{% endif %}</div>
-      </td>
-      <td>
-        <div class="lbl">Nearest Landmark</div>
-        <div class="val">{{ report.nearest_landmark|default:"—" }}</div>
       </td>
     </tr>
   </table>
@@ -168,24 +158,31 @@
         <div class="opts">{% for o in severity_options %}{% if o.checked %}[X]{% else %}[&nbsp;&nbsp;&nbsp;]{% endif %}&nbsp;{{ o.label }}&nbsp;&nbsp;&nbsp;{% endfor %}</div>
       </td>
     </tr>
+    <tr>
+      <td style="width: 50%;">
+        <div class="lbl">Date / Time Submitted</div>
+        <div class="val">{{ submitted_at|date:"F j, Y  g:i A" }} &middot; Week {{ submitted_week }}</div>
+      </td>
+      <td style="width: 50%;"></td>
+    </tr>
   </table>
 
   <!-- ═════════ CANAL CONDITION ═════════ -->
-  <p class="section-bar">Canal Condition</p>
+  <p class="section-bar">Overall Canal Condition (Whole Purok)</p>
   <table class="fields">
     <tr>
       <td style="width: 50%;">
-        <div class="lbl">Water Level (choose one)</div>
+        <div class="lbl">Overall Water Level (choose one)</div>
         <div class="opts">{% for o in water_level_options %}{% if o.checked %}[X]{% else %}[&nbsp;&nbsp;&nbsp;]{% endif %}&nbsp;{{ o.label }}&nbsp;&nbsp;&nbsp;{% endfor %}</div>
       </td>
       <td style="width: 50%;">
-        <div class="lbl">Water Flow Condition (choose one)</div>
+        <div class="lbl">Overall Water Flow (choose one)</div>
         <div class="opts">{% for o in flow_options %}{% if o.checked %}[X]{% else %}[&nbsp;&nbsp;&nbsp;]{% endif %}&nbsp;{{ o.label }}&nbsp;&nbsp;&nbsp;{% endfor %}</div>
       </td>
     </tr>
     <tr>
       <td colspan="2">
-        <div class="lbl">Obstruction Coverage (choose one)</div>
+        <div class="lbl">Overall Obstruction (choose one)</div>
         <div class="opts">{% for o in coverage_options %}{% if o.checked %}[X]{% else %}[&nbsp;&nbsp;&nbsp;]{% endif %}&nbsp;{{ o.label }}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{% endfor %}</div>
       </td>
     </tr>
@@ -244,16 +241,12 @@
         <div class="val">{% if report.date_responded %}{{ report.date_responded|date:"F j, Y  g:i A" }}{% else %}—{% endif %}</div>
       </td>
     </tr>
-    <tr>
-      <td>
-        <div class="lbl">Waste Collected</div>
-        <div class="val">{% if report.waste_collected_amount is not None %}{{ report.waste_collected_amount|floatformat:2 }} kg{% else %}—{% endif %}</div>
-      </td>
-      <td>
-        <div class="lbl">Final Canal Condition (choose one)</div>
-        <div class="opts">{% for o in final_condition_options %}{% if o.checked %}[X]{% else %}[&nbsp;&nbsp;&nbsp;]{% endif %}&nbsp;{{ o.label }}&nbsp;&nbsp;{% endfor %}</div>
-      </td>
-    </tr>
+      <tr>
+        <td colspan="2">
+          <div class="lbl">Waste Collected</div>
+          <div class="val">{% if report.waste_collected_amount is not None %}{{ report.waste_collected_amount|floatformat:2 }} kg{% else %}—{% endif %}</div>
+        </td>
+      </tr>
   </table>
 
   <p class="lbl keep" style="margin-top: 5px;">Action Taken</p>

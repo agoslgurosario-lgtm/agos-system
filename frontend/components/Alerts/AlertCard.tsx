@@ -40,9 +40,8 @@ type HighClogContext = {
 
 type ReportContext = {
   report_id?: number
-  canal_name?: string | null
+  purok?: number | null
   severity?: string | null
-  final_canal_condition?: string | null
   date_observed?: string | null
 }
 
@@ -110,11 +109,8 @@ export function  ContextRow({ alertType, ctx }: { alertType: string; ctx: AlertC
     const c = ctx as ReportContext
     return (
       <>
-        {c.canal_name && <p>Canal: <span className="font-semibold">{c.canal_name}</span></p>}
+        {c.purok && <p>Purok: <span className="font-semibold">{c.purok}</span></p>}
         {c.severity && <p>Severity: <span className="font-semibold">{c.severity}</span></p>}
-        {c.final_canal_condition && (
-          <p>Final Condition: <span className="font-semibold">{c.final_canal_condition.replace(/_/g, " ")}</span></p>
-        )}
       </>
     )
   }

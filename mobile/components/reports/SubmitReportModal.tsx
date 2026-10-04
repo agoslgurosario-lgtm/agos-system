@@ -11,7 +11,7 @@ interface SubmitReportModalProps {
   isSubmitting?: boolean;
   summary: {
     location: string;
-    canalName: string;
+    purok: number | null;
     severity: ReportSeverity | null;
     dateObserved: Date | null;
     responder: string;
@@ -62,7 +62,7 @@ export function SubmitReportModal({ visible, onClose, onConfirm, isSubmitting = 
           <View className="mb-3 gap-2 rounded-[14px] border border-[#e2e8f0] bg-[#f8fafc] p-3.5">
             <SummaryRow label="Canal">
               <Text className="text-xs font-bold text-[#0f172a]" numberOfLines={1}>
-                {summary.canalName || "N/A"}
+                {summary.purok ? `Purok ${summary.purok}` : "N/A"}
               </Text>
             </SummaryRow>
 

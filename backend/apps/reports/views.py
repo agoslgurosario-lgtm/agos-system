@@ -21,6 +21,7 @@ from django.shortcuts import get_object_or_404
 from agos_backend.pdf_utils import render_custom_pdf, get_logo_data_uri
 from apps.signatories.models import Signatory
 from apps.alerts.models import Alert
+from django.utils import timezone
 
 
 PHOTO_LABELS = [
@@ -126,7 +127,8 @@ class CanalMonitoringReportListView(generics.ListCreateAPIView):
         )
         if report.is_submitted:
             report.signatory_snapshot = _snapshot_signatories(report.barangay)
-            report.save(update_fields=['signatory_snapshot'])
+            report.submitted_at = timezone.now()
+            report.save(update_fields=['signatory_snapshot', 'submitted_at'])
 
 
 class CanalMonitoringReportDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -140,7 +142,8 @@ class CanalMonitoringReportDetailView(generics.RetrieveUpdateDestroyAPIView):
         report = serializer.save()
         if report.is_submitted and not was_submitted:
             report.signatory_snapshot = _snapshot_signatories(report.barangay)
-            report.save(update_fields=['signatory_snapshot'])
+            report.submitted_at = timezone.now()
+            report.save(update_fields=['signatory_snapshot', 'submitted_at'])
             Alert.objects.create(report=report, alert_type='Report_Submitted')
             log_action(
                 user=self.request.user,
@@ -170,15 +173,18 @@ class CanalMonitoringReportExportView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        submitted = timezone.localtime(report.submitted_at or report.created_at)
+
         context = {
             "logo_data_uri": get_logo_data_uri(),
             "report": report,
+            "submitted_at": submitted,
+            "submitted_week": (submitted.day - 1) // 7 + 1,
             "generated_by": f"{request.user.first_name} {request.user.last_name}",
             "severity_options": _choice_options(CanalMonitoringReport.SEVERITY_CHOICES, report.severity),
-            "water_level_options": _choice_options(CanalMonitoringReport.WATER_LEVEL_CHOICES, report.water_level),
-            "coverage_options": _choice_options(CanalMonitoringReport.OBSTRUCTION_COVERAGE_CHOICES, report.obstruction_coverage),
-            "flow_options": _choice_options(CanalMonitoringReport.WATER_FLOW_CHOICES, report.water_flow_condition),
-            "final_condition_options": _choice_options(CanalMonitoringReport.CANAL_CONDITION_CHOICES, report.final_canal_condition),
+            "water_level_options": _choice_options(CanalMonitoringReport.WATER_LEVEL_CHOICES, report.overall_water_level),
+            "coverage_options": _choice_options(CanalMonitoringReport.OBSTRUCTION_COVERAGE_CHOICES, report.overall_obstruction_coverage),
+            "flow_options": _choice_options(CanalMonitoringReport.WATER_FLOW_CHOICES, report.overall_water_flow_condition),
             "photo_groups": _photo_groups(report),
             "signatory_rows": _signatory_rows(report),
         }

@@ -22,9 +22,9 @@ import { PrintCanalReport } from "@/components/PrintReport/PrintCanalReport"
 // lib
 import { fetchWithAuth } from "@/lib/auth"
 import {
-  SEVERITY_STYLE, FINAL_CONDITION_LABEL, FINAL_CONDITION_STYLE,
+  SEVERITY_STYLE,
   WATER_LEVEL_LABEL, OBSTRUCTION_LABEL, WATER_FLOW_LABEL,
-  WASTE_CATEGORIES, formatDateTime, filedByName,
+  WASTE_CATEGORIES, formatDateTime, filedByName, reportDate, weekOf,
 } from "@/lib/reportOptions"
 import type { CanalMonitoringReport, ReportMedia } from "@/types/report"
 import { printReport } from "@/lib/printReport"
@@ -87,10 +87,6 @@ function TextBox({ label, text }: { label: string; text: string | null }) {
 
 function ReportDocument({ report }: { report: CanalMonitoringReport }) {
   const barangayName = report.barangay_details?.barangay_name ?? "—"
-  const coordinates =
-    report.latitude != null && report.longitude != null
-      ? `${report.latitude.toFixed(6)}, ${report.longitude.toFixed(6)}`
-      : ""
 
   const wasteRows = [
     ...WASTE_CATEGORIES.map(c => ({ label: c.label, kg: Number(report[c.key] ?? 0) })),
@@ -119,20 +115,18 @@ function ReportDocument({ report }: { report: CanalMonitoringReport }) {
         <p className="font-bold text-[#122A48] text-base">Municipal Environmental and Natural Resources Office</p>
         <p className="text-[#122A48] text-sm mt-1">Canal Monitoring Report</p>
         <p className="text-[#727272] text-xs mt-1">
-          Report No. {report.report_id} &nbsp;|&nbsp; Filed by <span className="font-semibold">{filedByName(report)}</span>
+          Report No. {report.report_id} &nbsp;|&nbsp; Created by <span className="font-semibold">{filedByName(report)}</span>
         </p>
       </div>
 
       {/* Monitoring site */}
       <SectionBar title="Monitoring Site Information" />
-      <div className="grid grid-cols-2 gap-x-8 gap-y-3">
-        <Field label="Canal Name / ID">{report.canal_name}</Field>
-        <Field label="Barangay">{barangayName}</Field>
-        <Field label="City / Municipality">Rosario</Field>
-        <Field label="Province">La Union</Field>
-        <Field label="GPS Coordinates (Lat, Long)">{coordinates}</Field>
-        <Field label="Nearest Landmark">{report.nearest_landmark}</Field>
-      </div>
+        <div className="grid grid-cols-2 gap-x-8 gap-y-3">
+          <Field label="Purok">{report.purok}</Field>
+          <Field label="Barangay">{barangayName}</Field>
+          <Field label="City / Municipality">Rosario</Field>
+          <Field label="Province">La Union</Field>
+        </div>
 
       {/* Detection summary */}
       <SectionBar title="Detection Summary" />
@@ -141,14 +135,18 @@ function ReportDocument({ report }: { report: CanalMonitoringReport }) {
         <Field label="Severity">
           {report.severity && <StyledBadge text={report.severity} style={SEVERITY_STYLE[report.severity]} />}
         </Field>
+        <Field label="Date / Time Submitted">
+          {formatDateTime(reportDate(report))}
+          <span className="font-normal text-[#727272]"> · Week {weekOf(report)}</span>
+        </Field>
       </div>
 
       {/* Canal condition */}
-      <SectionBar title="Canal Condition" />
+      <SectionBar title="Overall Canal Condition (Whole Purok)" />
       <div className="grid grid-cols-3 gap-x-8 gap-y-3">
-        <Field label="Water Level">{report.water_level && WATER_LEVEL_LABEL[report.water_level]}</Field>
-        <Field label="Water Flow Condition">{report.water_flow_condition && WATER_FLOW_LABEL[report.water_flow_condition]}</Field>
-        <Field label="Obstruction Coverage">{report.obstruction_coverage && OBSTRUCTION_LABEL[report.obstruction_coverage]}</Field>
+        <Field label="Overall Water Level">{report.overall_water_level && WATER_LEVEL_LABEL[report.overall_water_level]}</Field>
+        <Field label="Overall Water Flow Condition">{report.overall_water_flow_condition && WATER_FLOW_LABEL[report.overall_water_flow_condition]}</Field>
+        <Field label="Overall Obstruction Coverage">{report.overall_obstruction_coverage && OBSTRUCTION_LABEL[report.overall_obstruction_coverage]}</Field>
       </div>
 
       {/* Waste composition */}
@@ -175,14 +173,6 @@ function ReportDocument({ report }: { report: CanalMonitoringReport }) {
         <Field label="Date / Time Responded">{formatDateTime(report.date_responded)}</Field>
         <Field label="Waste Collected">
           {report.waste_collected_amount != null ? `${Number(report.waste_collected_amount).toFixed(2)} kg` : ""}
-        </Field>
-        <Field label="Final Canal Condition">
-          {report.final_canal_condition && (
-            <StyledBadge
-              text={FINAL_CONDITION_LABEL[report.final_canal_condition]}
-              style={FINAL_CONDITION_STYLE[report.final_canal_condition]}
-            />
-          )}
         </Field>
       </div>
       <TextBox label="Action Taken" text={report.action_taken} />
@@ -353,7 +343,7 @@ const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_
             </button>
             <div className="flex gap-3 items-center">
               <p className="font-bold text-[#122A48] text-sm">
-                {report.barangay_details?.barangay_name} — {report.canal_name || "Untitled canal"}
+                {report.barangay_details?.barangay_name} — {report.purok ? `Purok ${report.purok}` : "Untitled report"}
               </p>
               {report.severity && <StyledBadge text={report.severity} style={SEVERITY_STYLE[report.severity]} />}
             </div>

@@ -12,6 +12,7 @@ export function BarangayReportsSkeleton() {
   const [selectedMonth, setSelectedMonth] = useState<string>("current")
   const [filterBarangay, setFilterBarangay] = useState<string>("All")
   const [filterStatus, setFilterStatus] = useState<string>("All")
+  const [selectedWeek, setSelectedWeek] = useState<string>("All")
 
   const { panelRef, tableWrapRef, rows } = useFillRows({
     rowHeight: 56,
@@ -30,6 +31,15 @@ export function BarangayReportsSkeleton() {
             </SelectTrigger>
             <SelectContent position="popper">
               <SelectItem className="p-2 py-1 text-[#122A48]" value="current">This Month</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={selectedWeek} onValueChange={setSelectedWeek}>
+            <SelectTrigger className="cursor-pointer px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper">
+              <SelectItem value="All" className="p-2 py-1 text-[#122A48]">All weeks</SelectItem>
             </SelectContent>
           </Select>
 
@@ -62,9 +72,9 @@ export function BarangayReportsSkeleton() {
             <Table>
               <TableHeader className="bg-[#e8eef1b4] border border-[#CFD8DC]">
                 <TableRow>
-                  <TableHead className="font-semibold text-left text-xs text-[#727272]">DATE OBSERVED</TableHead>
+                  <TableHead className="font-semibold text-left text-xs text-[#727272]">DATE SUBMITTED</TableHead>
                   <TableHead className="font-semibold text-left text-xs text-[#727272]">BARANGAY</TableHead>
-                  <TableHead className="font-semibold text-left text-xs text-[#727272]">CANAL</TableHead>
+                  <TableHead className="font-semibold text-left text-xs text-[#727272]">PUROK</TableHead>
                   <TableHead className="font-semibold text-left text-xs text-[#727272]">SEVERITY</TableHead>
                   <TableHead className="font-semibold text-left text-xs text-[#727272]">FINAL CONDITION</TableHead>
                   <TableHead className="font-semibold text-left text-xs text-[#727272]">FILED BY</TableHead>
@@ -78,7 +88,6 @@ export function BarangayReportsSkeleton() {
                     <TableCell className="h-14"><Skeleton className="h-3.5 w-24" /></TableCell>
                     <TableCell className="h-14"><Skeleton className="h-3.5 w-28" /></TableCell>
                     <TableCell className="h-14"><Skeleton className="h-6 w-16 rounded-full" /></TableCell>
-                    <TableCell className="h-14"><Skeleton className="h-6 w-24 rounded-full" /></TableCell>
                     <TableCell className="h-14"><Skeleton className="h-3.5 w-24" /></TableCell>
                     <TableCell className="h-14">
                       <div className="flex gap-3">

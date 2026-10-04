@@ -1,5 +1,8 @@
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework.exceptions import PermissionDenied
+
+SAFE_METHODS = ('GET', 'HEAD', 'OPTIONS')
 
 
 class CookieJWTAuthentication(JWTAuthentication):
@@ -18,4 +21,6 @@ class CookieJWTAuthentication(JWTAuthentication):
         except (InvalidToken, TokenError):
             return None
 
+        if request.method not in SAFE_METHODS and request.headers.get('X-Requested-With') != 'agos-web':
+            raise PermissionDenied('CSRF check failed.')
         return self.get_user(validated_token), validated_token

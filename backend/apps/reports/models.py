@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from apps.barangay.models import Barangay
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 
 class CanalMonitoringReport(models.Model):
@@ -25,11 +26,6 @@ class CanalMonitoringReport(models.Model):
         ('Reduced', 'Reduced'),
         ('Blocked', 'Blocked'),
     ]
-    CANAL_CONDITION_CHOICES = [
-        ('Clear', 'Clear'),
-        ('Partially_Clear', 'Partially Clear'),
-        ('Still_Obstructed', 'Still Obstructed'),
-    ]
     WASTE_UNIT_CHOICES = [
         ('kg', 'kg'),
         ('L', 'L'),
@@ -45,19 +41,20 @@ class CanalMonitoringReport(models.Model):
         on_delete=models.CASCADE,
         db_column='barangay_id'
     )
-    canal_name = models.CharField(max_length=150, null=True, blank=True)
-    latitude = models.FloatField(null=True, blank=True)
-    longitude = models.FloatField(null=True, blank=True)
-    nearest_landmark = models.CharField(max_length=255, blank=True)
+    purok = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(7)],
+    )
 
     # Detection Summary
     date_observed = models.DateTimeField(null=True, blank=True)
     severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, null=True, blank=True)
 
-    # Canal Condition
-    water_level = models.CharField(max_length=10, choices=WATER_LEVEL_CHOICES, null=True, blank=True)
-    obstruction_coverage = models.CharField(max_length=10, choices=OBSTRUCTION_COVERAGE_CHOICES, null=True, blank=True)
-    water_flow_condition = models.CharField(max_length=10, choices=WATER_FLOW_CHOICES, null=True, blank=True)
+    # Canal Condition — overall assessment across the whole purok
+    overall_water_level = models.CharField(max_length=10, choices=WATER_LEVEL_CHOICES, null=True, blank=True)
+    overall_obstruction_coverage = models.CharField(max_length=10, choices=OBSTRUCTION_COVERAGE_CHOICES, null=True, blank=True)
+    overall_water_flow_condition = models.CharField(max_length=10, choices=WATER_FLOW_CHOICES, null=True, blank=True)
 
     # Waste Composition — estimated amount per category (kg)
     waste_plastic_kg = models.FloatField(null=True, blank=True)
@@ -78,7 +75,6 @@ class CanalMonitoringReport(models.Model):
     action_taken = models.TextField(null=True, blank=True)
     waste_collected_amount = models.FloatField(null=True, blank=True)
     waste_collected_unit = models.CharField(max_length=10, choices=WASTE_UNIT_CHOICES, default='kg')
-    final_canal_condition = models.CharField(max_length=20, choices=CANAL_CONDITION_CHOICES, null=True, blank=True)
     remarks = models.TextField(blank=True)
 
     # Relationships / metadata
@@ -97,6 +93,7 @@ class CanalMonitoringReport(models.Model):
         db_column='clog_event_id'
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    submitted_at = models.DateTimeField(null=True, blank=True)
     signatory_snapshot = models.JSONField(null=True, blank=True)
 
     class Meta:

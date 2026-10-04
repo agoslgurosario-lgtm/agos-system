@@ -1,12 +1,17 @@
 import type {
   ReportSeverity, WaterLevel, ObstructionCoverage,
-  WaterFlowCondition, FinalCanalCondition,
+  WaterFlowCondition,
 } from '@/types/reports'
 
 export interface Option<T extends string> {
   value: T
   label: string
 }
+
+export const PUROK_OPTIONS: Option<string>[] = Array.from({ length: 7 }, (_, i) => ({
+  value: String(i + 1),
+  label: `Purok ${i + 1}`,
+}))
 
 export const SEVERITY_OPTIONS: Option<ReportSeverity>[] = [
   { value: 'Critical', label: 'Critical' },
@@ -38,12 +43,6 @@ export const WATER_FLOW_OPTIONS: Option<WaterFlowCondition>[] = [
   { value: 'Normal', label: 'Normal' },
   { value: 'Reduced', label: 'Reduced' },
   { value: 'Blocked', label: 'Blocked' },
-]
-
-export const FINAL_CONDITION_OPTIONS: Option<FinalCanalCondition>[] = [
-  { value: 'Clear', label: 'Clear' },
-  { value: 'Partially_Clear', label: 'Partially Clear' },
-  { value: 'Still_Obstructed', label: 'Still Obstructed' },
 ]
 
 // turns a stored value into its display label, e.g. 'Under_25' → '<25%'

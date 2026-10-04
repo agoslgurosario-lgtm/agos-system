@@ -7,6 +7,8 @@ export const SERVER_UNREACHABLE_MESSAGE =
 
 export const REQUEST_TIMEOUT_MESSAGE = 'Took too long to respond. Please try again.'
 const DEFAULT_TIMEOUT_MS = 30000
+const CLIENT_HEADER = { 'X-Requested-With': 'agos-web' }
+
 
 async function safeFetch(url: string, options: RequestInit, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController()
@@ -38,7 +40,7 @@ async function refreshAccessToken(): Promise<boolean> {
   try {
     const res = await fetch(`${BASE_URL}/api/auth/token/refresh/`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...CLIENT_HEADER },
       credentials: 'include',
     })
 
@@ -56,7 +58,7 @@ async function refreshAccessToken(): Promise<boolean> {
 }
 
 function buildHeaders(): HeadersInit {
-  return { 'Content-Type': 'application/json' }
+  return { 'Content-Type': 'application/json', ...CLIENT_HEADER }
 }
 
 // fetch with auto retry on 401
@@ -151,7 +153,7 @@ export const publicApi = {
   post: async (endpoint: string, data?: unknown) => {
     const res = await safeFetch(`${BASE_URL}${endpoint}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...CLIENT_HEADER },
       credentials: 'include',
       body: JSON.stringify(data),
     })

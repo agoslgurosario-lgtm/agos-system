@@ -2,6 +2,7 @@
 
 import { createPortal } from "react-dom"
 import type { CanalMonitoringReport } from "@/types/report"
+import { reportDate, weekOf } from "@/lib/reportOptions"
 
 type PrintCanalReportProps = {
   report: CanalMonitoringReport
@@ -13,7 +14,6 @@ const SEVERITY_OPTIONS: [string, string][] = [['Critical', 'Critical'], ['Medium
 const WATER_LEVEL_OPTIONS: [string, string][] = [['Low', 'Low'], ['Moderate', 'Moderate'], ['High', 'High']]
 const COVERAGE_OPTIONS: [string, string][] = [['Under_25', '<25%'], ['25_50', '25–50%'], ['50_75', '50–75%'], ['Over_75', '>75%']]
 const FLOW_OPTIONS: [string, string][] = [['Normal', 'Normal'], ['Reduced', 'Reduced'], ['Blocked', 'Blocked']]
-const FINAL_CONDITION_OPTIONS: [string, string][] = [['Clear', 'Clear'], ['Partially_Clear', 'Partially Clear'], ['Still_Obstructed', 'Still Obstructed']]
 const PHOTO_LABELS: [string, string][] = [['Before_Clearing', 'Before Cleanup'], ['After_Clearing', 'After Cleanup'], ['Additional_Evidence', 'Additional Evidence']]
 const SIGNATORY_POSITIONS = ['Barangay Secretary', 'Chairman Environment', 'Brgy. Sanitary Inspector', 'Punong Barangay']
 
@@ -71,16 +71,12 @@ export function PrintCanalReport({ report, generatedBy, signatoryNames }: PrintC
       <p className="print-canal-section-bar">Monitoring Site Information</p>
       <table className="print-canal-fields"><tbody>
         <tr>
-          <td><div className="print-canal-lbl">Canal Name / ID</div><div className="print-canal-val">{report.canal_name || '—'}</div></td>
+          <td><div className="print-canal-lbl">Purok</div><div className="print-canal-val">{report.purok ?? '—'}</div></td>
           <td><div className="print-canal-lbl">Barangay</div><div className="print-canal-val">{report.barangay_details?.barangay_name ?? '—'}</div></td>
         </tr>
         <tr>
           <td><div className="print-canal-lbl">City / Municipality</div><div className="print-canal-val">Rosario</div></td>
           <td><div className="print-canal-lbl">Province</div><div className="print-canal-val">La Union</div></td>
-        </tr>
-        <tr>
-          <td><div className="print-canal-lbl">GPS Coordinates (Lat, Long)</div><div className="print-canal-val">{report.latitude != null && report.longitude != null ? `${report.latitude.toFixed(6)}, ${report.longitude.toFixed(6)}` : '—'}</div></td>
-          <td><div className="print-canal-lbl">Nearest Landmark</div><div className="print-canal-val">{report.nearest_landmark || '—'}</div></td>
         </tr>
       </tbody></table>
 
@@ -90,16 +86,20 @@ export function PrintCanalReport({ report, generatedBy, signatoryNames }: PrintC
           <td><div className="print-canal-lbl">Date / Time Observed</div><div className="print-canal-val">{fmtDate(report.date_observed)}</div></td>
           <td><div className="print-canal-lbl">Severity (choose one)</div><ChoiceRow options={SEVERITY_OPTIONS} selected={report.severity} /></td>
         </tr>
+        <tr>
+          <td><div className="print-canal-lbl">Date / Time Submitted</div><div className="print-canal-val">{fmtDate(reportDate(report))} · Week {weekOf(report)}</div></td>
+          <td></td>
+        </tr>
       </tbody></table>
 
-      <p className="print-canal-section-bar">Canal Condition</p>
+      <p className="print-canal-section-bar">Overall Canal Condition (Whole Purok)</p>
       <table className="print-canal-fields"><tbody>
         <tr>
-          <td><div className="print-canal-lbl">Water Level (choose one)</div><ChoiceRow options={WATER_LEVEL_OPTIONS} selected={report.water_level} /></td>
-          <td><div className="print-canal-lbl">Water Flow Condition (choose one)</div><ChoiceRow options={FLOW_OPTIONS} selected={report.water_flow_condition} /></td>
+          <td><div className="print-canal-lbl">Overall Water Level (choose one)</div><ChoiceRow options={WATER_LEVEL_OPTIONS} selected={report.overall_water_level} /></td>
+          <td><div className="print-canal-lbl">Overall Water Flow (choose one)</div><ChoiceRow options={FLOW_OPTIONS} selected={report.overall_water_flow_condition} /></td>
         </tr>
         <tr>
-          <td colSpan={2}><div className="print-canal-lbl">Obstruction Coverage (choose one)</div><ChoiceRow options={COVERAGE_OPTIONS} selected={report.obstruction_coverage} /></td>
+          <td colSpan={2}><div className="print-canal-lbl">Overall Obstruction (choose one)</div><ChoiceRow options={COVERAGE_OPTIONS} selected={report.overall_obstruction_coverage} /></td>
         </tr>
       </tbody></table>
 
@@ -119,8 +119,7 @@ export function PrintCanalReport({ report, generatedBy, signatoryNames }: PrintC
           <td><div className="print-canal-lbl">Date / Time Responded</div><div className="print-canal-val">{fmtDate(report.date_responded)}</div></td>
         </tr>
         <tr>
-          <td><div className="print-canal-lbl">Waste Collected</div><div className="print-canal-val">{report.waste_collected_amount != null ? `${Number(report.waste_collected_amount).toFixed(2)} kg` : '—'}</div></td>
-          <td><div className="print-canal-lbl">Final Canal Condition (choose one)</div><ChoiceRow options={FINAL_CONDITION_OPTIONS} selected={report.final_canal_condition} /></td>
+        <td colSpan={2}><div className="print-canal-lbl">Waste Collected</div><div className="print-canal-val">{report.waste_collected_amount != null ? `${Number(report.waste_collected_amount).toFixed(2)} kg` : '—'}</div></td>
         </tr>
       </tbody></table>
 

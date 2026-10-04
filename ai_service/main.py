@@ -27,6 +27,12 @@ app = FastAPI(title="AGOS AI Service")
 
 SERVICE_KEY = os.environ.get("AI_SERVICE_KEY")  # shared secret, set on both services
 
+if not SERVICE_KEY:
+    raise RuntimeError(
+        "AI_SERVICE_KEY environment variable is not set. "
+        "This service must not run without it."
+    )
+
 import threading
 
 @app.on_event("startup")
@@ -284,7 +290,7 @@ async def classify(
     frame: UploadFile = File(...),
     x_service_key: str = Header(None),
 ):
-    if SERVICE_KEY and x_service_key != SERVICE_KEY:
+    if not SERVICE_KEY or x_service_key != SERVICE_KEY:
         raise HTTPException(status_code=403, detail="Invalid service key")
 
     image_bytes = await frame.read()

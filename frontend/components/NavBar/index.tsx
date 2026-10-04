@@ -95,7 +95,7 @@ const navItems: Record<string, NavItem[]> = {
     },
   ],
   MENRO: [
-    { label: "Reginal Map",  href: "/menro/map",              icon: <Map size={18} /> },
+    { label: "Regional Map",  href: "/menro/map",              icon: <Map size={18} /> },
     { label: "Alerts",           href: "/menro/alerts",           icon: <Siren size={18} /> },
     { label: "Waste Analytics",  href: "/menro/analytics",        icon: <ChartNoAxesCombined size={18} /> },
     { label: "Resource Optimization",        href: "/menro/resources",        icon: <Package size={18} /> },

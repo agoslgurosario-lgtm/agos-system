@@ -7,6 +7,8 @@ import { ClogEvent } from '../../types/clog-events'
 import Pagination from '../../components/alerts/Pagination'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AlertBellButton from '@/components/alerts/AlertBellButton'
+import MonthFilter from '../../components/common/MonthFilter'
+import { currentMonthValue, monthLabel, monthOfIso } from '../../lib/months'
 
 import { useAuth } from '../../lib/AuthContext'
 import { useLiveSocket } from '../../lib/useLiveSocket'
@@ -42,22 +44,41 @@ export default function ClogEventsScreen() {
   const [selectedTab, setSelectedTab] = useState<(typeof SEVERITY_TABS)[number]>('All')
   const [page, setPage] = useState(1)
 
+  const [month, setMonth] = useState(currentMonthValue())
+  const [fetching, setFetching] = useState(false)
+  const monthRef = useRef(currentMonthValue())
+  const requestId = useRef(0)
+
   const fetchEvents = async (isRefresh = false) => {
+    const myRequest = ++requestId.current
     if (isRefresh) {
       setRefreshing(true)
     } else if (!hasLoadedOnce.current) {
       setLoading(true)
     }
+    setFetching(true)
     setError(false)
     try {
-      const data = await api.get('/api/clog-events/')
+      const data = await api.get(`/api/clog-events/?month=${monthRef.current}`)
+      if (myRequest !== requestId.current) return
       setEvents(Array.isArray(data) ? data : [])
       hasLoadedOnce.current = true
     } catch {
-      setError(true)
+      if (myRequest === requestId.current) setError(true)
     } finally {
-      isRefresh ? setRefreshing(false) : setLoading(false)
+      if (myRequest === requestId.current) {
+        setLoading(false)
+        setRefreshing(false)
+        setFetching(false)
+      }
     }
+  }
+
+  const selectMonth = (value: string) => {
+    monthRef.current = value
+    setMonth(value)
+    setPage(1)
+    fetchEvents()
   }
 
   useFocusEffect(
@@ -74,9 +95,9 @@ export default function ClogEventsScreen() {
       }
       setEvents((prev) => {
         const exists = prev.some((e) => e.event_id === incoming.event_id)
-        return exists
-          ? prev.map((e) => (e.event_id === incoming.event_id ? incoming : e))
-          : [incoming, ...prev]
+        if (exists) return prev.map((e) => (e.event_id === incoming.event_id ? incoming : e))
+        const inView = monthRef.current === 'All' || monthOfIso(incoming.detected_at) === monthRef.current
+        return inView ? [incoming, ...prev] : prev
       })
     },
     () => fetchEvents()
@@ -102,7 +123,7 @@ export default function ClogEventsScreen() {
     router.push('/clog-details')
   }
 
-  if (loading || refreshing) {
+  if (loading) {
     return (
       <View className="flex-1 items-center justify-center gap-3">
         <ActivityIndicator color="#2F6FED" />
@@ -120,7 +141,7 @@ export default function ClogEventsScreen() {
       </View>
 
       {/* severity tabs */}
-      <View className="pb-1 flex justify-center items-center">
+      <View className="flex justify-center items-center">
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="px-4 gap-2">
           {SEVERITY_TABS.map(tab => {
             const isActive = selectedTab === tab
@@ -143,11 +164,15 @@ export default function ClogEventsScreen() {
       </View>
 
       <ScrollView
-        contentContainerClassName="p-4 gap-3 pb-10"
+        contentContainerClassName="p-4 gap-3 pb-5 pt-2"
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => fetchEvents(true)} tintColor="#122A48" />
         }
       >
+        <View className='flex justify-center items-center'>
+          <MonthFilter value={month} onChange={selectMonth}/>
+        </View>
+        
         {error && (
           <Text className="text-[#D81010] text-xs text-center mb-1">
             Couldn't load clog events. Pull down to try again.
@@ -211,7 +236,7 @@ export default function ClogEventsScreen() {
         {/* list */}
         {filteredEvents.length === 0 ? (
           <Text className="text-[#94A3B8] text-sm text-center mt-8">
-            No events found for {selectedTab} severity.
+            No events found for {selectedTab} severity in {monthLabel(month)}.
           </Text>
         ) : (
           paginatedEvents.map(item => {

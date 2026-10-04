@@ -14,6 +14,7 @@ import { useFillRows } from "@/components/hooks/useFillRows"
 export function BarangayReportsSkeleton() {
   const [filterBarangay, setFilterBarangay] = useState<string>("All")
   const [selectedMonth, setSelectedMonth] = useState<string>("current")
+  const [selectedWeek, setSelectedWeek] = useState<string>("All")
 
   const { panelRef, tableWrapRef, rows } = useFillRows({
     rowHeight: 56,
@@ -48,6 +49,15 @@ export function BarangayReportsSkeleton() {
               <SelectItem value="current" className="p-2 text-xs">This Month</SelectItem>
             </SelectContent>
           </Select>
+
+          <Select value={selectedWeek} onValueChange={setSelectedWeek}>
+            <SelectTrigger className="cursor-pointer text-xs px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper">
+              <SelectItem value="All" className="p-2 text-xs">All weeks</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -74,7 +84,7 @@ export function BarangayReportsSkeleton() {
             </div>
             <Skeleton className="h-3 w-full rounded-full" />
             <div className="flex gap-8">
-              {[...Array(3)].map((_, i) => (
+              {[...Array(2)].map((_, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <Skeleton className="h-2 w-2 rounded-full" />
                   <Skeleton className="h-3 w-24" />
@@ -101,11 +111,10 @@ export function BarangayReportsSkeleton() {
           <Table>
             <TableHeader className="bg-[#e8eef1b4] border border-[#CFD8DC] h-12 rounded-lg">
               <TableRow>
-                <TableHead className="font-semibold text-left text-xs text-[#727272]">DATE OBSERVED</TableHead>
+                <TableHead className="font-semibold text-left text-xs text-[#727272]">DATE SUBMITTED</TableHead>
                 <TableHead className="font-semibold text-left text-xs text-[#727272]">BARANGAY</TableHead>
-                <TableHead className="font-semibold text-left text-xs text-[#727272]">CANAL</TableHead>
+                <TableHead className="font-semibold text-left text-xs text-[#727272]">PUROK</TableHead>
                 <TableHead className="font-semibold text-left text-xs text-[#727272]">SEVERITY</TableHead>
-                <TableHead className="font-semibold text-left text-xs text-[#727272]">FINAL CONDITION</TableHead>
                 <TableHead className="font-semibold text-left text-xs text-[#727272]">FILED BY</TableHead>
                 <TableHead className="font-semibold text-left text-xs text-[#727272]">ACTIONS</TableHead>
               </TableRow>
@@ -117,7 +126,6 @@ export function BarangayReportsSkeleton() {
                   <TableCell className="h-14"><Skeleton className="h-3.5 w-24" /></TableCell>
                   <TableCell className="h-14"><Skeleton className="h-3.5 w-28" /></TableCell>
                   <TableCell className="h-14"><Skeleton className="h-6 w-16 rounded-full" /></TableCell>
-                  <TableCell className="h-14"><Skeleton className="h-6 w-24 rounded-full" /></TableCell>
                   <TableCell className="h-14"><Skeleton className="h-3.5 w-24" /></TableCell>
                   <TableCell className="h-14">
                     <div className="flex gap-3">

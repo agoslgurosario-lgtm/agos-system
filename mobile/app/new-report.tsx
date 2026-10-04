@@ -5,25 +5,22 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
-import LocationPickerMap, { PickedLocation } from "@/components/reports/LocationPickerMap";
 import ChipSelect from "@/components/reports/ChipSelect";
 import {
   SEVERITY_OPTIONS, SEVERITY_COLORS,
   WATER_LEVEL_OPTIONS, OBSTRUCTION_COVERAGE_OPTIONS, WATER_FLOW_OPTIONS,
-  FINAL_CONDITION_OPTIONS,
+  PUROK_OPTIONS
 } from "@/constants/reports";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import type {
   CanalMonitoringReport, ReportSeverity, WaterLevel, ObstructionCoverage,
-  WaterFlowCondition, FinalCanalCondition,
+  WaterFlowCondition
 } from "@/types/reports";
 import { SubmitReportModal } from "@/components/reports/SubmitReportModal";
 import { IncompleteReportModal } from "@/components/reports/IncompleteReportModal";
 import { PhotoPreviewModal } from "@/components/reports/PhotoPreviewModal";
 
-// Rosario, La Union — fallback map center when the barangay has no coordinates
-const MUNICIPALITY_CENTER = { latitude: 16.2286, longitude: 120.4906 };
 
 interface PhotoAsset {
   uri: string;
@@ -34,10 +31,7 @@ interface PhotoAsset {
 
 interface ReportFormState {
   // Monitoring site
-  canalName: string;
-  latitude: number | null;
-  longitude: number | null;
-  nearestLandmark: string;
+  purok: number | null;
 
   // Detection summary
   dateObserved: Date | null;
@@ -65,8 +59,6 @@ interface ReportFormState {
   assignedPersonnel: string;
   dateResponded: Date | null;
   actionTaken: string;
-  wasteCollectedAmount: string;
-  finalCanalCondition: FinalCanalCondition | null;
   remarks: string;
 
   // Photos
@@ -76,10 +68,7 @@ interface ReportFormState {
 }
 
 const INITIAL_STATE: ReportFormState = {
-  canalName: "",
-  latitude: null,
-  longitude: null,
-  nearestLandmark: "",
+  purok: null,  
 
   dateObserved: null,
   severity: null,
@@ -103,8 +92,6 @@ const INITIAL_STATE: ReportFormState = {
   assignedPersonnel: "",
   dateResponded: null,
   actionTaken: "",
-  wasteCollectedAmount: "",
-  finalCanalCondition: null,
   remarks: "",
 
   beforePhotos: [],
@@ -231,43 +218,6 @@ function LockedField({ label, value }: { label: string; value: string }) {
         <MaterialCommunityIcons name="lock-outline" size={14} color="#94a3b8" />
         <Text className="flex-1 text-[13px] text-[#64748b]">{value}</Text>
       </View>
-    </View>
-  );
-}
-
-function CoordinatePicker({ latitude, longitude, onPress, required = false, }: {
-  latitude: number | null;
-  longitude: number | null;
-  onPress: () => void;
-  required?: boolean;
-}) {
-  const hasPin = latitude != null && longitude != null;
-
-  return (
-    <View className="mb-3">
-      <Text className="mb-1.5 text-xs font-semibold text-[#334155]">
-        GPS Coordinates {required && <Text className="text-[#dc2626]">*</Text>}
-      </Text>
-      <TouchableOpacity
-        onPress={onPress}
-        className={`flex-row items-center gap-2 rounded-[10px] border px-3 py-2.5 ${
-          hasPin ? "border-[#86efac] bg-[#f0fdf4]" : "border-dashed border-[#cbd5e1] bg-[#f8fafc]"
-        }`}
-      >
-        <MaterialCommunityIcons
-          name={hasPin ? "map-marker-check" : "map-marker-plus-outline"}
-          size={18}
-          color={hasPin ? "#16a34a" : "#94a3b8"}
-        />
-        <Text className={`flex-1 text-[13px] ${hasPin ? "text-[#15803d]" : "text-[#94a3b8]"}`}>
-          {hasPin
-            ? `${latitude!.toFixed(6)}, ${longitude!.toFixed(6)}`
-            : "Tap to pick on map"}
-        </Text>
-        {hasPin && (
-          <Text className="text-[11px] font-semibold text-[#16a34a]">Change</Text>
-        )}
-      </TouchableOpacity>
     </View>
   );
 }
@@ -455,12 +405,12 @@ function toNumberOrNull(text: string): number | null {
 // used to avoid creating an empty draft when there's nothing to save
 function isFormEmpty(f: ReportFormState): boolean {
   return (
-    !f.canalName.trim() && f.latitude == null && !f.nearestLandmark.trim() &&
+    f.purok == null &&
     !f.dateObserved && !f.severity &&
     !f.waterLevel && !f.obstructionCoverage && !f.waterFlowCondition &&
     WASTE_KG_FIELDS.every((w) => !f[w.key].trim()) && !f.wasteOtherLabel.trim() &&
     !f.assignedPersonnel.trim() && !f.dateResponded && !f.actionTaken.trim() &&
-    !f.wasteCollectedAmount.trim() && !f.finalCanalCondition && !f.remarks.trim() &&
+    !f.remarks.trim() &&
     f.beforePhotos.length === 0 && f.afterPhotos.length === 0 && f.evidencePhotos.length === 0
   );
 }
@@ -507,7 +457,6 @@ export default function NewReportScreen() {
   );
   const [isLoadingReport, setIsLoadingReport] = useState(!!params.report_id);
   const [isLocked, setIsLocked] = useState(false); // already submitted — read-only
-  const [isMapVisible, setIsMapVisible] = useState(false);
 
   const [photoSheetField, setPhotoSheetField] = useState<PhotoField | null>(null);
 
@@ -527,10 +476,6 @@ export default function NewReportScreen() {
   const creatingRef = useRef<Promise<number> | null>(null);
 
   const barangayName = user?.barangay_details?.barangay_name ?? "Your barangay";
-  const mapCenter = {
-    latitude: user?.barangay_details?.latitude ?? MUNICIPALITY_CENTER.latitude,
-    longitude: user?.barangay_details?.longitude ?? MUNICIPALITY_CENTER.longitude,
-  };
 
   // Load an existing in-progress report when continuing one
   useEffect(() => {
@@ -556,17 +501,14 @@ export default function NewReportScreen() {
         const num = (v: number | null) => (v == null ? "" : String(v));
 
         setForm({
-          canalName: report.canal_name ?? "",
-          latitude: report.latitude,
-          longitude: report.longitude,
-          nearestLandmark: report.nearest_landmark ?? "",
+          purok: report.purok,
 
           dateObserved: report.date_observed ? new Date(report.date_observed) : null,
           severity: report.severity,
 
-          waterLevel: report.water_level,
-          obstructionCoverage: report.obstruction_coverage,
-          waterFlowCondition: report.water_flow_condition,
+          waterLevel: report.overall_water_level,
+          obstructionCoverage: report.overall_obstruction_coverage,
+          waterFlowCondition: report.overall_water_flow_condition,
 
           wastePlasticKg: num(report.waste_plastic_kg),
           wasteFoodWrapperKg: num(report.waste_food_wrapper_kg),
@@ -583,8 +525,6 @@ export default function NewReportScreen() {
           assignedPersonnel: report.assigned_personnel ?? "",
           dateResponded: report.date_responded ? new Date(report.date_responded) : null,
           actionTaken: report.action_taken ?? "",
-          wasteCollectedAmount: num(report.waste_collected_amount),
-          finalCanalCondition: report.final_canal_condition,
           remarks: report.remarks ?? "",
 
           beforePhotos: toPhotos("Before_Clearing"),
@@ -602,14 +542,10 @@ export default function NewReportScreen() {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const handleConfirmLocation = (location: PickedLocation) => {
-    setForm((prev) => ({
-      ...prev,
-      latitude: location.latitude,
-      longitude: location.longitude,
-    }));
-    setIsMapVisible(false);
-  };
+  // Waste Collected is always the sum of the waste composition categories (kg)
+  const wasteTotalKg =
+    Math.round(WASTE_KG_FIELDS.reduce((sum, w) => sum + parseAmount(form[w.key]), 0) * 100) / 100;
+  const hasAnyWaste = WASTE_KG_FIELDS.some((w) => form[w.key].trim() !== "");
 
   // Creates a nearly-empty in-progress report the first time something needs one.
   // Every field is optional server-side, so an empty body is valid.
@@ -721,17 +657,14 @@ export default function NewReportScreen() {
     const textOrNull = (text: string) => (text.trim() ? text.trim() : null);
 
     return {
-      canal_name: textOrNull(form.canalName),
-      latitude: form.latitude,
-      longitude: form.longitude,
-      nearest_landmark: form.nearestLandmark.trim(),
+      purok: form.purok,
 
       date_observed: form.dateObserved ? form.dateObserved.toISOString() : null,
       severity: form.severity,
 
-      water_level: form.waterLevel,
-      obstruction_coverage: form.obstructionCoverage,
-      water_flow_condition: form.waterFlowCondition,
+      overall_water_level: form.waterLevel,
+      overall_obstruction_coverage: form.obstructionCoverage,
+      overall_water_flow_condition: form.waterFlowCondition,
 
       waste_plastic_kg: kg(form.wastePlasticKg),
       waste_food_wrapper_kg: kg(form.wasteFoodWrapperKg),
@@ -748,8 +681,7 @@ export default function NewReportScreen() {
       assigned_personnel: textOrNull(form.assignedPersonnel),
       date_responded: form.dateResponded ? form.dateResponded.toISOString() : null,
       action_taken: textOrNull(form.actionTaken),
-      waste_collected_amount: toNumberOrNull(form.wasteCollectedAmount),
-      final_canal_condition: form.finalCanalCondition,
+      waste_collected_amount: submit || hasAnyWaste ? wasteTotalKg : null,
       remarks: form.remarks.trim(),
 
       ...(submit ? { is_submitted: true } : {}),
@@ -758,18 +690,16 @@ export default function NewReportScreen() {
 
   const getMissingFields = (): string[] => {
     const missing: string[] = [];
-    if (!form.canalName.trim()) missing.push("Canal name / ID");
-    if (form.latitude == null || form.longitude == null) missing.push("GPS coordinates");
+    if (form.purok == null) missing.push("Purok");
     if (!form.dateObserved) missing.push("Date / time observed");
     if (!form.severity) missing.push("Severity");
-    if (!form.waterLevel) missing.push("Water level");
-    if (!form.obstructionCoverage) missing.push("Obstruction coverage");
-    if (!form.waterFlowCondition) missing.push("Water flow condition");
+    if (!form.waterLevel) missing.push("Overall water level");
+    if (!form.obstructionCoverage) missing.push("Overall obstruction");
+    if (!form.waterFlowCondition) missing.push("Overall water flow");
     if (!form.assignedPersonnel.trim()) missing.push("Assigned personnel");
     if (!form.dateResponded) missing.push("Date / time responded");
     if (!form.actionTaken.trim()) missing.push("Action taken");
-    if (toNumberOrNull(form.wasteCollectedAmount) === null) missing.push("Waste collected");
-    if (!form.finalCanalCondition) missing.push("Final canal condition");
+    if (wasteTotalKg <= 0) missing.push("Waste composition (at least one category)");
     if (form.beforePhotos.length === 0) missing.push("Before Cleanup photo");
     if (form.afterPhotos.length === 0) missing.push("After Cleanup photo");
     return missing;
@@ -904,36 +834,18 @@ export default function NewReportScreen() {
           {/* MONITORING SITE INFORMATION */}
           <SectionHeader icon="map-marker-radius-outline" title="MONITORING SITE INFORMATION" />
 
-          <View className="mb-3">
-            <Field
-              label="Canal Name / ID"
-              required
-              value={form.canalName}
-              onChangeText={(t) => update("canalName", t)}
-              placeholder="e.g. Purok 3 main canal"
-            />
-          </View>
-
           <View className="mb-3 flex-row gap-2.5">
             <LockedField label="Barangay" value={barangayName} />
             <LockedField label="Municipality" value="Rosario, La Union" />
           </View>
 
-          <CoordinatePicker
+          <ChipSelect
+            label="Purok"
             required
-            latitude={form.latitude}
-            longitude={form.longitude}
-            onPress={() => setIsMapVisible(true)}
+            options={PUROK_OPTIONS}
+            value={form.purok != null ? String(form.purok) : null}
+            onChange={(v) => update("purok", Number(v))}
           />
-
-          <View className="mb-3">
-            <Field
-              label="Nearest Landmark"
-              value={form.nearestLandmark}
-              onChangeText={(t) => update("nearestLandmark", t)}
-              placeholder="e.g. beside Brgy. Hall"
-            />
-          </View>
 
           <View className="mb-3 h-px bg-[#f1f5f9]" />
 
@@ -960,11 +872,14 @@ export default function NewReportScreen() {
 
           <View className="mb-3 h-px bg-[#f1f5f9]" />
 
-          {/* CANAL CONDITION  */}
-          <SectionHeader icon="waves" title="CANAL CONDITION" />
+          {/* OVERALL CANAL CONDITION */}
+          <SectionHeader icon="waves" title="OVERALL CANAL CONDITION" />
+          <Text className="mb-3 -mt-1 text-[11px] text-[#94a3b8]">
+            Describe the purok as a whole: the highest water level, the worst flow, and how much of its canals were obstructed.
+          </Text>
 
           <ChipSelect
-            label="Water Level"
+            label="Overall Water Level"
             required
             options={WATER_LEVEL_OPTIONS}
             value={form.waterLevel}
@@ -972,7 +887,7 @@ export default function NewReportScreen() {
           />
 
           <ChipSelect
-            label="Obstruction Coverage"
+            label="Overall Obstruction"
             required
             options={OBSTRUCTION_COVERAGE_OPTIONS}
             value={form.obstructionCoverage}
@@ -980,7 +895,7 @@ export default function NewReportScreen() {
           />
 
           <ChipSelect
-            label="Water Flow Condition"
+            label="Overall Water Flow"
             required
             options={WATER_FLOW_OPTIONS}
             value={form.waterFlowCondition}
@@ -992,7 +907,7 @@ export default function NewReportScreen() {
           {/* WASTE COMPOSITION */}
           <SectionHeader icon="trash-can-outline" title="WASTE COMPOSITION" />
           <Text className="mb-3 -mt-1 text-[11px] text-[#94a3b8]">
-            Estimate what was in the canal. Anything left blank is recorded as 0 when you submit.
+            Estimate what was in the canal. Anything left blank is recorded as 0 when you submit. Waste Collected is totaled automatically.
           </Text>
 
           {/* By category */}
@@ -1060,23 +975,8 @@ export default function NewReportScreen() {
           />
 
           <View className="mb-3">
-            <Field
-              label="Waste Collected"
-              required
-              value={form.wasteCollectedAmount}
-              onChangeText={(t) => update("wasteCollectedAmount", sanitizeDecimal(t))}
-              placeholder="0.00"
-              keyboardType="decimal-pad"
-            />
+            <LockedField label="Waste Collected (auto total)" value={`${wasteTotalKg.toFixed(2)} kg`} />
           </View>
-
-          <ChipSelect
-            label="Final Canal Condition"
-            required
-            options={FINAL_CONDITION_OPTIONS}
-            value={form.finalCanalCondition}
-            onChange={(v) => update("finalCanalCondition", v)}
-          />
 
           <Field
             label="Remarks"
@@ -1149,19 +1049,6 @@ export default function NewReportScreen() {
         </View>
       </ScrollView>
 
-      <LocationPickerMap
-        visible={isMapVisible}
-        onClose={() => setIsMapVisible(false)}
-        onConfirm={handleConfirmLocation}
-        initial={
-          form.latitude != null && form.longitude != null
-            ? { latitude: form.latitude, longitude: form.longitude }
-            : null
-        }
-        centerLat={mapCenter.latitude}
-        centerLng={mapCenter.longitude}
-      />
-
       <PhotoSourceSheet
         visible={photoSheetField !== null}
         onClose={() => setPhotoSheetField(null)}
@@ -1184,11 +1071,11 @@ export default function NewReportScreen() {
         isSubmitting={isSubmitting}
         summary={{
           location: barangayName,
-          canalName: form.canalName.trim(),
+          purok: form.purok,
           severity: form.severity,
           dateObserved: form.dateObserved,
           responder: form.assignedPersonnel.trim(),
-          wasteCollectedKg: toNumberOrNull(form.wasteCollectedAmount) ?? 0,
+          wasteCollectedKg: wasteTotalKg,
           photoCount: allPhotos.length,
         }}
       />

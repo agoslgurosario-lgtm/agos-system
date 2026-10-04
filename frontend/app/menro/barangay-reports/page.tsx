@@ -6,8 +6,9 @@ import { useRouter } from "next/navigation"
 // lib
 import { fetchWithAuth } from "@/lib/auth"
 import {
-  SEVERITY_STYLE, FINAL_CONDITION_LABEL, FINAL_CONDITION_STYLE,
-  formatDate, monthOf, filedByName, buildMonthOptions
+  SEVERITY_STYLE,
+  formatDate, filedByName, buildMonthOptions,
+  reportDate, monthOf, weekOf, weekMatches, buildWeekOptions,
 } from "@/lib/reportOptions"
 import { printReport } from "@/lib/printReport"
 import { getUser } from "@/lib/auth"
@@ -37,7 +38,7 @@ import type { CanalMonitoringReport, ReportBarangay, ReportSeverity } from "@/ty
 
 const SEVERITY_FILTERS: ReportSeverity[] = ["Critical", "Medium", "Low"]
 
-const sortKey = (r: CanalMonitoringReport) => new Date(r.date_observed ?? r.created_at).getTime()
+const sortKey = (r: CanalMonitoringReport) => new Date(reportDate(r)).getTime()
 
 // fetch raw data
 const fetchAllBarangaysRaw = async (): Promise<ReportBarangay[]> => {
@@ -76,10 +77,19 @@ export default function BarangayReports() {
   const [printingReport, setPrintingReport] = useState<CanalMonitoringReport | null>(null)
   const [signatoryNames, setSignatoryNames] = useState<Record<string, string>>({})
 
+  const [selectedWeek, setSelectedWeek] = useState<string>("All")
+
   const monthOptions = buildMonthOptions(reports)
+  const weekOptions = buildWeekOptions(selectedMonth)
+  
+  const handleMonthChange = (value: string) => {
+    setSelectedMonth(value)
+    setSelectedWeek("All")
+  }
 
   const filteredReports = reports
     .filter(r => selectedMonth === "All" || monthOf(r) === selectedMonth)
+    .filter(r => weekMatches(r, selectedWeek))
     .filter(r => filterBarangay === "All" || String(r.barangay_details?.barangay_id) === filterBarangay)
     .filter(r => filterSeverity === "All" || r.severity === filterSeverity)
     .sort((a, b) => sortKey(b) - sortKey(a) || b.report_id - a.report_id)
@@ -169,7 +179,7 @@ export default function BarangayReports() {
           <div className="flex gap-3">
 
             {/* month filter */}
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+            <Select value={selectedMonth} onValueChange={handleMonthChange}>
               <SelectTrigger className="cursor-pointer px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                 <SelectValue />
               </SelectTrigger>
@@ -178,6 +188,20 @@ export default function BarangayReports() {
                 {monthOptions.map(m => (
                   <SelectItem key={m.value} className="p-2 py-1 cursor-pointer text-[#122A48]" value={m.value}>
                     {m.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* week filter (only inside a single month) */}
+            <Select value={selectedWeek} onValueChange={setSelectedWeek} disabled={selectedMonth === "All"}>
+              <SelectTrigger className="cursor-pointer px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper" className="min-w-0 !max-h-70 overflow-y-auto">
+                {weekOptions.map(w => (
+                  <SelectItem key={w.value} className="p-2 py-1 cursor-pointer text-[#122A48]" value={w.value}>
+                    {w.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -225,11 +249,10 @@ export default function BarangayReports() {
               <Table>
                 <TableHeader className="bg-[#e8eef1b4] border border-[#CFD8DC]">
                   <TableRow>
-                    <TableHead className="font-semibold text-left text-xs text-[#727272]">DATE OBSERVED</TableHead>
+                    <TableHead className="font-semibold text-left text-xs text-[#727272]">DATE SUBMITTED</TableHead>
                     <TableHead className="font-semibold text-left text-xs text-[#727272]">BARANGAY</TableHead>
-                    <TableHead className="font-semibold text-left text-xs text-[#727272]">CANAL</TableHead>
+                    <TableHead className="font-semibold text-left text-xs text-[#727272]">PUROK</TableHead>
                     <TableHead className="font-semibold text-left text-xs text-[#727272]">SEVERITY</TableHead>
-                    <TableHead className="font-semibold text-left text-xs text-[#727272]">FINAL CONDITION</TableHead>
                     <TableHead className="font-semibold text-left text-xs text-[#727272]">FILED BY</TableHead>
                     <TableHead className="font-semibold text-left text-xs text-[#727272]">ACTIONS</TableHead>
                   </TableRow>
@@ -239,20 +262,16 @@ export default function BarangayReports() {
                   {!fetchError && filteredReports.length > 0 &&
                     paginated.map(report => (
                       <TableRow key={report.report_id} className="border-b border-[#C6C6C8] text-xs">
-                        <TableCell className="text-[#122A48] text-left h-14">{formatDate(report.date_observed)}</TableCell>
-                        <TableCell className="text-[#122A48] text-left h-14">{report.barangay_details?.barangay_name}</TableCell>
-                        <TableCell className="text-[#122A48] text-left h-14 max-w-40 truncate">{report.canal_name}</TableCell>
                         <TableCell className="text-[#122A48] text-left h-14">
-                          {report.severity && <StyledBadge text={report.severity} style={SEVERITY_STYLE[report.severity]} size="md" />}
+                          <p>{formatDate(reportDate(report))}</p>
+                          <p className="text-[10px] text-[#727272]">Week {weekOf(report)}</p>
+                        </TableCell>
+                        <TableCell className="text-[#122A48] text-left h-14">{report.barangay_details?.barangay_name}</TableCell>
+                        <TableCell className="text-[#122A48] text-left h-14 max-w-40 truncate">
+                          {report.purok ? `Purok ${report.purok}` : "—"}
                         </TableCell>
                         <TableCell className="text-[#122A48] text-left h-14">
-                          {report.final_canal_condition && (
-                            <StyledBadge
-                              text={FINAL_CONDITION_LABEL[report.final_canal_condition]}
-                              style={FINAL_CONDITION_STYLE[report.final_canal_condition]}
-                              size="md"
-                            />
-                          )}
+                          {report.severity && <StyledBadge text={report.severity} style={SEVERITY_STYLE[report.severity]} size="md" />}
                         </TableCell>
                         <TableCell className="text-[#122A48] text-left h-14">{filedByName(report)}</TableCell>
                         <TableCell className="flex gap-3">

@@ -191,6 +191,7 @@ export default function Page() {
       const res = await fetch(`${BASE_URL}/api/backup/manual/`, {
         method: "GET",
         credentials: "include",
+        headers: { "X-Requested-With": "agos-web" },
       })
 
       if (!res.ok) throw new Error("Backup failed")
@@ -319,6 +320,7 @@ export default function Page() {
       const res = await fetch(`${BASE_URL}/api/alert-sounds/upload/`, {
         method: "POST",
         credentials: "include",
+        headers: { "X-Requested-With": "agos-web" },
         body: formData,
       })
       let result: any = {}

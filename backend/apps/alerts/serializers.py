@@ -41,7 +41,7 @@ class AlertSerializer(serializers.ModelSerializer):
         Low_Battery         → battery_voltage
         Weak_Signal         → signal_strength
         Sensor_Failure      → sensor_continuity
-        Report_Submitted    → report_id, canal_name, severity, final_canal_condition, date_observed
+        Report_Submitted    → report_id, purok, severity, date_observed
         """
         t = obj.alert_type
 
@@ -50,9 +50,8 @@ class AlertSerializer(serializers.ModelSerializer):
                 return {}
             return {
                 'report_id': obj.report.report_id,
-                'canal_name': obj.report.canal_name,
+                'purok': obj.report.purok,
                 'severity': obj.report.severity,
-                'final_canal_condition': obj.report.final_canal_condition,
                 'date_observed': obj.report.date_observed.isoformat() if obj.report.date_observed else None,
             }
 

@@ -22,7 +22,6 @@ export type ReportSeverity = 'Critical' | 'Medium' | 'Low'
 export type WaterLevel = 'Low' | 'Moderate' | 'High'
 export type ObstructionCoverage = 'Under_25' | '25_50' | '50_75' | 'Over_75'
 export type WaterFlowCondition = 'Normal' | 'Reduced' | 'Blocked'
-export type FinalCanalCondition = 'Clear' | 'Partially_Clear' | 'Still_Obstructed'
 export type WasteUnit = 'kg' | 'L' | 'Other'
 export type MediaCategory = 'Before_Clearing' | 'After_Clearing' | 'Additional_Evidence'
 
@@ -32,19 +31,16 @@ export interface CanalMonitoringReport {
 
   // Monitoring site
   barangay: number
-  canal_name: string | null
-  latitude: number | null
-  longitude: number | null
-  nearest_landmark: string
+  purok: number | null
 
   // Detection summary
   date_observed: string | null
   severity: ReportSeverity | null
 
   // Canal condition
-  water_level: WaterLevel | null
-  obstruction_coverage: ObstructionCoverage | null
-  water_flow_condition: WaterFlowCondition | null
+  overall_water_level: WaterLevel | null
+  overall_obstruction_coverage: ObstructionCoverage | null
+  overall_water_flow_condition: WaterFlowCondition | null
 
   // Waste composition (kg)
   waste_plastic_kg: number | null
@@ -65,7 +61,6 @@ export interface CanalMonitoringReport {
   action_taken: string | null
   waste_collected_amount: number | null
   waste_collected_unit: WasteUnit
-  final_canal_condition: FinalCanalCondition | null
   remarks: string
 
   // Metadata

@@ -1,26 +1,96 @@
+from datetime import datetime
 import cv2
 import numpy as np
+
+from django.db.models import Count, Exists, OuterRef, Q, Subquery
 from rest_framework import generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from .models import SensorReading
 from .serializers import SensorReadingSerializer
-from apps.sensor_nodes.models import SensorNode
-from apps.users.permissions import IsAdminOrMENRO, IsIoTDevice, IoTDeviceAuthentication
+from apps.sensor_nodes.models import SensorNode, NodeAssignmentHistory
+from apps.users.permissions import IsAdminOrMENRO, IsAdminOrMENROOrBarangay, IsIoTDevice, IoTDeviceAuthentication
 from apps.users.authentication import CookieJWTAuthentication
-from django.views.decorators.csrf import csrf_exempt
-from django.utils.decorators import method_decorator
+from rest_framework.pagination import PageNumberPagination
+
+
+class ReadingsPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
 
 class SensorReadingListView(generics.ListCreateAPIView):
-    queryset = SensorReading.objects.all().order_by('-timestamp')
     serializer_class = SensorReadingSerializer
+    pagination_class = ReadingsPagination
     authentication_classes = [IoTDeviceAuthentication, CookieJWTAuthentication]
 
     def get_permissions(self):
         if self.request.method == 'GET':
-            return [IsAdminOrMENRO()]
+            return [IsAdminOrMENROOrBarangay()]
         return [IsIoTDevice()]
+
+    @staticmethod
+    def _scope_to_barangay(qs, barangay):
+        if barangay is None:
+            return qs.none()
+
+        covering = NodeAssignmentHistory.objects.filter(
+            node=OuterRef('node'),
+            started_at__lte=OuterRef('timestamp'),
+        ).filter(Q(ended_at__isnull=True) | Q(ended_at__gt=OuterRef('timestamp')))
+
+        # Same pick as hotspot_at(): when several rows cover the timestamp
+        # (overlapping assignments), the newest start wins.
+        return qs.annotate(
+            owner_barangay=Subquery(covering.order_by('-started_at').values('barangay_id')[:1]),
+            has_history=Exists(covering),
+        ).filter(
+            Q(owner_barangay=barangay.pk) | Q(has_history=False, node__barangay=barangay)
+        )
+
+    def get_queryset(self):
+        qs = SensorReading.objects.select_related('node').order_by('-timestamp')
+        user = self.request.user
+
+        if getattr(user, 'user_role', None) == 'Barangay':
+            qs = self._scope_to_barangay(qs, user.barangay)
+
+        # month filter is opt-in, so existing web calls with no params behave as before
+        month = self.request.query_params.get('month')
+        if month and month != 'All':
+            try:
+                target = datetime.strptime(month, '%Y-%m')
+                qs = qs.filter(timestamp__year=target.year, timestamp__month=target.month)
+            except ValueError:
+                pass
+        return qs
+
+    def list(self, request, *args, **kwargs):
+        base = self.get_queryset()
+        qs = base
+
+        severity = request.query_params.get('severity')
+        if severity and severity != 'All':
+            qs = qs.filter(reading_status=severity)
+
+        page = self.paginate_queryset(qs)
+        if page is None:
+            return Response(self.get_serializer(qs, many=True).data)
+
+        response = self.get_paginated_response(self.get_serializer(page, many=True).data)
+
+        # Card totals for the whole month (ignoring the severity tab), only computed
+        # when a month is requested so unfiltered web calls aren't slowed down.
+        if request.query_params.get('month'):
+            response.data['summary'] = base.aggregate(
+                total=Count('pk'),
+                normal=Count('pk', filter=Q(reading_status='Normal')),
+                warning=Count('pk', filter=Q(reading_status='Warning')),
+                critical=Count('pk', filter=Q(reading_status='Critical')),
+            )
+        return response
 
     def perform_create(self, serializer):
         if isinstance(self.request.auth, SensorNode):
@@ -92,7 +162,7 @@ def compute_optical_flow(frames_bytes: list, camera_height_cm: float):
 
     img_height, img_width = first_frame.shape
     camera_height_m = camera_height_cm / 100.0
-    real_width_m = camera_height_m * 1.155
+    real_width_m = camera_height_m * 1.563
     pixels_per_meter = img_width / real_width_m if real_width_m > 0 else 1000
 
     lk_params = dict(
@@ -398,15 +468,21 @@ class SensorReadingWithFlowView(APIView):
             # re-alert while unresolved). Here we just patch the context
             # of the alert(s) tied to this event with the classification
             # data, since alert_context was empty at creation time.
-            Alert.objects.filter(event=open_event).update(
-                alert_context={
-                    'dominant_waste_type': dominant_label,
-                    'recyclable_pct':      round(percentages.get('recyclable', 0), 2),
-                    'biodegradable_pct':   round(percentages.get('biodegradable', 0), 2),
-                    'residual_pct':        round(percentages.get('residual', 0), 2),
-                    'special_waste_pct':   round(percentages.get('special_waste', 0), 2),
-                    'confidence':          round(confidence, 2),
-                    'estimated_volume':    round(estimated_kg, 2),
-                }
-            )
+            classification_context = {
+                'dominant_waste_type': dominant_label,
+                'recyclable_pct':      round(percentages.get('recyclable', 0), 2),
+                'biodegradable_pct':   round(percentages.get('biodegradable', 0), 2),
+                'residual_pct':        round(percentages.get('residual', 0), 2),
+                'special_waste_pct':   round(percentages.get('special_waste', 0), 2),
+                'confidence':          round(confidence, 2),
+                'estimated_volume':    round(estimated_kg, 2),
+            }
+            # MERGE into each alert's existing context instead of replacing it.
+            # evaluate_clog() stores {'severity': ...} on every clog alert and
+            # reads it back to detect escalation; replacing the whole dict
+            # would erase that key and break the cooldown bypass.
+            # .update() per row (not .save()) keeps this free of signals.
+            for alert in Alert.objects.filter(event=open_event):
+                merged_context = {**(alert.alert_context or {}), **classification_context}
+                Alert.objects.filter(pk=alert.pk).update(alert_context=merged_context)
         # If classification is already linked, do nothing — alert already exists

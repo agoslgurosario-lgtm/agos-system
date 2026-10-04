@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+from django.utils import timezone
 
 import requests
 
@@ -65,6 +66,7 @@ def fetch_rainfall_for_barangay(barangay):
         'longitude': barangay.longitude,
         'hourly': 'precipitation',
         'forecast_days': 1,
+        'timezone': 'Asia/Manila',
     }
 
     try:
@@ -72,7 +74,7 @@ def fetch_rainfall_for_barangay(barangay):
         response.raise_for_status()
         data = response.json()
 
-        current_hour_str = datetime.now().strftime('%Y-%m-%dT%H:00')
+        current_hour_str = timezone.localtime().strftime('%Y-%m-%dT%H:00')
         _save_rainfall_from_data(barangay, data, current_hour_str)
         return True
 
@@ -120,7 +122,7 @@ def fetch_all_barangays():
             f"locations, got {len(results)} results back."
         )
 
-    current_hour_str = datetime.now().strftime('%Y-%m-%dT%H:00')
+    current_hour_str = timezone.localtime().strftime('%Y-%m-%dT%H:00')
 
     for barangay, data in zip(barangays, results):
         try:
