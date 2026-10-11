@@ -19,7 +19,7 @@ const SEVERITY_STYLE: Record<DetectionSeverity, { icon: keyof typeof Ionicons.gl
 
 function describeSeverity(severity: DetectionSeverity, volume: number | null) {
   if (severity === "None") return "No detection";
-  return `${severity} volume${volume != null ? ` (${volume.toFixed(1)}kg)` : ""}`;
+  return `${severity} volume${volume != null ? ` (${volume.toFixed(2)}kg)` : ""}`;
 }
 
 export default function DetectionRow({ node, location, severity, status, volume }: Props) {

@@ -41,7 +41,7 @@ export function buildWasteVolumes(data: WasteClassification[]): WasteVolume[] {
     const dominant = dominantNode(data, key);
     return {
       title,
-      value: Math.round(total * 10) / 10,
+      value: Math.round(total * 100) / 100,
       subtitle: dominant ? `${dominant} dominant` : "No data yet",
       icon,
     };
@@ -63,9 +63,10 @@ export function buildComposition(data: WasteClassification[]): WasteCompositionI
 }
 
 function bucketSeverity(volume: number): "None" | "Low" | "Moderate" | "High" {
-  if (volume >= 8) return "High";
-  if (volume >= 4) return "Moderate";
-  if (volume >= 0.5) return "Low";
+  // Thresholds are sized for YOLO's per-item average weights (bottle 0.025 kg, etc.)
+  if (volume >= 1) return "High";
+  if (volume >= 0.25) return "Moderate";
+  if (volume > 0) return "Low";
   return "None";
 }
 
@@ -101,13 +102,19 @@ export function buildDetections(
       };
     }
 
+    const volume = latest.estimated_volume || 0;
+    let severity = bucketSeverity(volume);
+    // classifier sees waste but YOLO didn't count anything
+    if (severity === "None" && latest.dominant_waste_type !== "None") severity = "Low";
+
     return {
       node_id: node.node_id,
       node: node.node_name,
       location: node.location,
-      severity: bucketSeverity(latest.estimated_volume || 0),
-      status: "Detected",
-      volume: latest.estimated_volume,
+      severity,
+      // badge and text now come from the same result, so they can't disagree
+      status: severity === "None" ? "Clear" : "Detected",
+      volume,
     };
   });
 }

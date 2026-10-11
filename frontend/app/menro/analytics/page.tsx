@@ -383,7 +383,7 @@ useWebSocket({
                   <TableRow key={w.classification_id}>
                     <TableCell className="text-left text-xs h-[35px]">{w.classification_id}</TableCell>
                     <TableCell className="text-left text-xs">{w.node_details?.node_name ?? "—"}</TableCell>
-                    <TableCell className="text-left text-xs">{w.dominant_waste_type}</TableCell>
+                    <TableCell className="text-left text-xs">{w.dominant_waste_type === 'None' ? 'No waste detected' : w.dominant_waste_type}</TableCell>
                     <TableCell className="text-left text-xs">{w.recyclable_pct?.toFixed(2)}%</TableCell>
                     <TableCell className="text-left text-xs">{w.biodegradable_pct?.toFixed(2)}%</TableCell>
                     <TableCell className="text-left text-xs">{w.residual_pct?.toFixed(2)}%</TableCell>

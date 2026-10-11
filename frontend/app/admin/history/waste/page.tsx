@@ -334,7 +334,7 @@ export default function Waste() {
                             {waste.dominant_waste_type === 'Residual'      && <Trash2 size={16} color="white" />}
                             {waste.dominant_waste_type === 'Special Waste' && <Trash2 size={16} color="white" />}
                           </span>
-                          <span className="text-[#122A48] ">{waste.dominant_waste_type}</span>
+                          <span className="text-[#122A48] ">{waste.dominant_waste_type === 'None' ? 'No waste detected' : waste.dominant_waste_type}</span>
                         </span>
                       </TableCell>
                       <TableCell className="text-[#122A48] text-left h-13 text-xs">
@@ -429,7 +429,7 @@ export default function Waste() {
                   {/* dominant waste type */}
                   <div className="flex justify-between mt-2 text-xs">
                     <p>Dominant Waste Type</p>
-                    <p className="text-left">{selectedWaste.dominant_waste_type}</p>
+                    <p className="text-left">{selectedWaste.dominant_waste_type === 'None' ? 'No waste detected' : selectedWaste.dominant_waste_type}</p>
                   </div>
                   {/* confidence */}
                   <div className="flex justify-between mt-1 text-xs">
