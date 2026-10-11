@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { api, setTokens, clearAuth, getAccessToken, getRefreshToken, publicApi } from './api'
 import { User } from '../types/user'
 import { setForceLogoutListener } from './authEvents'
+import { unregisterFromPush } from './pushNotifications'
+
 
 type AuthContextType = {
   user: User | null
@@ -58,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const logout = async () => {
+    await unregisterFromPush()   // so the next person on this phone doesn't get your alerts
     try {
       const refresh = await getRefreshToken()
       await api.post('/api/auth/mobile-logout/', { refresh })

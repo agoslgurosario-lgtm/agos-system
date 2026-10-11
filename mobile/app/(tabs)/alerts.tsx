@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocalSearchParams } from "expo-router";
 import { FlatList, Pressable, Text, View, ActivityIndicator, RefreshControl  } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -25,7 +26,19 @@ export default function AlertsScreen() {
 
   const { alerts, loading, refreshing, error, refetch, markAsRead } = useAlerts(alertType, dateFilter);
 
-  // Statistics
+  const { alertId } = useLocalSearchParams<{ alertId?: string }>();
+  const openedFromPushRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!alertId || loading || openedFromPushRef.current === alertId) return;
+    const match = alerts.find((a) => String(a.alert_id) === alertId);
+    if (match) {
+      openedFromPushRef.current = alertId;
+      handleAlertPress(match);
+    }
+  }, [alertId, loading, alerts]);
+
+  // statistics
   const totalAlerts = alerts.length;
   const clogEvents = alerts.filter((a) => CLOG_TYPES.includes(a.alert_type)).length;
   const unread = alerts.filter((a) => !a.is_read).length;

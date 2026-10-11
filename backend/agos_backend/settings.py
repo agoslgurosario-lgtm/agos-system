@@ -107,6 +107,7 @@ INSTALLED_APPS = [
     'apps.training_captures',
     'apps.system_backup',
     'apps.alert_sounds',
+    'apps.push_notifications',
 ]
 
 MIDDLEWARE = [

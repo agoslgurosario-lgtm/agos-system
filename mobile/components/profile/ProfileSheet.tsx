@@ -1,7 +1,10 @@
-import { Modal, Pressable, Text, View, Alert } from 'react-native'
+import { useEffect, useState } from 'react'
+import { Modal, Pressable, Text, View, Alert, Switch } from 'react-native'
+import { isPushEnabled, setPushEnabled } from '../../lib/pushNotifications'
 import { Ionicons } from '@expo/vector-icons'
 import { useAuth } from '../../lib/AuthContext'
 import { useRouter } from 'expo-router'
+
 
 interface Props {
   visible: boolean
@@ -20,6 +23,13 @@ function CredentialRow({ label, value }: { label: string; value: string }) {
 export default function ProfileSheet({ visible, onClose }: Props) {
   const router = useRouter()
   const { user, logout } = useAuth()
+  const [pushOn, setPushOn] = useState(true)
+  const [pushBusy, setPushBusy] = useState(false)
+
+  useEffect(() => {
+    if (visible && user) isPushEnabled(user.user_id).then(setPushOn)
+  }, [visible, user?.user_id])
+
   if (!user) return null
 
   const initials = `${user.first_name[0] ?? ''}${user.last_name[0] ?? ''}`.toUpperCase()
@@ -29,6 +39,20 @@ export default function ProfileSheet({ visible, onClose }: Props) {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Log out', style: 'destructive', onPress: () => { onClose(); logout() } },
     ])
+  }
+
+  const togglePush = async (next: boolean) => {
+    if (pushBusy) return
+    setPushBusy(true)
+    const result = await setPushEnabled(user.user_id, next)
+    setPushOn(result)
+    setPushBusy(false)
+    if (next && !result) {
+      Alert.alert(
+        'Notifications blocked',
+        'Allow notifications for AGOS in your phone settings, then try again.'
+      )
+    }
   }
 
 
@@ -65,6 +89,16 @@ export default function ProfileSheet({ visible, onClose }: Props) {
             <CredentialRow label="Barangay" value={user.barangay_details.barangay_name} />
           )}
           <CredentialRow label="Status" value={user.status} />
+
+          <View className="flex-row justify-between items-center py-2.5 border-b border-slate-100">
+            <View className="flex-1 pr-3">
+              <Text className="text-[12px] text-slate-500">Push notifications</Text>
+              <Text className="text-[11px] text-slate-400">
+                Clog and water level alerts for your barangay
+              </Text>
+            </View>
+            <Switch value={pushOn} onValueChange={togglePush} disabled={pushBusy} />
+          </View>
 
           {/* Actions */}
           <Pressable

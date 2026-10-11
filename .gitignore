@@ -88,3 +88,6 @@ ai_service/convert_classifier.py
 ai_service/check_memory_tflite.py
 ai_service/check_memory_litert.py
 ai_service/test_tflite_vs_keras.py
+
+# mobile firebase key
+mobile/agos-31475-firebase-adminsdk-fbsvc-d2315df569.json

@@ -43,4 +43,5 @@ urlpatterns = [
     path('api/', include('apps.system_backup.urls')),
     path('api/', include('apps.alert_sounds.urls')),
     path('api/', include('apps.rainfall.urls')),
+    path('api/', include('apps.push_notifications.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
