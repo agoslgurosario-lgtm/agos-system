@@ -1,6 +1,7 @@
 export interface ManualStepSection {
   label?: string
   description: string
+  imageUrl?: string;
 }
 
 export interface ManualStep {
@@ -9,11 +10,13 @@ export interface ManualStep {
   description: string
   whyItMatters: string
   extraSections?: ManualStepSection[]
+  imageUrl?: string;
 }
 
 interface StepsListProps {
   title: string
   description: string
+  imageUrl?: string;
   steps: ManualStep[]
   activeStepId: string
   visitedStepIds: string[]
