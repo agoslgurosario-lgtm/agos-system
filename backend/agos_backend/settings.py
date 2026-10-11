@@ -323,6 +323,7 @@ FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
 
 AI_SERVICE_URL = os.getenv('AI_SERVICE_URL', 'http://localhost:8001')
 AI_SERVICE_KEY = os.getenv('AI_SERVICE_KEY')
+CLOUDFLARE_URL = os.getenv('CLOUDFLARE_URL')
 
 # mqtt for IoT
 MQTT_BROKER_HOST = os.getenv('MQTT_BROKER_HOST')
