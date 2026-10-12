@@ -257,7 +257,6 @@ class ReportMediaUploadView(APIView):
     def post(self, request):
         file = request.FILES.get('file')
         media_category = request.data.get('media_category', 'Additional_Evidence')
-        clog_event_id = request.data.get('clog_event_id')
         report_id = request.data.get('report_id')
 
         if not file:
@@ -277,13 +276,6 @@ class ReportMediaUploadView(APIView):
             file = convert_heic_to_jpeg(file)
 
         media = ReportMedia(file_path=file, media_type='Image', media_category=media_category, uploaded_by=request.user)
-
-        if clog_event_id:
-            from apps.clog_events.models import ClogEvent
-            try:
-                media.clog_event_id = ClogEvent.objects.get(event_id=clog_event_id)
-            except ClogEvent.DoesNotExist:
-                pass
 
         if report_id:
             try:
@@ -318,9 +310,14 @@ class ReportMediaByClogEventView(generics.ListAPIView):
 
     def get_queryset(self):
         event_id = self.kwargs['event_id']
-        return ReportMedia.objects.filter(clog_event_id=event_id).filter(
-            Q(report__isnull=True) | Q(report__is_submitted=True)
+        qs = ReportMedia.objects.filter(
+            report__clog_event_id=event_id,
+            report__is_submitted=True,
         )
+        # a barangay may only see evidence for its own reports
+        if self.request.user.user_role == 'Barangay':
+            qs = qs.filter(report__barangay_id=self.request.user.barangay_id)
+        return qs
 
 
 class SignatoryStatusView(APIView):

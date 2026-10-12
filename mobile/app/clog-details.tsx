@@ -65,7 +65,7 @@ export default function ClogDetails() {
   if (!selectedEvent) return null
 
   const status = selectedEvent.status
-  const isRespondedDone = status === 'Responded' || status === 'Cleared' || status === 'Verified'
+  const isRespondedDone = !!selectedEvent.responded_at
   const isClearedDone = status === 'Cleared' || status === 'Verified'
   const sevStyle = SEVERITY_STYLE[selectedEvent.severity] ?? SEVERITY_STYLE.Low
   const statusStyle = STATUS_STYLE[status] ?? STATUS_STYLE.Detected
@@ -315,7 +315,7 @@ export default function ClogDetails() {
               <View className="pb-5">
                 <Text className="text-sm font-extrabold t ext-[#122A48]">Responded</Text>
                 <Text className="text-[11px] text-[#64748B] mt-0.5">
-                  {isRespondedDone ? 'Response team deployed' : 'Pending'}
+                  {isRespondedDone ? 'Response team deployed' : isClearedDone ? 'No response recorded' : 'Pending'}
                 </Text>
                   {isRespondedDone && (
                     <Text className="text-[11px] text-[#64748B] mt-0.5">{formatDate(selectedEvent.responded_at)}</Text>
@@ -341,7 +341,13 @@ export default function ClogDetails() {
               <View>
                 <Text className="text-sm font-extrabold text-[#122A48]">Cleared</Text>
                 <Text className="text-[11px] text-[#64748B] mt-0.5">
-                  {isClearedDone ? 'Clearing operation completed' : 'Pending'}
+                  {isClearedDone
+                    ? selectedEvent.cleared_by_details
+                      ? 'Clearing operation completed'
+                      : selectedEvent.auto_cleared
+                        ? 'Auto-cleared after 7 days with no resolution'
+                        : 'Auto-cleared: sensor readings returned to normal'
+                    : 'Pending'}
                 </Text>
                   {isClearedDone && (
                     <Text className="text-[11px] text-[#64748B] mt-0.5">{formatDate(selectedEvent.resolved_at)}</Text>

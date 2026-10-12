@@ -13,6 +13,7 @@ export interface ClogEvent {
   resolved_at: string | null
   cleared_by: number | null
   responded_by: number | null
+  auto_cleared: boolean
   barangay_details: {
     barangay_id: number
     barangay_name: string
