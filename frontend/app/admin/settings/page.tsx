@@ -281,7 +281,7 @@ export default function Page() {
       if (!tokenRes.ok) throw new Error("Could not authenticate for restore.")
       const { token } = await tokenRes.json()
 
-      const RENDER_URL = "https://agos-capstone.onrender.com"
+      const RENDER_URL = process.env.NEXT_PUBLIC_BACKEND_DIRECT_URL ?? "https://agos-capstone.onrender.com"
       const res = await fetch(`${RENDER_URL}/api/backup/restore/`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
