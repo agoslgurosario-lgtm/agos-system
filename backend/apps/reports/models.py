@@ -66,6 +66,9 @@ class CanalMonitoringReport(models.Model):
     waste_foam_kg = models.FloatField(null=True, blank=True)
     waste_textile_kg = models.FloatField(null=True, blank=True)  # clothes, towels, etc.
     waste_ewaste_kg = models.FloatField(null=True, blank=True)  # batteries, vapes, electronics
+    waste_sanitary_kg = models.FloatField(null=True, blank=True)  # diapers, pads, wet wipes
+    waste_footwear_kg = models.FloatField(null=True, blank=True)  # slippers, rubber scraps
+    waste_medical_kg = models.FloatField(null=True, blank=True)   # facemasks, gloves, syringes, medicine packs
     waste_other_kg = models.FloatField(null=True, blank=True)
     waste_other_label = models.CharField(max_length=100, blank=True)
 

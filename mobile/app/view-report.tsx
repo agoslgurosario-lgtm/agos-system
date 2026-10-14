@@ -23,6 +23,9 @@ const WASTE_ROWS: { key: keyof CanalMonitoringReport; label: string }[] = [
   { key: "waste_foam_kg", label: "Foam" },
   { key: "waste_textile_kg", label: "Clothes / Textiles" },
   { key: "waste_ewaste_kg", label: "E-waste" },
+  { key: "waste_sanitary_kg", label: "Sanitary / Hygiene" },
+  { key: "waste_footwear_kg", label: "Footwear / Rubber" },
+  { key: "waste_medical_kg", label: "Medical" },
 ];
 
 function formatDateTime(iso: string | null): string {
@@ -156,7 +159,7 @@ export default function ViewReportScreen() {
       label: report.waste_other_label ? `Other (${report.waste_other_label})` : "Other",
       kg: report.waste_other_kg ?? 0,
     },
-  ].filter((row) => row.kg > 0);
+  ];
 
   const photosBy = (category: string) => report.media.filter((m) => m.media_category === category);
   const photoGroups = [
@@ -271,6 +274,7 @@ export default function ViewReportScreen() {
             <>
               <View className="my-3 h-px bg-[#f1f5f9]" />
               <SectionHeader icon="paperclip" title="PHOTOS" />
+              <Text className="mb-2 text-[10px] text-slate-400">🔍 Tap a photo to enlarge</Text>
               <View className="mb-3 gap-2.5">
                 {photoGroups.map((group) => (
                   <View key={group.label}>
@@ -287,10 +291,16 @@ export default function ViewReportScreen() {
                             })
                           }
                         >
+                        <View className="relative">
                           <Image
                             source={{ uri: m.file_url ?? undefined }}
                             className="h-20 w-20 rounded-[10px]"
                           />
+                          {/* tap-to-enlarge indicator */}
+                          <View className="absolute bottom-1 right-1 h-5 w-5 items-center justify-center rounded-full bg-slate-900/80">
+                            <MaterialCommunityIcons name="arrow-expand" size={12} color="white" />
+                          </View>
+                        </View>
                         </TouchableOpacity>
                       ))}
                     </View>

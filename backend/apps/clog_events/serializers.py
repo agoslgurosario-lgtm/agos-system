@@ -7,6 +7,18 @@ from apps.sensor_nodes.serializers import get_node_identity
 from apps.sensor_nodes.serializers import get_node_identity_as_of
 
 
+def clog_clear_reason(event):
+    if event.status not in ('Cleared', 'Verified') and not event.resolved_at:
+        return None
+    if event.auto_cleared:
+        return 'Auto-cleared'
+    if event.cleared_by_id:
+        return 'Manual Clear'
+    if event.resolved_at:
+        return 'Clear readings'
+    return None
+
+
 class ClogEventSerializer(serializers.ModelSerializer):
     barangay_details = BarangaySerializer(source='barangay', read_only=True)
     node_details = serializers.SerializerMethodField()
@@ -14,6 +26,7 @@ class ClogEventSerializer(serializers.ModelSerializer):
     cleared_by_details = UserSerializer(source='cleared_by', read_only=True)
     reading_details = serializers.SerializerMethodField()
     responded_by_details = UserSerializer(source='responded_by', read_only=True)
+    clear_reason = serializers.SerializerMethodField()
 
     class Meta:
         model = ClogEvent
@@ -38,3 +51,6 @@ class ClogEventSerializer(serializers.ModelSerializer):
             'clog_pct': r.clog_pct,
             'timestamp': r.timestamp.isoformat() if r.timestamp else None,
         }
+
+    def get_clear_reason(self, obj):
+        return clog_clear_reason(obj)

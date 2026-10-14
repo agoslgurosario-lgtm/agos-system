@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from datetime import datetime
 from rest_framework.parsers import MultiPartParser
+from .services import create_backup_archive, restore_backup_archive, InvalidBackupError
 
 from apps.users.permissions import IsAdmin
 from .services import create_backup_archive, restore_backup_archive
@@ -52,10 +53,10 @@ class ManualBackupView(APIView):
                 triggered_by=request.user,
                 error_message=str(e),
             )
-            return Response(
-                {'error': f'Backup failed: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+        return Response(
+            {'error': 'Restore failed because of a server problem. Please try again, and contact your system administrator if it keeps happening.'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 class RestoreBackupView(APIView):
@@ -96,18 +97,13 @@ class RestoreBackupView(APIView):
 
             return Response({'message': 'System restored successfully.'})
 
-        except Exception as e:
+        except InvalidBackupError as e:
             BackupLog.objects.create(
-                backup_type='restore',
-                status='failed',
-                triggered_by=request.user,
-                file_name=uploaded_file.name,
+                backup_type='restore', status='failed',
+                triggered_by=request.user, file_name=uploaded_file.name,
                 error_message=str(e),
             )
-            return Response(
-                {'error': f'Restore failed: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class BackupConfigView(APIView):
@@ -195,15 +191,10 @@ class RestoreFromServerView(APIView):
                 )
                 return Response({'message': 'System restored successfully.'})
 
-            except Exception as e:
+            except InvalidBackupError as e:
                 BackupLog.objects.create(
-                    backup_type='restore',
-                    status='failed',
-                    triggered_by=request.user,
-                    file_name=safe_name,
+                    backup_type='restore', status='failed',
+                    triggered_by=request.user, file_name=uploaded_file.name,  # safe_name in the second view
                     error_message=str(e),
                 )
-                return Response(
-                    {'error': f'Restore failed: {str(e)}'},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
+                return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)

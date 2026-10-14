@@ -107,6 +107,7 @@ export function ClogEventsSkeleton() {
                   <TableHead className="font-semibold text-left text-xs text-[#727272]">WATER LEVEL</TableHead>
                   <TableHead className="font-semibold text-left text-xs text-[#727272]">WATER FLOW</TableHead>
                   <TableHead className="font-semibold text-left text-xs text-[#727272]">STATUS</TableHead>
+                  <TableHead className="font-semibold text-left text-xs text-[#727272]">REASOn</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -120,6 +121,7 @@ export function ClogEventsSkeleton() {
                     <TableCell className="h-13"><Skeleton className="h-3.5 w-14" /></TableCell>
                     <TableCell className="h-13"><Skeleton className="h-3.5 w-16" /></TableCell>
                     <TableCell className="h-13"><Skeleton className="h-3.5 w-14" /></TableCell>
+                    <TableCell className="h-13"><Skeleton className="h-3.5 w-24" /></TableCell>
                   </TableRow>
                 ))}
               </TableBody>

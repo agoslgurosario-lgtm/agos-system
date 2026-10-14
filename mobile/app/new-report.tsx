@@ -53,6 +53,9 @@ interface ReportFormState {
   wasteFoamKg: string;
   wasteTextileKg: string;
   wasteEwasteKg: string;
+  wasteSanitaryKg: string;
+  wasteFootwearKg: string;
+  wasteMedicalKg: string;
   wasteOtherKg: string;
   wasteOtherLabel: string;
 
@@ -87,6 +90,9 @@ const INITIAL_STATE: ReportFormState = {
   wasteFoamKg: "",
   wasteTextileKg: "",
   wasteEwasteKg: "",
+  wasteSanitaryKg: "",
+  wasteFootwearKg: "",
+  wasteMedicalKg: "",
   wasteOtherKg: "",
   wasteOtherLabel: "",
 
@@ -240,7 +246,7 @@ function parseAmount(text: string): number {
 type WasteKgKey =
   | "wastePlasticKg" | "wasteFoodWrapperKg" | "wastePaperCardboardKg" | "wasteGlassKg"
   | "wasteOrganicKg" | "wasteMetalKg" | "wasteFoamKg" | "wasteTextileKg"
-  | "wasteEwasteKg" | "wasteOtherKg";
+  | "wasteEwasteKg" | "wasteSanitaryKg" | "wasteFootwearKg" | "wasteMedicalKg" | "wasteOtherKg";
 
 // "Other" is in the grid now; its "specify" text field sits below it
 const WASTE_KG_FIELDS: { key: WasteKgKey; label: string }[] = [
@@ -253,6 +259,9 @@ const WASTE_KG_FIELDS: { key: WasteKgKey; label: string }[] = [
   { key: "wasteFoamKg", label: "Foam (kg)" },
   { key: "wasteTextileKg", label: "Clothes / Textiles (kg)" },
   { key: "wasteEwasteKg", label: "E-waste (kg)" },
+  { key: "wasteSanitaryKg", label: "Sanitary / Hygiene (kg)" },
+  { key: "wasteFootwearKg", label: "Footwear / Rubber (kg)" },
+  { key: "wasteMedicalKg", label: "Medical (kg)" },
   { key: "wasteOtherKg", label: "Other (kg)" },
 ];
 
@@ -524,6 +533,9 @@ export default function NewReportScreen() {
           wasteFoamKg: num(report.waste_foam_kg),
           wasteTextileKg: num(report.waste_textile_kg),
           wasteEwasteKg: num(report.waste_ewaste_kg),
+          wasteSanitaryKg: num(report.waste_sanitary_kg),
+          wasteFootwearKg: num(report.waste_footwear_kg),
+          wasteMedicalKg: num(report.waste_medical_kg),
           wasteOtherKg: num(report.waste_other_kg),
           wasteOtherLabel: report.waste_other_label ?? "",
 
@@ -680,6 +692,9 @@ export default function NewReportScreen() {
       waste_foam_kg: kg(form.wasteFoamKg),
       waste_textile_kg: kg(form.wasteTextileKg),
       waste_ewaste_kg: kg(form.wasteEwasteKg),
+      waste_sanitary_kg: kg(form.wasteSanitaryKg),
+      waste_footwear_kg: kg(form.wasteFootwearKg),
+      waste_medical_kg: kg(form.wasteMedicalKg),
       waste_other_kg: kg(form.wasteOtherKg),
       waste_other_label: form.wasteOtherLabel.trim(),
 
@@ -933,7 +948,7 @@ export default function NewReportScreen() {
           <View className="mb-3.5 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] p-3">
             <Text className="mb-1 text-xs font-bold text-[#334155]">By Category (kg)</Text>
             <Text className="mb-2.5 text-[11px] leading-4 text-[#94a3b8]">
-              Plastic: bottles, bags, containers · Food Wrapper: snack and junk-food packaging · Clothes / Textiles: shirts, shorts, towels · E-waste: batteries, vapes, electronics
+              Plastic: bottles, bags, containers · Food Wrapper: snack and junk-food packaging · Clothes / Textiles: shirts, shorts, towels · E-waste: batteries, vapes, electronics · Sanitary / Hygiene: diapers, pads, wet wipes · Footwear / Rubber: slippers, rubber scraps · Medical: facemasks, gloves, syringes, medicine packs
             </Text>
 
             <FieldPairs
@@ -954,7 +969,7 @@ export default function NewReportScreen() {
                 label="Other — specify"
                 value={form.wasteOtherLabel}
                 onChangeText={(t) => update("wasteOtherLabel", t)}
-                placeholder="e.g. rubber, tires"
+                placeholder="e.g. wood, construction debris, mattress"
               />
             </View>
           </View>

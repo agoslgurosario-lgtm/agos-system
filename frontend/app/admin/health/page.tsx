@@ -175,6 +175,8 @@ export default function Health() {
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null)
   const [selectedNode, setSelectedNode] = useState<NodeHealth | null>(null)
   const [healthLogs, setHealthLogs] = useState<NodeHealth[]>([])
+  const [loadingNode, setLoadingNode] = useState(false)
+  const nodeRequestRef = useRef(0)
 
   const [maintenanceDialog, setMaintenanceDialog] = useState(false)
   const [maintenanceReason, setMaintenanceReason] = useState("")
@@ -313,15 +315,20 @@ export default function Health() {
     restoredSelectionRef.current = true
     try { sessionStorage.setItem(SELECTED_NODE_KEY, String(nodeId)) } catch {}
     setSelectedNodeId(nodeId)
-    setSelectedNode(null)
+    setLoadingNode(true)
+    const requestId = ++nodeRequestRef.current
     try {
       const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/system-health/node/${nodeId}/`)
       if (!res.ok) throw new Error()
       const data = await res.json()
       const logs = data.results ?? data
+      if (requestId !== nodeRequestRef.current) return
       setSelectedNode(logs[0] ?? null)
     } catch {
+      if (requestId !== nodeRequestRef.current) return
       setSelectedNode(null)
+    } finally {
+      if (requestId === nodeRequestRef.current) setLoadingNode(false)
     }
   }
 
@@ -569,16 +576,21 @@ export default function Health() {
                 <p className="font-semibold text-[#122A488F]">No node selected</p>
                 <p className="text-[#122A4873] text-xs text-center">Select a node from the network <br /> map to view its hardware status <br /> and sensor information</p>
               </div>
+            ) : loadingNode ? (
+              <div className="flex justify-center items-center h-full min-h-[200px] flex-col gap-3 border border-[#C9C9C9] w-full rounded-lg">
+                <SpinnerIcon size={32} />
+                <p className="text-xs text-[#122A4873]">Loading node data...</p>
+              </div>
             ) : !selectedNode ? (
               <div className="flex justify-center items-center h-full flex-col gap-2 border border-[#C9C9C9] w-full rounded-lg">
-                <Radar size={50} className="text-[#1565BC80]"/>
+                <Radar size={50}className="text-[#1565BC80]"/>
                 <p className="font-semibold text-[#122A488F]">No health data yet</p>
                 <p className="text-[#122A4873] text-xs text-center">
                   {allNodes.find(n => n.node_id === selectedNodeId)?.node_name ?? 'This node'} hasn't reported <br /> any hardware status yet
                 </p>
               </div>
             ) : (
-             <div className="flex flex-col text-[#122A48] w-full">
+              <div className="flex flex-col text-[#122A48] w-full">
                 {/* Hardware details */}
                 <div className="w-full p-3 -mb-2">
                   <p className="font-semibold">Hardware Details</p>
@@ -749,7 +761,7 @@ export default function Health() {
             {/* empty state vs data */}
             {!selectedNode ? (
               <div className="flex justify-center items-center py-8">
-                <p className="text-xs text-[#727272]">{emptyStateText}</p>
+                {loadingNode ? <SpinnerIcon size={20} /> : <p className="text-xs text-[#727272]">{emptyStateText}</p>}
               </div>
             ) : isUnderMaintenance ? (
               <div className="flex flex-col items-center justify-center gap-1 py-6">
@@ -801,7 +813,7 @@ export default function Health() {
             
               {!selectedNode ? (
                 <div className="flex justify-center items-center py-8">
-                  <p className="text-xs text-[#727272]">{emptyStateText}</p>
+                  {loadingNode ? <SpinnerIcon size={20} /> : <p className="text-xs text-[#727272]">{emptyStateText}</p>}
                 </div>
               ) : isUnderMaintenance ? (
                 <div className="flex flex-col items-center justify-center gap-1 py-6">
@@ -853,7 +865,7 @@ export default function Health() {
 
               {!selectedNode ? (
                 <div className="flex justify-center items-center py-8">
-                  <p className="text-xs text-[#727272]">{emptyStateText}</p>
+                  {loadingNode ? <SpinnerIcon size={20} /> : <p className="text-xs text-[#727272]">{emptyStateText}</p>}
                 </div>
               ) : isUnderMaintenance ? (
                 <div className="flex flex-col items-center justify-center gap-1 py-6">

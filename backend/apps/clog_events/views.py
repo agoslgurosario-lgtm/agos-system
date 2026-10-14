@@ -2,7 +2,7 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from .models import ClogEvent
-from .serializers import ClogEventSerializer
+from .serializers import ClogEventSerializer, clog_clear_reason
 from django.utils import timezone
 from apps.users.permissions import IsAdmin, IsAdminOrMENRO, IsAdminOrMENROOrBarangay
 from apps.audit_logs.utils import log_action
@@ -172,7 +172,7 @@ class ClogEventExportView(APIView):
         if severity and severity != 'All Severity':
             qs = qs.filter(severity=severity)
 
-        columns = ["ID", "Severity", "Detected At", "Resolved At", "Location", "Water Level", "Water Flow", "Status"]
+        columns = ["ID", "Severity", "Detected At", "Resolved At", "Location", "Water Level", "Water Flow", "Status", "Reason"]
         rows = []
         for c in qs:
             reading = c.classification.reading if c.classification else None
@@ -185,6 +185,7 @@ class ClogEventExportView(APIView):
                 f"{reading.water_level} cm" if reading and reading.water_level is not None else "—",
                 f"{reading.water_flow_rate:.5f} m/s" if reading and reading.water_flow_rate is not None else "—",
                 c.status,
+                clog_clear_reason(c) or "—",
             ])
 
         log_action(

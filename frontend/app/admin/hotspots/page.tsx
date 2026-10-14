@@ -210,6 +210,7 @@ export default function HotspotManagement() {
   const [hotspotHistoryDialog, setHotspotHistoryDialog] = useState<{ open: boolean; hotspot: Hotspot | null }>({ open: false, hotspot: null })
   const [hotspotHistoryRows, setHotspotHistoryRows] = useState<any[]>([])
   const [hotspotHistoryLoading, setHotspotHistoryLoading] = useState(false)
+  const [hotspotHistoryLoadedKey, setHotspotHistoryLoadedKey] = useState('')
   const [hotspotHistoryError, setHotspotHistoryError] = useState(false)
   const [hotspotHistoryPage, setHotspotHistoryPage] = useState(1)
   const [hotspotHistoryHasNext, setHotspotHistoryHasNext] = useState(false)
@@ -218,6 +219,10 @@ export default function HotspotManagement() {
   const [hotspotHistoryTick, setHotspotHistoryTick] = useState(0)
   const hotspotHistoryReqRef = useRef(0)
   const hotspotHistoryRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const historyHotspotId = hotspotHistoryDialog.open ? hotspotHistoryDialog.hotspot?.hotspot_id : undefined
+  const hotspotHistoryBaseKey = `${historyHotspotId}|${hotspotHistoryPage}`
+  const hotspotHistoryBusy =
+    hotspotHistoryLoading || (historyHotspotId !== undefined && hotspotHistoryLoadedKey !== hotspotHistoryBaseKey)
 
   // history state
   const [historyExporting, setHistoryExporting] = useState(false)
@@ -367,6 +372,7 @@ export default function HotspotManagement() {
     if (!hotspotHistoryDialog.open || !hotspotHistoryDialog.hotspot) {
       setHotspotHistoryRows([])
       setHotspotHistoryPage(1)
+      setHotspotHistoryLoadedKey('')
       return
     }
 
@@ -379,6 +385,7 @@ export default function HotspotManagement() {
       setHotspotHistoryHasPrev(cached.hasPrev)
       setHotspotHistoryError(false)
       setHotspotHistoryLoading(false)
+      setHotspotHistoryLoadedKey(hotspotHistoryBaseKey)
     }
     const reqId = ++hotspotHistoryReqRef.current
 
@@ -400,7 +407,10 @@ export default function HotspotManagement() {
       } catch {
         if (reqId === hotspotHistoryReqRef.current && !cached) setHotspotHistoryError(true)
       } finally {
-        if (reqId === hotspotHistoryReqRef.current) setHotspotHistoryLoading(false)
+        if (reqId === hotspotHistoryReqRef.current) {
+          setHotspotHistoryLoading(false)
+          setHotspotHistoryLoadedKey(hotspotHistoryBaseKey)
+        }
       }
     }
     fetchHistory()
@@ -1296,8 +1306,15 @@ export default function HotspotManagement() {
             <TableBody>
               {hotspotHistoryError ? (
                 <TableRow><TableCell colSpan={4} className="text-center py-10"><p className="text-[#D81010] font-semibold text-sm">Failed to load assignment history.</p></TableCell></TableRow>
-              ) : hotspotHistoryLoading ? (
-                <TableRow><TableCell colSpan={4} className="text-center py-10"><p className="text-[#727272] text-sm">Loading...</p></TableCell></TableRow>
+              ) : hotspotHistoryBusy ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center py-10">
+                    <div className="flex flex-col items-center gap-2">
+                      <SpinnerIcon size={24} />
+                      <p className="text-[#727272] text-sm">Loading assignment history...</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
               ) : hotspotHistoryRows.length === 0 ? (
                 <TableRow><TableCell colSpan={4} className="text-center py-10"><p className="text-[#727272] text-sm">No nodes have been assigned to this hotspot yet.</p></TableCell></TableRow>
               ) : (

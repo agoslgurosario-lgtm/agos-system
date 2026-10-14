@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Modal, Pressable, Text, View, Alert, Switch } from 'react-native'
 import { isPushEnabled, setPushEnabled } from '../../lib/pushNotifications'
 import { Ionicons } from '@expo/vector-icons'
@@ -24,11 +24,11 @@ export default function ProfileSheet({ visible, onClose }: Props) {
   const router = useRouter()
   const { user, logout } = useAuth()
   const [pushOn, setPushOn] = useState(true)
-  const [pushBusy, setPushBusy] = useState(false)
+  const pushQueue = useRef<Promise<unknown>>(Promise.resolve())
 
   useEffect(() => {
-    if (visible && user) isPushEnabled(user.user_id).then(setPushOn)
-  }, [visible, user?.user_id])
+    if (user) isPushEnabled(user.user_id).then(setPushOn)
+  }, [user?.user_id])
 
   if (!user) return null
 
@@ -41,18 +41,20 @@ export default function ProfileSheet({ visible, onClose }: Props) {
     ])
   }
 
-  const togglePush = async (next: boolean) => {
-    if (pushBusy) return
-    setPushBusy(true)
-    const result = await setPushEnabled(user.user_id, next)
-    setPushOn(result)
-    setPushBusy(false)
-    if (next && !result) {
-      Alert.alert(
-        'Notifications blocked',
-        'Allow notifications for AGOS in your phone settings, then try again.'
-      )
-    }
+  const togglePush = (next: boolean) => {
+    setPushOn(next) // flip immediately; the real work happens in the background
+    pushQueue.current = pushQueue.current.then(async () => {
+      const result = await setPushEnabled(user.user_id, next)
+      if (result !== next) {
+        setPushOn(result) // e.g. permission denied: put the switch back
+        if (next && !result) {
+          Alert.alert(
+            'Notifications blocked',
+            'Allow notifications for AGOS in your phone settings, then try again.'
+          )
+        }
+      }
+    })
   }
 
 
@@ -97,7 +99,7 @@ export default function ProfileSheet({ visible, onClose }: Props) {
                 Clog and water level alerts for your barangay
               </Text>
             </View>
-            <Switch value={pushOn} onValueChange={togglePush} disabled={pushBusy} />
+            <Switch value={pushOn} onValueChange={togglePush}/>
           </View>
 
           {/* Actions */}
