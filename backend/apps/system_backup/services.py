@@ -119,55 +119,74 @@ def create_backup_archive(output_dir):
 
 def restore_backup_archive(zip_path):
     """
-    Restores the system from a previously created backup archive:
-      - runs the database.sql dump against the current DB
-      - overwrites report_media/ files with the ones from the archive
+    Memory-light restore, safe for a 512MB instance:
+      - extracts ONLY database.sql to disk (not the whole archive)
+      - runs psql with output sent to a log file (nothing buffered in RAM)
+      - streams each report_media file from the zip straight to S3
+        (no extractall, no temp copies of the media)
     """
+    import gc
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         with zipfile.ZipFile(zip_path, 'r') as zf:
             names = zf.namelist()
             if 'database.sql' not in names:
-                raise InvalidBackupError("This file isn't a valid AGOS backup. Please choose a backup that was created by the system.")
+                raise InvalidBackupError(
+                    "This file isn't a valid AGOS backup. Please choose a backup that was created by the system."
+                )
             _validate_backup_zip(zf)
-            zf.extractall(tmp_dir)
 
-        dump_path = os.path.join(tmp_dir, 'database.sql')
-        db_settings = settings.DATABASES['default']
-        dump_host = os.getenv('DB_HOST_DIRECT', db_settings['HOST'])
-        dump_port = os.getenv('DB_PORT_DIRECT', db_settings['PORT'])
+            # 1. Extract only the SQL dump
+            zf.extract('database.sql', tmp_dir)
+            dump_path = os.path.join(tmp_dir, 'database.sql')
 
-        env = os.environ.copy()
-        env['PGPASSWORD'] = db_settings['PASSWORD']
+            db_settings = settings.DATABASES['default']
+            dump_host = os.getenv('DB_HOST_DIRECT', db_settings['HOST'])
+            dump_port = os.getenv('DB_PORT_DIRECT', db_settings['PORT'])
 
-        result = subprocess.run(
-            [
-                'psql',
-                '-v', 'ON_ERROR_STOP=1',
-                '--single-transaction',
-                '-h', dump_host,
-                '-p', str(dump_port),
-                '-U', db_settings['USER'],
-                '-d', db_settings['NAME'],
-                '-f', dump_path,
-            ],
-            env=env,
-            capture_output=True,
-            text=True,
-        )
+            env = os.environ.copy()
+            env['PGPASSWORD'] = db_settings['PASSWORD']
 
-        if result.returncode != 0:
-            raise RuntimeError(f"psql restore failed: {result.stderr}")
+            # 2. Run psql; stdout discarded, stderr to a file (never held in RAM)
+            log_path = os.path.join(tmp_dir, 'psql.log')
+            with open(log_path, 'w') as log:
+                result = subprocess.run(
+                    [
+                        'psql', '-q',
+                        '-v', 'ON_ERROR_STOP=1',
+                        '--single-transaction',
+                        '-h', dump_host,
+                        '-p', str(dump_port),
+                        '-U', db_settings['USER'],
+                        '-d', db_settings['NAME'],
+                        '-f', dump_path,
+                    ],
+                    env=env,
+                    stdout=subprocess.DEVNULL,
+                    stderr=log,
+                )
 
-        # Restore media files
-        extracted_media = os.path.join(tmp_dir, 'media')
-        if os.path.exists(extracted_media):
+            if result.returncode != 0:
+                with open(log_path, 'r', errors='replace') as f:
+                    tail = f.read()[-2000:]
+                raise RuntimeError(f"psql restore failed: {tail}")
+
+            # The dump is applied; free disk + memory before touching media
+            os.remove(dump_path)
+            gc.collect()
+
+            # 3. Stream media entries directly from the zip to S3
+            media_prefix = 'media/report_media/'
             s3 = _get_s3_client()
             bucket = settings.AWS_STORAGE_BUCKET_NAME
-            for root, dirs, files in os.walk(extracted_media):
-                for file in files:
-                    src = os.path.join(root, file)
-                    rel_path = os.path.relpath(src, extracted_media)
-                    key = rel_path.replace(os.sep, '/')
-                    if not key.startswith('report_media/'):
-                        continue
-                    s3.upload_file(src, bucket, key, ExtraArgs={'ACL': 'public-read'})
+            for info in zf.infolist():
+                if info.is_dir() or not info.filename.startswith(media_prefix):
+                    continue
+                key = info.filename[len('media/'):]  # -> report_media/...
+                if '..' in key.split('/'):
+                    continue  # skip anything suspicious
+                with zf.open(info) as fh:
+                    s3.upload_fileobj(
+                        fh, bucket, key,
+                        ExtraArgs={'ACL': 'public-read'},
+                    )

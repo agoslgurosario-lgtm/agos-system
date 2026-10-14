@@ -16,6 +16,10 @@ class BackupConfig(models.Model):
     )
     server_backup_path = models.CharField(max_length=500, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, db_column='updated_by'
+    )
 
     class Meta:
         db_table = 'tbl_backup_config'
@@ -32,6 +36,10 @@ class BackupLog(models.Model):
     STATUS_CHOICES = [('success', 'Success'), ('failed', 'Failed')]
 
     log_id = models.AutoField(primary_key=True)
+    config = models.ForeignKey(
+        BackupConfig, on_delete=models.SET_NULL,
+        null=True, blank=True, db_column='config_id'
+    )
     backup_type = models.CharField(max_length=20, choices=BACKUP_TYPE_CHOICES)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES)
     triggered_by = models.ForeignKey(

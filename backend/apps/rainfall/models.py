@@ -2,6 +2,7 @@ from datetime import timedelta
 from django.db import models
 from django.utils import timezone
 from apps.barangay.models import Barangay
+from django.conf import settings
 
 
 class RainfallCondition(models.Model):
@@ -75,6 +76,13 @@ class AlertThreshold(models.Model):
     clear_streak_count = models.PositiveIntegerField(
         default=5,
         help_text="Consecutive confirmed-clear readings (clog_pct < 30) required to auto-clear an open ClogEvent."
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column='updated_by',
     )
 
     class Meta:
