@@ -23,7 +23,7 @@ export const WATER_FLOW_LABEL: Record<WaterFlowCondition, string> = {
   Normal: "Normal", Reduced: "Reduced", Blocked: "Blocked",
 }
 
-// the nine fixed categories; "Other" is handled separately because it carries a label
+// the twelve fixed categories; "Other" is handled separately because it carries a label
 export const WASTE_CATEGORIES: { key: keyof CanalMonitoringReport; label: string }[] = [
   { key: "waste_plastic_kg", label: "Plastic" },
   { key: "waste_food_wrapper_kg", label: "Food Wrapper" },
@@ -34,7 +34,11 @@ export const WASTE_CATEGORIES: { key: keyof CanalMonitoringReport; label: string
   { key: "waste_foam_kg", label: "Foam" },
   { key: "waste_textile_kg", label: "Clothes / Textiles" },
   { key: "waste_ewaste_kg", label: "E-waste" },
+  { key: "waste_sanitary_kg", label: "Sanitary / Hygiene" },
+  { key: "waste_footwear_kg", label: "Footwear / Rubber" },
+  { key: "waste_medical_kg", label: "Medical" },
 ]
+
 
 export const formatDateTime = (iso: string | null): string => {
   if (!iso) return "—"

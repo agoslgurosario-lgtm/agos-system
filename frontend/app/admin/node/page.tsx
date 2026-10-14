@@ -135,6 +135,9 @@ export default function NodeManagement() {
   // Hotspot History tab
   const [hotspotHistory, setHotspotHistory] = useState<any[]>([])
   const [hotspotHistoryLoading, setHotspotHistoryLoading] = useState(false)
+  const [readingsLoadedKey, setReadingsLoadedKey] = useState('')
+  const [healthLoadedKey, setHealthLoadedKey] = useState('')
+  const [hotspotLoadedKey, setHotspotLoadedKey] = useState('')
   const [hotspotHistoryError, setHotspotHistoryError] = useState(false)
   const [hotspotReasonFilter, setHotspotReasonFilter] = useState('All')
   const [hotspotHistoryPage, setHotspotHistoryPage] = useState(1)
@@ -234,6 +237,13 @@ export default function NodeManagement() {
   }, [nodeFormDialog.open])
 
   const healthFetchKeyRef = useRef('')
+  const historyNodeId = readingsDialog.open ? readingsDialog.node?.node_id : undefined
+  const readingsBaseKey = `${historyNodeId}|${readingsStatusFilter}|${readingsHotspotFilter}|${readingsPage}`
+  const healthBaseKey = `${historyNodeId}|${healthStatusFilter}|${healthFrom}|${healthTo}|${healthPage}`
+  const hotspotBaseKey = `${historyNodeId}|${hotspotReasonFilter}|${hotspotHistoryPage}`
+  const readingsBusy = readingsLoading || (historyNodeId !== undefined && readingsLoadedKey !== readingsBaseKey)
+  const healthBusy = healthLoading || (historyNodeId !== undefined && healthLoadedKey !== healthBaseKey)
+  const hotspotBusy = hotspotHistoryLoading || (historyNodeId !== undefined && hotspotLoadedKey !== hotspotBaseKey)
 
   useEffect(() => {
     if (!readingsDialog.open || !readingsDialog.node || historyTab !== 'health') return
@@ -251,6 +261,7 @@ export default function NodeManagement() {
       setHealthHasPrev(cached.hasPrev)
       setHealthError(false)
       setHealthLoading(false)
+      setHealthLoadedKey(healthBaseKey)
     }
     const reqId = ++healthReqRef.current
 
@@ -277,7 +288,10 @@ export default function NodeManagement() {
       } catch {
         if (reqId === healthReqRef.current && !cached) setHealthError(true)
       } finally {
-        if (reqId === healthReqRef.current) setHealthLoading(false)
+        if (reqId === healthReqRef.current) {
+          setHealthLoading(false)
+          setHealthLoadedKey(healthBaseKey)
+        }
       }
     }
     fetchHealth()
@@ -318,6 +332,7 @@ export default function NodeManagement() {
       setReadingsHasPrev(cached.hasPrev)
       setReadingsError(false)
       setReadingsLoading(false)
+      setReadingsLoadedKey(readingsBaseKey)
     }
     const reqId = ++readingsReqRef.current
 
@@ -343,7 +358,10 @@ export default function NodeManagement() {
       } catch {
         if (reqId === readingsReqRef.current && !cached) setReadingsError(true)
       } finally {
-        if (reqId === readingsReqRef.current) setReadingsLoading(false)
+        if (reqId === readingsReqRef.current) {
+          setReadingsLoading(false)
+          setReadingsLoadedKey(readingsBaseKey)
+        }
       }
     }
     fetchReadings()
@@ -365,6 +383,7 @@ export default function NodeManagement() {
       setHotspotHistoryHasPrev(cached.hasPrev)
       setHotspotHistoryError(false)
       setHotspotHistoryLoading(false)
+      setHotspotLoadedKey(hotspotBaseKey)
     }
     const reqId = ++hotspotReqRef.current
 
@@ -389,7 +408,10 @@ export default function NodeManagement() {
       } catch {
         if (reqId === hotspotReqRef.current && !cached) setHotspotHistoryError(true)
       } finally {
-        if (reqId === hotspotReqRef.current) setHotspotHistoryLoading(false)
+        if (reqId === hotspotReqRef.current) {
+          setHotspotHistoryLoading(false)
+          setHotspotLoadedKey(hotspotBaseKey)
+        }
       }
     }
     fetchHotspotHistory()
@@ -475,6 +497,9 @@ export default function NodeManagement() {
   useEffect(() => {
     if (!readingsDialog.open || !readingsDialog.node) {
       setNodeReadings([])
+      setReadingsLoadedKey('')
+      setHealthLoadedKey('')
+      setHotspotLoadedKey('')
       return
     }
     setHistoryTab('readings')
@@ -1155,10 +1180,13 @@ export default function NodeManagement() {
                       <p className="text-[#D81010] font-semibold text-sm">Failed to load readings.</p>
                     </TableCell>
                   </TableRow>
-                ) : readingsLoading ? (
+                ) : readingsBusy ? (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-10">
-                      <p className="text-[#727272] text-sm">Loading readings...</p>
+                      <div className="flex flex-col items-center gap-2">
+                        <SpinnerIcon size={24} />
+                        <p className="text-[#727272] text-sm">Loading readings...</p>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ) : nodeReadings.length === 0 ? (
@@ -1275,8 +1303,15 @@ export default function NodeManagement() {
                 <TableBody>
                   {healthError ? (
                     <TableRow><TableCell colSpan={5} className="text-center py-10"><p className="text-[#D81010] font-semibold text-sm">Failed to load health history.</p></TableCell></TableRow>
-                  ) : healthLoading ? (
-                    <TableRow><TableCell colSpan={5} className="text-center py-10"><p className="text-[#727272] text-sm">Loading...</p></TableCell></TableRow>
+                  ) : healthBusy ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-10">
+                        <div className="flex flex-col items-center gap-2">
+                          <SpinnerIcon size={24} />
+                          <p className="text-[#727272] text-sm">Loading health...</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
                   ) : healthLogs.length === 0 ? (
                     <TableRow><TableCell colSpan={5} className="text-center py-10"><p className="text-[#727272] text-sm">No health checks match these filters.</p></TableCell></TableRow>
                   ) : (
@@ -1361,8 +1396,15 @@ export default function NodeManagement() {
                 <TableBody>
                   {hotspotHistoryError ? (
                     <TableRow><TableCell colSpan={5} className="text-center py-10"><p className="text-[#D81010] font-semibold text-sm">Failed to load hotspot history.</p></TableCell></TableRow>
-                  ) : hotspotHistoryLoading ? (
-                    <TableRow><TableCell colSpan={5} className="text-center py-10"><p className="text-[#727272] text-sm">Loading...</p></TableCell></TableRow>
+                  ) : hotspotBusy ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-10">
+                        <div className="flex flex-col items-center gap-2">
+                          <SpinnerIcon size={24} />
+                          <p className="text-[#727272] text-sm">Loading hotspots...</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
                   ) : hotspotHistory.length === 0 ? (
                     <TableRow><TableCell colSpan={5} className="text-center py-10"><p className="text-[#727272] text-sm">No assignment history yet.</p></TableCell></TableRow>
                   ) : (

@@ -98,6 +98,8 @@ export function AssignNodeDialog({
     hotspot === originalHotspot &&
     installedAt === originalInstalledAt
 
+  const todayStr = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD in local time
+
   const handleCancelClick = () => {
     if (isUnchanged && onNoChanges) onNoChanges()
     else onCancel()
@@ -189,7 +191,8 @@ export function AssignNodeDialog({
     } else if (
       isEdit &&
       hotspot !== originalHotspot &&
-      installedAt === originalInstalledAt
+      installedAt === originalInstalledAt &&
+      originalInstalledAt !== todayStr   // today's date is already the right answer
     ) {
       errors.installedAt = "You're moving this node to a new hotspot — confirm or update the install date."
     }

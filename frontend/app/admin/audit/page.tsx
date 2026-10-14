@@ -284,7 +284,7 @@ export default function Audit() {
                   </TableCell>
                   <TableCell className="text-[#122A48] text-left text-[12px] px-2 h-7 whitespace-nowrap">{a.action}</TableCell>
                   <TableCell className="text-[#122A48] text-left text-[12px] px-2 h-7 whitespace-nowrap">{formatAffectedTableLabel(a.affected_table)}</TableCell>
-                  <TableCell className="text-[#122A48] text-left text-[12px] max-w-xs px-4 h-7 truncate">{formatAuditDetails(a)}</TableCell>
+                  <TableCell className="text-[#122A48] text-left text-[12px] min-w-[240px] max-w-md px-4 py-1.5 h-7 whitespace-normal break-words">{formatAuditDetails(a)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

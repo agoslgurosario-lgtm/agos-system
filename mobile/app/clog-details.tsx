@@ -256,7 +256,7 @@ export default function ClogDetails() {
                 <Text className="text-[11px] text-[#64748B] font-medium">Water Flow</Text>
                 <Text className="text-xs font-extrabold text-[#122A48] mt-0.5" numberOfLines={1}>
                   {selectedEvent.reading_details?.water_flow_rate != null
-                    ? `${selectedEvent.reading_details.water_flow_rate} m/s`
+                    ? `${Number(selectedEvent.reading_details.water_flow_rate).toFixed(4)} m/s`
                     : '—'}
                 </Text>
               </View>

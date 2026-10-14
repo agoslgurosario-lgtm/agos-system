@@ -6,7 +6,7 @@ import Image from "next/image"
 import RosLogo from "@/public/ROS-logo.jpg"
 
 // icons
-import { ArrowLeft, FileText, Image as ImageIcon, FileDown } from "lucide-react"
+import { ArrowLeft, FileText, Image as ImageIcon, FileDown, Expand } from "lucide-react"
 
 // shadcn
 import { Button } from "@/components/ui/button"
@@ -194,12 +194,26 @@ function PhotosPanel({ media, onOpen }: { media: ReportMedia[]; onOpen: (url: st
             ) : (
               <div className="grid grid-cols-3 lg:grid-cols-4 gap-3">
                 {photos.map(m => (
-                  <button key={m.media} type="button" onClick={() => onOpen(m.file_url!)} className="cursor-zoom-in">
+                  <button
+                    key={m.media}
+                    type="button"
+                    onClick={() => onOpen(m.file_url!)}
+                    className="group relative cursor-zoom-in rounded-lg overflow-hidden"
+                  >
                     <img
                       src={m.file_url!}
                       alt={group.label}
-                      className="w-full h-40 object-cover rounded-lg border border-[#C6C6C8] hover:opacity-90"
+                      className="w-full h-40 object-cover rounded-lg border border-[#C6C6C8]"
                     />
+
+                    {/* Hover overlay */}
+                    <div className="absolute inset-0 rounded-lg bg-black/0 group-hover:bg-black/10 transition-colors" />
+
+                    {/* Expand indicator, same as the user manual screenshots */}
+                    <span className="absolute bottom-2 right-2 flex items-center gap-1.5 rounded-md bg-black/60 text-white text-xs px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Expand size={14} />
+                      Click to expand
+                    </span>
                   </button>
                 ))}
               </div>

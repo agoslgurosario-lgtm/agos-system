@@ -68,7 +68,20 @@ type Clogs = {
     dominant_waste_type: string
   } | null
   auto_cleared: boolean
+  clear_reason: 'Manual' | 'Auto-cleared' | 'Clear readings' | null
 }
+
+const CLEAR_REASON_LABEL: Record<string, string> = {
+  'Manual': 'Cleared manually',
+  'Auto-cleared': 'Auto-cleared after 7 days',
+  'Clear readings': 'Clear readings',
+}
+const CLEAR_REASON_SHORT: Record<string, string> = {
+  'Manual': 'Manual clear',
+  'Auto-cleared': 'Auto clear (7 days)',
+  'Clear readings': 'Clear readings',
+}
+const clearReasonLabel = (reason: Clogs['clear_reason']) => (reason ? CLEAR_REASON_LABEL[reason] : '—')
 
 type ClogMedia = {
   media_id: number
@@ -230,6 +243,7 @@ export default function ClogEvents() {
     c.reading_details?.water_level != null ? `${c.reading_details.water_level} cm` : '—',
     c.reading_details?.water_flow_rate != null ? `${Number(c.reading_details.water_flow_rate).toFixed(5)} m/s` : '—',
     c.status === 'Cleared' && c.auto_cleared ? 'Cleared (Auto)' : c.status,
+    clearReasonLabel(c.clear_reason),
   ])
 
   const currentUser = getUser()
@@ -357,6 +371,7 @@ export default function ClogEvents() {
                     <TableHead className='font-semibold text-left text-xs text-[#727272]'>WATER LEVEL</TableHead>
                     <TableHead className='font-semibold text-left text-xs text-[#727272]'>WATER FLOW</TableHead>
                     <TableHead className='font-semibold text-left text-xs text-[#727272]'>STATUS</TableHead>
+                    <TableHead className='font-semibold text-left text-xs text-[#727272]'>REASON</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -396,12 +411,10 @@ export default function ClogEvents() {
                       <TableCell className="text-[#122A48] text-left h-13 text-xs">
                         <span className="inline-flex items-center gap-1.5">
                           {clog.status}
-                          {clog.status === 'Cleared' && clog.auto_cleared && (
-                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#E5E5E6] text-[#727272]">
-                              Auto
-                            </span>
-                          )}
                         </span>
+                      </TableCell>
+                      <TableCell className="text-[#122A48] text-left h-13 text-xs">
+                        {clog.clear_reason ? CLEAR_REASON_SHORT[clog.clear_reason] : '—'}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -544,13 +557,15 @@ export default function ClogEvents() {
                   <p>Status</p>
                   <p className="flex items-center gap-1.5">
                     {selectedClog.status}
-                    {selectedClog.status === 'Cleared' && selectedClog.auto_cleared && (
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#E5E5E6] text-[#727272]">
-                        Auto
-                      </span>
-                    )}
                   </p>
                 </div>
+
+                {selectedClog.clear_reason && (
+                  <div className="flex justify-between text-xs">
+                    <p>Reason</p>
+                    <p>{clearReasonLabel(selectedClog.clear_reason)}</p>
+                  </div>
+                )}
 
               </div>
               
@@ -564,7 +579,7 @@ export default function ClogEvents() {
         
         <PrintReport
           reportTitle="Clog Events"
-          columns={["ID", "Severity", "Detected At", "Resolved At", "Location", "Water Level", "Water Flow", "Status"]}
+          columns={["ID", "Severity", "Detected At", "Resolved At", "Location", "Water Level", "Water Flow", "Status", "Reason"]}
           rows={printRows}
           generatedBy={generatedBy}
         />

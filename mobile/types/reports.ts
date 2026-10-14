@@ -52,6 +52,9 @@ export interface CanalMonitoringReport {
   waste_foam_kg: number | null
   waste_textile_kg: number | null
   waste_ewaste_kg: number | null
+  waste_sanitary_kg: number | null
+  waste_footwear_kg: number | null
+  waste_medical_kg: number | null
   waste_other_kg: number | null
   waste_other_label: string
 

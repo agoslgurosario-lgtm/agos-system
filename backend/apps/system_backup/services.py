@@ -11,6 +11,10 @@ MAX_BACKUP_ENTRY_COUNT = 20_000
 MAX_COMPRESSION_RATIO = 100
 
 
+class InvalidBackupError(ValueError):
+    """The uploaded archive isn't a usable backup. Message is safe to show users."""
+    
+
 def _validate_backup_zip(zf):
     total_uncompressed = 0
     entry_count = 0
@@ -18,7 +22,7 @@ def _validate_backup_zip(zf):
     for info in zf.infolist():
         entry_count += 1
         if entry_count > MAX_BACKUP_ENTRY_COUNT:
-            raise ValueError("Backup archive has too many entries.")
+            InvalidBackupError("This backup file looks too large or unsafe to restore.")
 
         total_uncompressed += info.file_size
         if total_uncompressed > MAX_BACKUP_UNCOMPRESSED_SIZE:
@@ -123,7 +127,7 @@ def restore_backup_archive(zip_path):
         with zipfile.ZipFile(zip_path, 'r') as zf:
             names = zf.namelist()
             if 'database.sql' not in names:
-                raise ValueError("Invalid backup file: database.sql not found in archive.")
+                InvalidBackupError("This file isn't a valid AGOS backup. Please choose a backup that was created by the system.")
             _validate_backup_zip(zf)
             zf.extractall(tmp_dir)
 

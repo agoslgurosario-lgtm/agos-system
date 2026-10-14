@@ -19,8 +19,6 @@ import { DialogModal } from "@/components/DialogModal"
 
 // components 
 import { SpinnerIcon } from "@/components/SpinnerIcon"
-import { useToast } from "@/components/hooks/useToast"
-import { Toast } from "@/components/Toast"
 
 // table pagination
 import { usePagination } from "@/components/hooks/usePagination";
@@ -62,8 +60,6 @@ type UploadedSound = {
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? ""
 
 export default function Page() {
-  const { toasts, addToast, removeToast } = useToast()
-
   // us
   const [deleteSoundDialog, setDeleteSoundDialog] = useState<{ open: boolean; sound: UploadedSound | null; tier: "critical" | "warning" | "info" | null }>({ open: false, sound: null, tier: null })
   const [deleteLoadingDialog, setDeleteLoadingDialog] = useState(false)
@@ -93,8 +89,10 @@ export default function Page() {
   const [saveSoundConfirmOpen, setSaveSoundConfirmOpen] = useState(false)
   const [saveBackupConfirmOpen, setSaveBackupConfirmOpen] = useState(false)
 
+  const [restoreDoneDialog, setRestoreDoneDialog] = useState(false)
+
   const [actionLoadingDialog, setActionLoadingDialog] = useState<{ open: boolean; title: string; description: string }>({ open: false, title: "", description: "" })
-  const [actionSuccessDialog, setActionSuccessDialog] = useState<{ open: boolean; title: string; description: string }>({ open: false, title: "", description: "" })
+  const [actionSuccessDialog, setActionSuccessDialog] = useState<{ open: boolean; title: string; description: React.ReactNode }>({ open: false, title: "", description: "" })
   const [actionErrorDialog, setActionErrorDialog] = useState<{ open: boolean; message: string }>({ open: false, message: "" })
 
   const [soundEnabled, setSoundEnabled] = useState(true)
@@ -127,7 +125,7 @@ export default function Page() {
   const [savingSoundConfig, setSavingSoundConfig] = useState(false)
   const soundFileInputRef = useRef<HTMLInputElement>(null)
 
-  const { paginated, currentPage, setCurrentPage, totalItems, itemsPerPage } = usePagination(logs, 8)
+  const { paginated, currentPage, setCurrentPage, totalItems, itemsPerPage } = usePagination(logs, 10)
 
   const lastManual = logs.find(l => l.backup_type === "manual" && l.status === "success")
   const lastScheduled = logs
@@ -164,7 +162,7 @@ export default function Page() {
       })
       setUploadedSounds(uploadedSoundsRes)
     } catch {
-      addToast("Failed to load backup settings.", "error")
+      setActionErrorDialog({ open: true, message: "Failed to load backup settings." })
     } finally {
       setLoading(false)
     }
@@ -259,7 +257,7 @@ export default function Page() {
     const file = e.target.files?.[0]
     if (!file) return
     if (!file.name.endsWith(".zip")) {
-      addToast("Please select a valid .zip backup file.", "error")
+      setActionErrorDialog({ open: true, message: "Please select a valid .zip backup file." })
       return
     }
     setSelectedFile(file)
@@ -281,8 +279,7 @@ export default function Page() {
       if (!tokenRes.ok) throw new Error("Could not authenticate for restore.")
       const { token } = await tokenRes.json()
 
-      const RENDER_URL = process.env.NEXT_PUBLIC_BACKEND_DIRECT_URL ?? "https://agos-capstone.onrender.com"
-      const res = await fetch(`${RENDER_URL}/api/backup/restore/`, {
+      const res = await fetch(`${BASE_URL}/api/backup/restore/`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
@@ -297,12 +294,15 @@ export default function Page() {
       if (!res.ok) throw new Error(result?.error || "Restore failed. Please check your backup file and try again.")
 
       setActionLoadingDialog({ open: false, title: "", description: "" })
-      setActionSuccessDialog({ open: true, title: "Restore Complete", description: "System restored successfully. Restart the backend for AI model changes to take effect." })
-      loadData()
+      setRestoreDoneDialog(true)
     } catch (err: any) {
       console.error(err)
       setActionLoadingDialog({ open: false, title: "", description: "" })
-      setActionErrorDialog({ open: true, message: err?.message || "Restore failed." })
+      const message =
+        err instanceof TypeError
+          ? "Couldn't reach the server. Check your connection and try again."
+          : err?.message || "Restore failed."
+      setActionErrorDialog({ open: true, message })
     } finally {
       setRestoring(false)
       setSelectedFile(null)
@@ -325,8 +325,7 @@ export default function Page() {
         file_name: selectedRestorePoint.file_name,
       })
       setActionLoadingDialog({ open: false, title: "", description: "" })
-      setActionSuccessDialog({ open: true, title: "Restore Complete", description: "System restored successfully. Restart the backend for AI model changes to take effect." })
-      loadData()
+      setRestoreDoneDialog(true)
     } catch (err: any) {
       console.error(err)
       setActionLoadingDialog({ open: false, title: "", description: "" })
@@ -357,10 +356,14 @@ export default function Page() {
         // Response wasn't valid JSON (e.g. a server crash with no body) — fall back gracefully
       }
       if (!res.ok) throw new Error(result?.error || "Upload failed. Please check your sound file and try again.")
-      addToast("Sound uploaded successfully.")
+      setActionSuccessDialog({
+        open: true,
+        title: "Sound Uploaded",
+        description: <><strong>{file.name}</strong> has been uploaded successfully.</>,
+      })
       loadData()
     } catch (err: any) {
-      addToast(err?.message || "Upload failed.", "error")
+      setActionErrorDialog({ open: true, message: err?.message || "Upload failed." })
     } finally {
       setUploadingSound(false)
       if (soundFileInputRef.current) soundFileInputRef.current.value = ""
@@ -405,7 +408,7 @@ export default function Page() {
     } catch (err) {
       console.error(err)
       setDeleteLoadingDialog(false)
-      addToast('Failed to delete sound.', 'error')
+      setActionErrorDialog({ open: true, message: 'Failed to delete sound.' })
     }
   }
 
@@ -426,6 +429,16 @@ export default function Page() {
       console.error(err)
       setActionLoadingDialog({ open: false, title: "", description: "" })
       setActionErrorDialog({ open: true, message: err?.error || "Failed to save alert sound settings." })
+    }
+  }
+
+  async function handleRestoreDone() {
+    try {
+      await api.post('/api/auth/logout/', {})
+    } catch {
+      // The restore may have invalidated our session already; sign-out failing is fine.
+    } finally {
+      window.location.href = '/login'
     }
   }
 
@@ -944,7 +957,16 @@ export default function Page() {
         confirmLabel="Okay"
       />
 
-      <Toast toasts={toasts} onRemove={removeToast} />
+      <DialogModal
+        open={restoreDoneDialog}
+        onConfirm={handleRestoreDone}
+        color={DIALOG_COLOR.lightgreen}
+        icon={CheckCircle}
+        iconColor={DIALOG_COLOR.green}
+        title="Restore Complete"
+        description="System restored successfully. You'll now be signed out, so please sign in again. Restart the backend for AI model changes to take effect."
+        confirmLabel="Okay"
+      />
     </>
   )
 }

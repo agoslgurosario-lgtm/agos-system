@@ -223,8 +223,22 @@
       <td class="item-lbl">E-waste</td>
       <td class="item-val">{{ report.waste_ewaste_kg|default_if_none:0|floatformat:2 }}</td>
       <td class="item-gap"></td>
+      <td class="item-lbl">Sanitary / Hygiene</td>
+      <td class="item-val">{{ report.waste_sanitary_kg|default_if_none:0|floatformat:2 }}</td>
+    </tr>
+    <tr>
+      <td class="item-lbl">Footwear / Rubber</td>
+      <td class="item-val">{{ report.waste_footwear_kg|default_if_none:0|floatformat:2 }}</td>
+      <td class="item-gap"></td>
+      <td class="item-lbl">Medical</td>
+      <td class="item-val">{{ report.waste_medical_kg|default_if_none:0|floatformat:2 }}</td>
+    </tr>
+    <tr>
       <td class="item-lbl">Other{% if report.waste_other_label %} ({{ report.waste_other_label }}){% endif %}</td>
       <td class="item-val">{{ report.waste_other_kg|default_if_none:0|floatformat:2 }}</td>
+      <td class="item-gap"></td>
+      <td class="item-lbl"></td>
+      <td class="item-val"></td>
     </tr>
   </table>
 

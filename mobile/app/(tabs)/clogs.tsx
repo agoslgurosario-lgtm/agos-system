@@ -287,7 +287,7 @@ export default function ClogEventsScreen() {
                   <View className="flex-1 items-end">
                     <Text className="text-[10px] text-[#94A3B8] font-medium">Water Flow</Text>
                     <Text className="text-xs font-bold text-[#334155] mt-0.5">
-                      {waterFlow != null ? `${waterFlow} m/s` : '--'}
+                      {waterFlow != null ? `${Number(waterFlow).toFixed(4)} m/s` : '--'}
                     </Text>
                   </View>
                 </View>
