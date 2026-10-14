@@ -17,6 +17,7 @@ class AlertSoundConfig(models.Model):
     info_sound = models.CharField(max_length=255, default="preset:info")
 
     updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, db_column='updated_by')
 
     class Meta:
         db_table = 'tbl_alert_sound_config'
