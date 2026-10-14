@@ -213,24 +213,37 @@ export default function Page() {
     }
 
     try {
-      const res = await fetch(`${BASE_URL}/api/backup/manual/`, {
+      const tokenRes = await fetch(`${BASE_URL}/api/auth/ws-token/`, {
         method: "GET",
         credentials: "include",
-        headers: { "X-Requested-With": "agos-web" },
+      })
+      if (!tokenRes.ok) throw new Error("Could not authenticate for backup.")
+      const { token } = await tokenRes.json()
+
+      const DIRECT_URL = process.env.NEXT_PUBLIC_BACKEND_DIRECT_URL
+      if (!DIRECT_URL) throw new Error("Backend URL is not configured.")
+      const res = await fetch(`${DIRECT_URL}/api/backup/manual/`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
       })
 
-      if (!res.ok) throw new Error("Backup failed")
+      if (!res.ok) {
+        let msg = ""
+        try { msg = (await res.json())?.error } catch {}
+        throw new Error(msg || `Backup failed (error ${res.status}). Please try again.`)
+      }
 
-      const blob = await res.blob()
       const disposition = res.headers.get("Content-Disposition")
       const match = disposition?.match(/filename="?([^"]+)"?/)
       const filename = match?.[1] || `agos_backup_${Date.now()}.zip`
 
-      if (handle) {
+      if (handle && res.body) {
+        // stream straight to disk, no full copy held in memory
         const writable = await handle.createWritable()
-        await writable.write(blob)
-        await writable.close()
+        await res.body.pipeTo(writable) // closes the file when the stream ends
       } else {
+        // browsers without the save picker (Firefox/Safari): fallback, still buffers in memory
+        const blob = await res.blob()
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement("a")
         a.href = url
@@ -244,10 +257,14 @@ export default function Page() {
       setActionLoadingDialog({ open: false, title: "", description: "" })
       setActionSuccessDialog({ open: true, title: "Backup Created", description: "Your backup has been created successfully." })
       loadData()
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
       setActionLoadingDialog({ open: false, title: "", description: "" })
-      setActionErrorDialog({ open: true, message: "Failed to create backup." })
+      const message =
+        err instanceof TypeError
+          ? "Couldn't reach the server. Check your connection and try again."
+          : err?.message || "Failed to create backup."
+      setActionErrorDialog({ open: true, message })
     } finally {
       setBackingUp(false)
     }
@@ -279,7 +296,10 @@ export default function Page() {
       if (!tokenRes.ok) throw new Error("Could not authenticate for restore.")
       const { token } = await tokenRes.json()
 
-      const res = await fetch(`${BASE_URL}/api/backup/restore/`, {
+      const DIRECT_URL = process.env.NEXT_PUBLIC_BACKEND_DIRECT_URL
+      if (!DIRECT_URL) throw new Error("Backend URL is not configured.")
+
+      const res = await fetch(`${DIRECT_URL}/api/backup/restore/`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
@@ -291,7 +311,16 @@ export default function Page() {
       } catch {
         // Response wasn't valid JSON (e.g. a server crash with no body) — fall back gracefully
       }
-      if (!res.ok) throw new Error(result?.error || "Restore failed. Please check your backup file and try again.")
+      if (!res.ok) {
+        const message =
+          result?.error ||
+          (res.status === 413
+            ? "This backup file is too large for the server to accept. Try restoring from a server restore point instead."
+            : res.status === 401 || res.status === 403
+            ? "Your session expired. Please refresh the page and try again."
+            : `Restore failed (error ${res.status}). Please try again.`)
+        throw new Error(message)
+      }
 
       setActionLoadingDialog({ open: false, title: "", description: "" })
       setRestoreDoneDialog(true)
@@ -832,7 +861,7 @@ export default function Page() {
         description={
           <>
             This will overwrite your current database, media files, and AI models with
-            the contents of <strong>{selectedFile?.name}</strong>. This action cannot be undone.
+            the contents of <strong>{selectedRestorePoint?.file_name}</strong>. This action cannot be undone.
             You will be logged out automatically once it completes, and will need to sign in again.
           </>
         }
@@ -964,7 +993,7 @@ export default function Page() {
         icon={CheckCircle}
         iconColor={DIALOG_COLOR.green}
         title="Restore Complete"
-        description="System restored successfully. You'll now be signed out, so please sign in again. Restart the backend for AI model changes to take effect."
+        description="System restored successfully. You'll now be signed out, so please sign in again for the changes to take effect."
         confirmLabel="Okay"
       />
     </>

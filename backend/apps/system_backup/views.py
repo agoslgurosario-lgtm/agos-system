@@ -54,7 +54,7 @@ class ManualBackupView(APIView):
                 error_message=str(e),
             )
         return Response(
-            {'error': 'Restore failed because of a server problem. Please try again, and contact your system administrator if it keeps happening.'},
+            {'error': 'Backup failed because of a server problem. Please try again, and contact your system administrator if it keeps happening.'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
@@ -104,6 +104,19 @@ class RestoreBackupView(APIView):
                 error_message=str(e),
             )
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            BackupLog.objects.create(
+                backup_type='restore', status='failed',
+                triggered_by=request.user, file_name=uploaded_file.name,
+                error_message=str(e),
+            )
+            return Response(
+                {'error': 'Restore failed because of a server problem. Please try again, and contact your system administrator if it keeps happening.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 class BackupConfigView(APIView):
@@ -194,7 +207,18 @@ class RestoreFromServerView(APIView):
             except InvalidBackupError as e:
                 BackupLog.objects.create(
                     backup_type='restore', status='failed',
-                    triggered_by=request.user, file_name=uploaded_file.name,  # safe_name in the second view
+                    triggered_by=request.user, file_name=safe_name,
                     error_message=str(e),
                 )
                 return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+            except Exception as e:
+                BackupLog.objects.create(
+                    backup_type='restore', status='failed',
+                    triggered_by=request.user, file_name=safe_name,
+                    error_message=str(e),
+                )
+                return Response(
+                    {'error': 'Restore failed because of a server problem. Please try again, and contact your system administrator if it keeps happening.'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )

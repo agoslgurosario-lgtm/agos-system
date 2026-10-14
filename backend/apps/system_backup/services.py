@@ -22,16 +22,16 @@ def _validate_backup_zip(zf):
     for info in zf.infolist():
         entry_count += 1
         if entry_count > MAX_BACKUP_ENTRY_COUNT:
-            InvalidBackupError("This backup file looks too large or unsafe to restore.")
+            raise InvalidBackupError("This backup file looks too large or unsafe to restore.")
 
         total_uncompressed += info.file_size
         if total_uncompressed > MAX_BACKUP_UNCOMPRESSED_SIZE:
-            raise ValueError("Backup archive is too large when decompressed.")
+            raise InvalidBackupError("Backup archive is too large when decompressed.")
 
         if info.compress_size > 0:
             ratio = info.file_size / info.compress_size
             if ratio > MAX_COMPRESSION_RATIO and info.file_size > 10 * 1024 * 1024:
-                raise ValueError("Backup archive contains a suspiciously compressed file.")
+                raise InvalidBackupError("Backup archive contains a suspiciously compressed file.")
 
 
 def create_backup_archive(output_dir):
@@ -127,7 +127,7 @@ def restore_backup_archive(zip_path):
         with zipfile.ZipFile(zip_path, 'r') as zf:
             names = zf.namelist()
             if 'database.sql' not in names:
-                InvalidBackupError("This file isn't a valid AGOS backup. Please choose a backup that was created by the system.")
+                raise InvalidBackupError("This file isn't a valid AGOS backup. Please choose a backup that was created by the system.")
             _validate_backup_zip(zf)
             zf.extractall(tmp_dir)
 
@@ -168,4 +168,6 @@ def restore_backup_archive(zip_path):
                     src = os.path.join(root, file)
                     rel_path = os.path.relpath(src, extracted_media)
                     key = rel_path.replace(os.sep, '/')
+                    if not key.startswith('report_media/'):
+                        continue
                     s3.upload_file(src, bucket, key, ExtraArgs={'ACL': 'public-read'})
