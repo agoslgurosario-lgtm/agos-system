@@ -391,14 +391,22 @@ export default function NodeAssignment() {
                 <div className="rounded-full bg-[#E5E5E6] p-3">
                   <RadioTower size={30} color="#727272" />
                 </div>
-                <p className="text-[#122A48] font-bold">No nodes assigned yet</p>
-                <p className="text-[#727272] text-xs">Assign an available node to a canal hotspot.</p>
-                <Button
-                  onClick={() => setAssignFormDialog({ open: true, node: null })}
-                  className="cursor-pointer bg-transparent rounded-lg border border-[#727272] text-[#122A48] px-3 py-2 hover:bg-gray-100"
-                >
-                  + Assign Node
-                </Button>
+                <p className="text-[#122A48] font-bold">
+                  {assignedNodes.length === 0 ? "No nodes assigned yet" : "No assigned nodes found"}
+                </p>
+                <p className="text-[#727272] text-xs">
+                  {assignedNodes.length === 0
+                    ? "Assign an available node to a canal hotspot."
+                    : "No assigned nodes match the selected filters or search."}
+                </p>
+                {assignedNodes.length === 0 && (
+                  <Button
+                    onClick={() => setAssignFormDialog({ open: true, node: null })}
+                    className="cursor-pointer bg-transparent rounded-lg border border-[#727272] text-[#122A48] px-3 py-2 hover:bg-gray-100"
+                  >
+                    + Assign Node
+                  </Button>
+                )}
               </div>
             )}
             

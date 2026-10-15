@@ -420,16 +420,20 @@ export default function Users() {
               <div className="rounded-full bg-[#E5E5E6] p-3">
                 <UserRound size={30} color="#727272" />
               </div>
-              <p className="text-[#122A48] font-bold">No users found</p>
-              <p className="text-[#727272] text-xs">
-                No user have been added yet. <br/> Click the button below to start adding users.
-              </p>
-              <Button
-                onClick={() => router.push('/admin/users/form')}
-                className="cursor-pointer bg-transparent rounded-lg border border-[#727272] text-[#122A48] px-3 py-2 hover:bg-gray-100"
-              >
-                + Add User
-              </Button>
+                <p className="text-[#122A48] font-bold">No users found</p>
+                <p className="text-[#727272] text-xs">
+                  {users.length === 0
+                    ? <>No users have been added yet. <br/> Click the button below to start adding users.</>
+                    : "No users match the selected filters or search."}
+                </p>
+                {users.length === 0 && (
+                  <Button
+                    onClick={() => router.push('/admin/users/form')}
+                    className="cursor-pointer bg-transparent rounded-lg border border-[#727272] text-[#122A48] px-3 py-2 hover:bg-gray-100"
+                  >
+                    + Add User
+                  </Button>
+                )}
             </div>
           )}
   

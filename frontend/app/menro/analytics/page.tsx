@@ -71,6 +71,13 @@ const fetchSensorNodesRaw = async () => {
   return data.results ?? data
 }
 
+function formatKg(value: number) {
+  if (!value) return "0"
+  if (value < 0.01) return "<0.01"
+  if (value < 1) return value.toFixed(3)
+  return value.toFixed(1)
+}
+
 
 export default function Analytics() {
   // waste classification state
@@ -259,7 +266,7 @@ useWebSocket({
               <div className={`${card.bg} rounded-lg p-2`}>{card.icon}</div>
               <div className="flex flex-col">
                 <span className="text-xl font-bold text-[#122A48] leading-tight">
-                  {card.count.toFixed(1)} <span className="text-xs font-normal">kg</span>
+                  {formatKg(card.count)} <span className="text-xs font-normal">kg</span>
                 </span>
                 <p className="text-xs text-[#122A48]">{card.label}</p>
               </div>
@@ -291,7 +298,7 @@ useWebSocket({
                         style={{ width: `${displayWidthPct}%` }}
                       />
                       <span className="text-xs text-[#122A48] whitespace-nowrap">
-                        {b.total.toFixed(1)}kg
+                        {formatKg(b.total)}kg
                       </span>
                     </div>
                   </div>
@@ -331,7 +338,7 @@ useWebSocket({
                   </Pie>
                 </PieChart>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-2xl font-bold text-[#122A48]">{totalWaste.toFixed(0)}</span>
+                  <span className="text-2xl font-bold text-[#122A48]">{formatKg(totalWaste)}</span>
                   <span className="text-xs text-[#122A48]/70">KG</span>
                 </div>
               </div>

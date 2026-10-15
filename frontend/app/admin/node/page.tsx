@@ -976,14 +976,22 @@ export default function NodeManagement() {
                 <div className="rounded-full bg-[#E5E5E6] p-3">
                   <RadioTower size={30} color="#727272" />
                 </div>
-                <p className="text-[#122A48] font-bold">No sensor nodes added</p>
-                <p className="text-[#727272] text-xs">Add a node to start monitoring.</p>
-                <Button
-                  onClick={() => setNodeFormDialog({ open: true, node: null })}
-                  className="cursor-pointer bg-transparent rounded-lg border border-[#727272] text-[#122A48] px-3 py-2 hover:bg-gray-100"
-                >
-                  + Add Node
-                </Button>
+                <p className="text-[#122A48] font-bold">
+                  {sensorNodes.length === 0 ? "No sensor nodes added" : "No sensor nodes found"}
+                </p>
+                <p className="text-[#727272] text-xs">
+                  {sensorNodes.length === 0
+                    ? "Add a node to start monitoring."
+                    : "No nodes match the selected filters or search."}
+                </p>
+                {sensorNodes.length === 0 && (
+                  <Button
+                    onClick={() => setNodeFormDialog({ open: true, node: null })}
+                    className="cursor-pointer bg-transparent rounded-lg border border-[#727272] text-[#122A48] px-3 py-2 hover:bg-gray-100"
+                  >
+                    + Add Node
+                  </Button>
+                )}
               </div>
             )}
 

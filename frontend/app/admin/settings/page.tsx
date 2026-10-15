@@ -91,6 +91,7 @@ export default function Page() {
   const [saveBackupConfirmOpen, setSaveBackupConfirmOpen] = useState(false)
 
   const [restoreDoneDialog, setRestoreDoneDialog] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
 
   const [actionLoadingDialog, setActionLoadingDialog] = useState<{ open: boolean; title: string; description: string }>({ open: false, title: "", description: "" })
   const [actionSuccessDialog, setActionSuccessDialog] = useState<{ open: boolean; title: string; description: React.ReactNode }>({ open: false, title: "", description: "" })
@@ -344,10 +345,16 @@ export default function Page() {
     }
   }
 
+  async function refreshUploadedSounds() {
+    const sounds = await api.get("/api/alert-sounds/")
+    setUploadedSounds(sounds)
+  }
+
   async function handleUploadSound(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     setUploadingSound(true)
+    setActionLoadingDialog({ open: true, title: "Uploading Sound", description: "Please wait while your sound is being uploaded..." })
     try {
       const formData = new FormData()
       formData.append("sound_file", file)
@@ -364,12 +371,13 @@ export default function Page() {
         // Response wasn't valid JSON (e.g. a server crash with no body) — fall back gracefully
       }
       if (!res.ok) throw new Error(result?.error || "Upload failed. Please check your sound file and try again.")
+      await refreshUploadedSounds()
+      setActionLoadingDialog({ open: false, title: "", description: "" })
       setActionSuccessDialog({
         open: true,
         title: "Sound Uploaded",
         description: <><strong>{file.name}</strong> has been uploaded successfully.</>,
       })
-      loadData()
     } catch (err: any) {
       setActionErrorDialog({ open: true, message: err?.message || "Upload failed." })
     } finally {
@@ -441,6 +449,7 @@ export default function Page() {
   }
 
   async function handleRestoreDone() {
+    setSigningOut(true)
     try {
       await api.post('/api/auth/logout/', {})
     } catch {
@@ -973,7 +982,8 @@ export default function Page() {
         iconColor={DIALOG_COLOR.green}
         title="Restore Complete"
         description="System restored successfully. You'll now be signed out, so please sign in again for the changes to take effect."
-        confirmLabel="Okay"
+        confirmLabel={signingOut ? "Signing out..." : "Okay"}
+        loading={signingOut}
       />
     </>
   )
