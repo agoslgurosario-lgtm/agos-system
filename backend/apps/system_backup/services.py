@@ -70,6 +70,9 @@ def create_backup_archive(output_dir):
               '-p', str(dump_port),
               '-U', db_settings['USER'],
               '-F', 'p',
+              '-n', 'public',     # only the app's tables, not Supabase internals
+              '--no-owner',       # don't depend on who owned things in the source DB
+              '--no-acl',         # don't copy GRANT/REVOKE statements
               '--clean',
               '--if-exists',
               '-f', dump_path,
@@ -117,6 +120,37 @@ def create_backup_archive(output_dir):
     return archive_path
 
 
+# Lines pg_dump --clean emits for the "public" schema itself. Supabase owns that
+# schema (and extensions live in it), so we must not drop/recreate it.
+_SKIP_EXACT = {
+    'DROP SCHEMA IF EXISTS public;',
+    'CREATE SCHEMA public;',
+}
+_SKIP_PREFIX = ('COMMENT ON SCHEMA public IS',)
+# Signs of an old-style full-database dump (includes Supabase internals).
+_UNSUPPORTED_PREFIX = ('CREATE EVENT TRIGGER', 'CREATE SCHEMA ', 'CREATE EXTENSION')
+
+
+def _prepare_dump(src_path, dst_path):
+    """
+    Stream database.sql -> a cleaned copy (one line at a time, so memory use stays tiny).
+    Raises InvalidBackupError for old backups that contain Supabase internals.
+    """
+    with open(src_path, 'r', encoding='utf-8', errors='replace') as src, \
+         open(dst_path, 'w', encoding='utf-8') as dst:
+        for line in src:
+            stripped = line.strip()
+            if stripped in _SKIP_EXACT or stripped.startswith(_SKIP_PREFIX):
+                continue
+            if stripped.startswith(_UNSUPPORTED_PREFIX):
+                raise InvalidBackupError(
+                    "This backup was made by an older version of the system and includes "
+                    "database internals that can't be restored. Please create a new backup "
+                    "and restore from that one."
+                )
+            dst.write(line)
+
+
 def restore_backup_archive(zip_path):
     """
     Memory-light restore, safe for a 512MB instance:
@@ -138,7 +172,10 @@ def restore_backup_archive(zip_path):
 
             # 1. Extract only the SQL dump
             zf.extract('database.sql', tmp_dir)
-            dump_path = os.path.join(tmp_dir, 'database.sql')
+            raw_path = os.path.join(tmp_dir, 'database.sql')
+            dump_path = os.path.join(tmp_dir, 'database.clean.sql')
+            _prepare_dump(raw_path, dump_path)
+            os.remove(raw_path)
 
             db_settings = settings.DATABASES['default']
             dump_host = os.getenv('DB_HOST_DIRECT', db_settings['HOST'])

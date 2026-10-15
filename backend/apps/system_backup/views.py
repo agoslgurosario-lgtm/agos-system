@@ -219,6 +219,6 @@ class RestoreFromServerView(APIView):
                     error_message=str(e),
                 )
                 return Response(
-                    {'error': 'Restore failed because of a server problem. Please try again, and contact your system administrator if it keeps happening.'},
+                    {'error': 'Restore failed because of a server problem. Please try again.'},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
