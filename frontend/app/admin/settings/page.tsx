@@ -10,6 +10,7 @@ import { DatabaseBackup, Download, Upload, TriangleAlert, ShieldAlert, Bell, Tra
 import { api } from "@/lib/api"
 import { resolveSoundUrl} from '@/lib/soundUtils'
 import { DIALOG_COLOR } from "@/lib/constant"
+import { chunkedRestore } from "@/lib/chunkedRestore"
 
 // shadcn components
 import { Button } from "@/components/ui/button"
@@ -284,43 +285,21 @@ export default function Page() {
     if (!selectedFile) return
     setConfirmRestoreOpen(false)
     setRestoring(true)
-    setActionLoadingDialog({ open: true, title: "Restoring System", description: "Please wait while your system is being restored. This might take a minute — you'll be logged out automatically once it's done." })
+    setActionLoadingDialog({ open: true, title: "Restoring System", description: "Uploading backup… 0%" })
     try {
-      const formData = new FormData()
-      formData.append("backup_file", selectedFile)
-
-      const tokenRes = await fetch(`${BASE_URL}/api/auth/ws-token/`, {
-        method: "GET",
-        credentials: "include",
-      })
-      if (!tokenRes.ok) throw new Error("Could not authenticate for restore.")
-      const { token } = await tokenRes.json()
-
       const DIRECT_URL = process.env.NEXT_PUBLIC_BACKEND_DIRECT_URL
       if (!DIRECT_URL) throw new Error("Backend URL is not configured.")
 
-      const res = await fetch(`${DIRECT_URL}/api/backup/restore/`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
+      await chunkedRestore(selectedFile, {
+        directUrl: DIRECT_URL,
+        getToken: async () => {
+          const res = await api.get("/api/auth/ws-token/")
+          if (!res?.token) throw new Error("Could not authenticate for restore.")
+          return res.token as string
+        },
+        onProgress: (message) =>
+          setActionLoadingDialog({ open: true, title: "Restoring System", description: message }),
       })
-
-      let result: any = {}
-      try {
-        result = await res.json()
-      } catch {
-        // Response wasn't valid JSON (e.g. a server crash with no body) — fall back gracefully
-      }
-      if (!res.ok) {
-        const message =
-          result?.error ||
-          (res.status === 413
-            ? "This backup file is too large for the server to accept. Try restoring from a server restore point instead."
-            : res.status === 401 || res.status === 403
-            ? "Your session expired. Please refresh the page and try again."
-            : `Restore failed (error ${res.status}). Please try again.`)
-        throw new Error(message)
-      }
 
       setActionLoadingDialog({ open: false, title: "", description: "" })
       setRestoreDoneDialog(true)
