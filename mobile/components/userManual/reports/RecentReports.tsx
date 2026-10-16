@@ -36,7 +36,7 @@ export default function RecentReports({ expanded, onPress }: Props) {
             <Image
               source={recentReportsImage}
               resizeMode="contain"
-              className="w-full h-[300px]"
+              className="h-[300px] w-full"
               style={{
                 backgroundColor: "#F8FAFC",
               }}
@@ -63,20 +63,23 @@ export default function RecentReports({ expanded, onPress }: Props) {
 
       {/* INSTRUCTIONS */}
       <View className="mt-4 px-4">
-        <ManualStep
-          number={1}
-          text="Review the report date, date of the canal monitoring report, number of attached files, and current status."
-        />
+        <ManualStep number={1}>
+          <Text>
+            Review the report date, date of the canal monitoring report, number
+            of attached files, and current status.
+          </Text>
+        </ManualStep>
 
-        <ManualStep
-          number={2}
-          text="Tap Continue Draft to continue editing a report that has not yet been submitted."
-        />
+        <ManualStep number={2}>
+          <Text>
+            Tap Continue Draft to continue editing a report that has not yet
+            been submitted.
+          </Text>
+        </ManualStep>
 
-        <ManualStep
-          number={3}
-          text="Tap Export to download or save a copy of the report."
-        />
+        <ManualStep number={3}>
+          <Text>Tap Export to download or save a copy of the report.</Text>
+        </ManualStep>
       </View>
 
       {/* TIP */}

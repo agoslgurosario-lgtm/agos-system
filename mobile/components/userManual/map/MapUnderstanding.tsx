@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Text, View, Image, Pressable } from "react-native";
 import ImageViewing from "react-native-image-viewing";
-import { MapPinned } from "lucide-react-native";
+import { MapPinned, ZoomIn } from "lucide-react-native";
 
 import ManualSection from "../common/ManualSection";
 
@@ -13,12 +13,12 @@ type Props = {
 export default function MapUnderstanding({ expanded, onPress }: Props) {
   const [isImageVisible, setIsImageVisible] = useState(false);
 
-  const mapImage = require("../../../assets/images/userManual/map/understand.jpg");
+  const mapImage = require("../../../assets/images/userManual/map/understand.png");
 
   return (
     <>
       <ManualSection
-        number={2}
+        number={3}
         title="UNDERSTANDING THE MAP"
         description="The map uses color-coded indicators to help users quickly identify monitoring points and canal conditions."
         icon={<MapPinned size={18} color="#203D70" />}
@@ -182,41 +182,47 @@ export default function MapUnderstanding({ expanded, onPress }: Props) {
             </View>
           </View>
 
-          {/* ================================= */}
-          {/* MAP IMAGE CARD */}
-          {/* ================================= */}
-          <Pressable
-            onPress={() => setIsImageVisible(true)}
-            className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
-          >
-            <View className="relative">
-              <Image
-                source={mapImage}
-                style={{
-                  width: "100%",
-                  height: 280,
-                  backgroundColor: "#F8FAFC",
-                }}
-                resizeMode="contain"
-              />
+          {/* =============================== */}
+          {/* MAP IMAGE */}
+          {/* =============================== */}
+          <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <View className="flex-row items-center justify-between border-b border-slate-100 px-4 py-3">
+              <Text className="text-[11px] font-bold text-slate-700">
+                Map Example
+              </Text>
 
-              <View className="absolute bottom-3 right-3 rounded-full bg-slate-900/80 px-3 py-2">
-                <Text className="text-[10px] font-semibold text-white">
-                  🔍 Tap to enlarge
+              <View className="flex-row items-center rounded-full bg-blue-50 px-2.5 py-1">
+                <ZoomIn size={10} color="#2563EB" />
+                <Text className="ml-1 text-[8px] font-bold text-blue-600">
+                  TAP TO ENLARGE
                 </Text>
               </View>
             </View>
 
-            <View className="border-t border-slate-100 px-4 py-3">
-              <Text className="text-center text-xs font-semibold text-slate-700">
-                Localized Canal Map
-              </Text>
+            <Pressable
+              onPress={() => setIsImageVisible(true)}
+              className="bg-slate-50"
+            >
+              <Image
+                source={mapImage}
+                resizeMode="contain"
+                style={{
+                  width: "100%",
+                  height: 500,
+                  backgroundColor: "#F8FAFC",
+                }}
+              />
 
-              <Text className="mt-1 text-center text-[10px] text-slate-400">
-                Use the map indicators to identify canal conditions
-              </Text>
-            </View>
-          </Pressable>
+              {/* <View className="absolute bottom-3 left-0 right-0 items-center">
+                <View className="flex-row items-center rounded-full bg-black/60 px-3 py-2">
+                  <ZoomIn size={13} color="#FFFFFF" />
+                  <Text className="ml-1.5 text-[9px] font-semibold text-white">
+                    Tap image to enlarge
+                  </Text>
+                </View>
+              </View> */}
+            </Pressable>
+          </View>
 
           {/* ================================= */}
           {/* HOW TO READ THE MAP */}

@@ -18,7 +18,7 @@ type Props = {
 export default function CriticalNodes({ expanded, onPress }: Props) {
   return (
     <ManualSection
-      number={5}
+      number={6}
       title="CRITICAL NODES"
       description="Displays monitoring locations in your barangay where detected conditions require prompt attention."
       icon={<TriangleAlert size={18} color="#203D70" />}

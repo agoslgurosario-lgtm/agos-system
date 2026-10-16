@@ -89,20 +89,22 @@ export default function ClogEventDetails({ expanded, onPress }: Props) {
       {/* ================================= */}
 
       <View className="mx-5 mt-4">
-        <ManualStep
-          number={1}
-          text="Tap a clog event card from the Clog Events list to open its Event Details page."
-        />
-
-        <ManualStep
-          number={2}
-          text="Review the severity and current status shown at the top of the page."
-        />
-
-        <ManualStep
-          number={3}
-          text="Review the monitoring information recorded for the selected event."
-        />
+        <ManualStep number={1}>
+          <Text>
+            Tap a clog event card from the Clog Events list to open its Event
+            Details page.
+          </Text>
+        </ManualStep>
+        <ManualStep number={2}>
+          <Text>
+            Review the severity and current status shown at the top of the page.
+          </Text>
+        </ManualStep>
+        <ManualStep number={3}>
+          <Text>
+            Review the monitoring information recorded for the selected event.
+          </Text>
+        </ManualStep>
       </View>
 
       {/* ================================= */}

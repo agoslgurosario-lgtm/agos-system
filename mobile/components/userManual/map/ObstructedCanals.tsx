@@ -21,7 +21,7 @@ type Props = {
 export default function ObstructedCanals({ expanded, onPress }: Props) {
   return (
     <ManualSection
-      number={6}
+      number={7}
       title="OBSTRUCTED CANALS"
       description="Monitor canal obstructions in your barangay and follow the appropriate response process."
       icon={<Ban size={18} color="#203D70" />}
@@ -92,30 +92,40 @@ export default function ObstructedCanals({ expanded, onPress }: Props) {
             Follow these steps when an obstructed canal is identified.
           </Text>
 
-          <ManualStep
-            number={1}
-            text="Locate the affected canal on the map and confirm the reported location."
-          />
+          <ManualStep number={1}>
+            <Text>
+              Locate the affected canal on the map and confirm the reported
+              location.
+            </Text>
+          </ManualStep>
 
-          <ManualStep
-            number={2}
-            text="Review the available risk level, sensor readings, and reported condition."
-          />
+          <ManualStep number={2}>
+            <Text>
+              Review the available risk level, sensor readings, and reported
+              condition.
+            </Text>
+          </ManualStep>
 
-          <ManualStep
-            number={3}
-            text="Coordinate with the appropriate personnel for inspection and response."
-          />
+          <ManualStep number={3}>
+            <Text>
+              Coordinate with the appropriate personnel for inspection and
+              response.
+            </Text>
+          </ManualStep>
 
-          <ManualStep
-            number={4}
-            text="Conduct an on-site inspection to verify the actual obstruction and canal condition."
-          />
+          <ManualStep number={4}>
+            <Text>
+              Conduct an on-site inspection to verify the actual obstruction and
+              canal condition.
+            </Text>
+          </ManualStep>
 
-          <ManualStep
-            number={5}
-            text="Document the response and update the canal status after the appropriate action has been completed."
-          />
+          <ManualStep number={5}>
+            <Text>
+              Document the response and update the canal status after the
+              appropriate action has been completed.
+            </Text>
+          </ManualStep>
         </View>
 
         {/* =============================== */}

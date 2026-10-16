@@ -124,10 +124,12 @@ export default function ClassifiedWasteType({ expanded, onPress }: Props) {
           {/* ================================================= */}
 
           <View className="mt-5">
-            <ManualStep
-              number={1}
-              text="Compare the percentages to identify which type of waste makes up the largest portion of the recorded waste."
-            />
+            <ManualStep number={1}>
+              <Text>
+                Compare the estimated amount of Biodegradable, Recyclable,
+                Residual, and Special Waste.
+              </Text>
+            </ManualStep>
           </View>
         </View>
       </ManualSection>

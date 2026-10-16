@@ -12,27 +12,29 @@ type Props = {
   onPress: () => void;
 };
 
-type ImageKey = "siteInfo" | "wasteComposition" | "barangayResponse";
+type ImageKey =
+  | "monitoring"
+  | "wasteComposition"
+  | "barangayResponse"
+  | "photos";
 
 export default function AddEditReport({ expanded, onPress }: Props) {
   const [isImageVisible, setIsImageVisible] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<ImageKey>("siteInfo");
+  const [selectedImage, setSelectedImage] = useState<ImageKey>("monitoring");
 
   /*
-   * SAVE YOUR THREE SCREENSHOTS AS:
-   *
+   * Image assets:
    * assets/images/userManual/reports/
    *
-   * ├── add-edit-report-site.jpg
-   * ├── add-edit-report-waste.jpg
-   * └── add-edit-report-response.jpg
+   * monitoring.png
+   * waste-composition.png
+   * barangay-response.png
+   * upload-evidence.png
    */
-
-  const siteInfoImage = require("../../../assets/images/userManual/reports/add-edit-report-site.jpg");
-
-  const wasteCompositionImage = require("../../../assets/images/userManual/reports/add-edit-report-waste.jpg");
-
-  const barangayResponseImage = require("../../../assets/images/userManual/reports/add-edit-report-response.jpg");
+  const monitoringImage = require("../../../assets/images/userManual/reports/monitoring.png");
+  const wasteCompositionImage = require("../../../assets/images/userManual/reports/waste-composition.png");
+  const barangayResponseImage = require("../../../assets/images/userManual/reports/barangay-response.png");
+  const photosImage = require("../../../assets/images/userManual/reports/upload-evidence.png");
 
   const openImage = (image: ImageKey) => {
     setSelectedImage(image);
@@ -40,339 +42,309 @@ export default function AddEditReport({ expanded, onPress }: Props) {
   };
 
   const fullscreenImage =
-    selectedImage === "siteInfo"
-      ? siteInfoImage
+    selectedImage === "monitoring"
+      ? monitoringImage
       : selectedImage === "wasteComposition"
         ? wasteCompositionImage
-        : barangayResponseImage;
+        : selectedImage === "barangayResponse"
+          ? barangayResponseImage
+          : photosImage;
+
+  // Reusable screenshot preview
+  const Screenshot = ({
+    image,
+    source,
+    title,
+    description,
+  }: {
+    image: ImageKey;
+    source: number;
+    title: string;
+    description: string;
+  }) => (
+    <View className="mx-5 mt-3">
+      <Pressable
+        onPress={() => openImage(image)}
+        className="overflow-hidden rounded-2xl border border-slate-300 bg-white"
+      >
+        <View className="relative items-center justify-center bg-[#F8FAFC]">
+          <Image
+            source={source}
+            resizeMode="contain"
+            style={{
+              width: "100%",
+              height: 380,
+            }}
+          />
+
+          <View className="absolute bottom-3 right-3 rounded-full bg-slate-900/80 px-3 py-2">
+            <Text className="text-[10px] font-semibold text-white">
+              🔍 Tap to enlarge
+            </Text>
+          </View>
+        </View>
+
+        <View className="border-t border-slate-100 px-4 py-3">
+          <Text className="text-center text-xs font-semibold text-slate-700">
+            {title}
+          </Text>
+
+          <Text className="mt-1 text-center text-[10px] text-slate-400">
+            {description}
+          </Text>
+        </View>
+      </Pressable>
+    </View>
+  );
 
   return (
     <ManualSection
       number={4}
       title="ADD OR EDIT REPORT"
-      description="Enter and review the information needed to complete a canal clearing operation report."
+      description="Complete the canal monitoring report, record the waste collected, document the barangay response, and attach cleanup photos."
       icon={<FilePlus2 size={18} color="#203D70" />}
       expanded={expanded}
       onPress={onPress}
     >
-      {/* ================================================== */}
       {/* INTRODUCTION */}
-      {/* ================================================== */}
-
       <View className="mt-5 px-5">
         <Text className="text-[11px] leading-5 text-slate-600">
-          The Add or Edit Report form allows barangay users to record the
-          condition of a canal, document the waste collected, and provide
-          details about the clearing response.
+          Use the Add or Edit Report form to record the observed canal
+          condition, estimate waste by category, describe the cleanup response,
+          and provide photo evidence before and after the operation.
         </Text>
       </View>
 
-      {/* ================================================== */}
-      {/* IMAGE 1 — MONITORING SITE INFORMATION              */}
-      {/* ================================================== */}
-
+      {/* 1. MONITORING SITE INFORMATION */}
       <View className="mx-5 mt-5">
         <Text className="text-[13px] font-bold text-[#203D70]">
           1. Monitoring Site Information
         </Text>
 
         <Text className="mt-1 text-[10px] leading-4 text-slate-500">
-          Enter the location and identifying information of the canal being
-          monitored.
+          Confirm the assigned location, select the Purok, and record the
+          detected canal condition.
         </Text>
       </View>
 
-      <View className="mx-5 mt-3">
-        <Pressable
-          onPress={() => openImage("siteInfo")}
-          className="overflow-hidden rounded-2xl border border-slate-300 bg-white"
-        >
-          <View className="relative">
-            <Image
-              source={siteInfoImage}
-              resizeMode="contain"
-              className="w-full h-[620px]"
-              style={{
-                backgroundColor: "#F8FAFC",
-              }}
-            />
-
-            <View className="absolute bottom-3 right-3 rounded-full bg-slate-900/80 px-3 py-2">
-              <Text className="text-[10px] font-semibold text-white">
-                🔍 Tap to enlarge
-              </Text>
-            </View>
-          </View>
-        </Pressable>
-      </View>
-
-      {/* IMAGE 1 INSTRUCTIONS */}
+      <Screenshot
+        image="monitoring"
+        source={monitoringImage}
+        title="Monitoring Site Information"
+        description="Tap to zoom and explore the monitoring and canal condition fields."
+      />
 
       <View className="mt-4 px-4">
-        <ManualStep
-          number={1}
-          text="Enter the Canal Name or ID to identify the monitoring site."
-        />
+        <ManualStep number={1}>
+          <Text>
+            Check the Barangay and Municipality fields. These are displayed as
+            locked fields for the assigned user.
+          </Text>
+        </ManualStep>
 
-        <View className="mt-3">
-          <ManualStep
-            number={2}
-            text="Check the Barangay and Municipality information displayed for the monitoring site."
-          />
-        </View>
+        <ManualStep number={2}>
+          <Text>Select the Purok where the canal condition was observed.</Text>
+        </ManualStep>
 
-        <View className="mt-3">
-          <ManualStep
-            number={3}
-            text="Tap the GPS Coordinates field and select the canal location on the map."
-          />
-        </View>
+        <ManualStep number={3}>
+          <Text>
+            Select Date / Time Observed to record when the condition was
+            identified.
+          </Text>
+        </ManualStep>
 
-        <View className="mt-3">
-          <ManualStep
-            number={4}
-            text="Enter the nearest landmark to make the canal location easier to identify."
-          />
-        </View>
+        <ManualStep number={4}>
+          <Text>Choose the Severity level: Critical, Medium, or Low.</Text>
+        </ManualStep>
+
+        <ManualStep number={5}>
+          <Text>
+            Under Overall Canal Condition, select the Overall Water Level: Low,
+            Moderate, or High.
+          </Text>
+        </ManualStep>
+
+        <ManualStep number={6}>
+          <Text>
+            Select the Overall Obstruction range that best describes the canal:{" "}
+            {"<25%"}, 25–50%, 50–75%, or {">75%"}.
+          </Text>
+        </ManualStep>
+
+        <ManualStep number={7}>
+          <Text>
+            Select the Overall Water Flow: Normal, Reduced, or Blocked.
+          </Text>
+        </ManualStep>
       </View>
-
-      {/* ================================================== */}
-      {/* DETECTION SUMMARY */}
-      {/* ================================================== */}
-
-      <View className="mx-5 mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4">
-        <Text className="text-[11px] font-bold text-[#203D70]">
-          DETECTION SUMMARY
-        </Text>
-
-        <Text className="mt-2 text-[10px] leading-5 text-slate-600">
-          Record when the canal condition was observed and indicate the severity
-          of the detected condition.
-        </Text>
-      </View>
-
-      <View className="mt-4 px-4">
-        <ManualStep
-          number={5}
-          text="Select the Date / Time Observed to record when the canal condition was identified."
-        />
-
-        <View className="mt-3">
-          <ManualStep
-            number={6}
-            text="Select the appropriate severity level: Critical, Medium, or Low."
-          />
-        </View>
-      </View>
-
-      {/* ================================================== */}
-      {/* CANAL CONDITION */}
-      {/* ================================================== */}
-
-      <View className="mx-5 mt-5 rounded-2xl border border-teal-100 bg-teal-50 p-4">
-        <Text className="text-[11px] font-bold text-[#237C72]">
-          CANAL CONDITION
-        </Text>
-
-        <Text className="mt-2 text-[10px] leading-5 text-slate-600">
-          Describe the current water level, obstruction coverage, and water flow
-          condition of the canal.
-        </Text>
-      </View>
-
-      <View className="mt-4 px-4">
-        <ManualStep
-          number={7}
-          text="Select the Water Level: Low, Moderate, or High."
-        />
-
-        <View className="mt-3">
-          <ManualStep
-            number={8}
-            text="Select the Obstruction Coverage: <25%, 25–50%, 50–75%, or >75%."
-          />
-        </View>
-
-        <View className="mt-3">
-          <ManualStep
-            number={9}
-            text="Select the Water Flow Condition: Normal, Reduced, or Blocked."
-          />
-        </View>
-      </View>
-
-      {/* ================================================== */}
-      {/* DIVIDER */}
-      {/* ================================================== */}
 
       <View className="mx-5 mt-7 border-t border-slate-200" />
 
-      {/* ================================================== */}
-      {/* IMAGE 2 — WASTE COMPOSITION                         */}
-      {/* ================================================== */}
-
+      {/* 2. WASTE COMPOSITION */}
       <View className="mx-5 mt-6">
         <Text className="text-[13px] font-bold text-[#203D70]">
           2. Waste Composition
         </Text>
 
         <Text className="mt-1 text-[10px] leading-4 text-slate-500">
-          Estimate the amount of waste collected from the canal by category.
+          Estimate the weight of each type of waste collected from the canal.
+          Blank categories are recorded as 0 when the report is submitted.
         </Text>
       </View>
 
-      <View className="mx-5 mt-3">
-        <Pressable
-          onPress={() => openImage("wasteComposition")}
-          className="overflow-hidden rounded-2xl border border-slate-300 bg-white"
-        >
-          <View className="relative">
-            <Image
-              source={wasteCompositionImage}
-              resizeMode="contain"
-              className="w-full h-[620px]"
-              style={{
-                backgroundColor: "#F8FAFC",
-              }}
-            />
-
-            <View className="absolute bottom-3 right-3 rounded-full bg-slate-900/80 px-3 py-2">
-              <Text className="text-[10px] font-semibold text-white">
-                🔍 Tap to enlarge
-              </Text>
-            </View>
-          </View>
-        </Pressable>
-      </View>
-
-      {/* IMAGE 2 INSTRUCTIONS */}
+      <Screenshot
+        image="wasteComposition"
+        source={wasteCompositionImage}
+        title="Waste Composition"
+        description="Tap to zoom and review the waste categories and weight fields."
+      />
 
       <View className="mt-4 px-4">
-        <ManualStep
-          number={10}
-          text="Enter the estimated amount of Plastic, Food Wrapper, Paper / Cardboard, Glass, Organic, Metal, Foam, Clothes / Textiles, and E-waste in kilograms."
-        />
+        <ManualStep number={8}>
+          <Text>
+            Enter the estimated weight in kilograms for each applicable
+            category: Plastic, Food Wrapper, Paper / Cardboard, Glass, Organic,
+            Metal, Foam, Clothes / Textiles, E-waste, Sanitary / Hygiene,
+            Footwear / Rubber, and Medical.
+          </Text>
+        </ManualStep>
 
-        <View className="mt-3">
-          <ManualStep
-            number={11}
-            text="Enter the amount under Other (kg) when the waste does not belong to the listed categories."
-          />
-        </View>
+        <ManualStep number={9}>
+          <Text>
+            Enter the weight under Other (kg) for waste that does not fit any of
+            the listed categories.
+          </Text>
+        </ManualStep>
 
-        <View className="mt-3">
-          <ManualStep
-            number={12}
-            text="Use Other — specify to describe the type of waste entered under the Other category."
-          />
-        </View>
+        <ManualStep number={10}>
+          <Text>
+            Use Other — specify to identify the additional type of waste, such
+            as wood, construction debris, or a mattress.
+          </Text>
+        </ManualStep>
+
+        <ManualStep number={11}>
+          <Text>
+            Review the category estimates before continuing. The total Waste
+            Collected is calculated automatically from the entered amounts.
+          </Text>
+        </ManualStep>
       </View>
-
-      {/* ================================================== */}
-      {/* DIVIDER */}
-      {/* ================================================== */}
 
       <View className="mx-5 mt-7 border-t border-slate-200" />
 
-      {/* ================================================== */}
-      {/* IMAGE 3 — BARANGAY RESPONSE                         */}
-      {/* ================================================== */}
-
+      {/* 3. BARANGAY RESPONSE */}
       <View className="mx-5 mt-6">
         <Text className="text-[13px] font-bold text-[#203D70]">
           3. Barangay Response
         </Text>
 
         <Text className="mt-1 text-[10px] leading-4 text-slate-500">
-          Record the personnel, response details, and final condition of the
-          canal after the clearing operation.
+          Record who performed the cleanup, when the response took place, and
+          what action was carried out.
         </Text>
       </View>
 
-      <View className="mx-5 mt-3">
-        <Pressable
-          onPress={() => openImage("barangayResponse")}
-          className="overflow-hidden rounded-2xl border border-slate-300 bg-white"
-        >
-          <View className="relative">
-            <Image
-              source={barangayResponseImage}
-              resizeMode="contain"
-              className="w-full h-[620px]"
-              style={{
-                backgroundColor: "#F8FAFC",
-              }}
-            />
-
-            <View className="absolute bottom-3 right-3 rounded-full bg-slate-900/80 px-3 py-2">
-              <Text className="text-[10px] font-semibold text-white">
-                🔍 Tap to enlarge
-              </Text>
-            </View>
-          </View>
-        </Pressable>
-      </View>
-
-      {/* IMAGE 3 INSTRUCTIONS */}
+      <Screenshot
+        image="barangayResponse"
+        source={barangayResponseImage}
+        title="Barangay Response"
+        description="Tap to zoom and review the cleanup response details."
+      />
 
       <View className="mt-4 px-4">
-        <ManualStep
-          number={13}
-          text="Enter the Assigned Personnel who carried out the cleanup."
-        />
+        <ManualStep number={12}>
+          <Text>Enter the Assigned Personnel who carried out the cleanup.</Text>
+        </ManualStep>
 
-        <View className="mt-3">
-          <ManualStep
-            number={14}
-            text="Select the Date / Time Responded to record when the cleanup response took place."
-          />
-        </View>
+        <ManualStep number={13}>
+          <Text>
+            Select Date / Time Responded to record when the cleanup response
+            took place.
+          </Text>
+        </ManualStep>
 
-        <View className="mt-3">
-          <ManualStep
-            number={15}
-            text="Describe the Action Taken to explain what was done to clear or address the canal."
-          />
-        </View>
+        <ManualStep number={14}>
+          <Text>
+            Describe the Action Taken, including the work performed to clear the
+            canal.
+          </Text>
+        </ManualStep>
 
-        <View className="mt-3">
-          <ManualStep
-            number={16}
-            text="Enter the total Waste Collected in kilograms."
-          />
-        </View>
+        <ManualStep number={15}>
+          <Text>
+            Check Waste Collected (auto total). This field is locked and
+            displays the total calculated from the waste composition entries.
+          </Text>
+        </ManualStep>
 
-        <View className="mt-3">
-          <ManualStep
-            number={17}
-            text="Select the Final Canal Condition: Clear, Partially Clear, or Still Obstructed."
-          />
-        </View>
-
-        <View className="mt-3">
-          <ManualStep
-            number={18}
-            text="Add any additional information in the Remarks field if necessary."
-          />
-        </View>
+        <ManualStep number={16}>
+          <Text>
+            Add any relevant details in Remarks. This field is optional.
+          </Text>
+        </ManualStep>
       </View>
 
-      {/* ================================================== */}
-      {/* TIP */}
-      {/* ================================================== */}
+      <View className="mx-5 mt-7 border-t border-slate-200" />
 
+      {/* 4. PHOTO EVIDENCE */}
+      <View className="mx-5 mt-6">
+        <Text className="text-[13px] font-bold text-[#203D70]">4. Photos</Text>
+
+        <Text className="mt-1 text-[10px] leading-4 text-slate-500">
+          Attach visual documentation of the canal before and after cleanup.
+          Additional evidence can be added when needed.
+        </Text>
+      </View>
+
+      <Screenshot
+        image="photos"
+        source={photosImage}
+        title="Photo Evidence"
+        description="Tap to zoom and review the before and after cleanup photo fields."
+      />
+
+      <View className="mt-4 px-4">
+        <ManualStep number={17}>
+          <Text>
+            Tap Add Photo under Before Cleanup to attach a photo showing the
+            canal before the clearing operation. This field is required.
+          </Text>
+        </ManualStep>
+
+        <ManualStep number={18}>
+          <Text>
+            Tap Add Photo under After Cleanup to attach a photo showing the
+            canal after the clearing operation. This field is required.
+          </Text>
+        </ManualStep>
+
+        <ManualStep number={19}>
+          <Text>
+            Use Additional Evidence to attach other relevant photos if needed.
+            This section is optional.
+          </Text>
+        </ManualStep>
+
+        <ManualStep number={20}>
+          <Text>
+            Select Save Draft to save the report and continue later, or Submit
+            to send the completed report.
+          </Text>
+        </ManualStep>
+      </View>
+
+      {/* TIP */}
       <View className="mx-5 mt-4">
         <ManualTip>
-          Complete all required fields marked with an asterisk (*). Review the
-          information entered in each section before continuing to the next step
-          of the report.
+          Before submitting, make sure the Purok and canal condition are
+          correct, the waste weights reflect the collected materials, and both
+          required cleanup photos are attached. Review the response details
+          before selecting Submit.
         </ManualTip>
       </View>
 
-      {/* ================================================== */}
-      {/* FULLSCREEN IMAGE VIEWER                             */}
-      {/* ================================================== */}
-
+      {/* FULLSCREEN IMAGE VIEWER */}
       <ImageViewing
         images={[
           {

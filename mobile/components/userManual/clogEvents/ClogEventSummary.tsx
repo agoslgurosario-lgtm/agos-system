@@ -85,25 +85,30 @@ export default function ClogEventSummary({ expanded, onPress }: Props) {
         {/* ================================================= */}
 
         <View className="mx-5 mt-4">
-          <ManualStep
-            number={1}
-            text="Total Events shows the total number of clog events recorded by the system."
-          />
+          <ManualStep number={1}>
+            <Text>
+              Total Events shows the total number of clog events recorded by the
+              system.
+            </Text>
+          </ManualStep>
+          <ManualStep number={2}>
+            <Text>
+              Detected shows the number of clog events that have been detected.
+            </Text>
+          </ManualStep>
 
-          <ManualStep
-            number={2}
-            text="Detected shows the number of clog events that have been detected."
-          />
-
-          <ManualStep
-            number={3}
-            text="Responded shows the number of detected events that have received a response."
-          />
-
-          <ManualStep
-            number={4}
-            text="Resolved shows the number of clog events that have been cleared or resolved."
-          />
+          <ManualStep number={3}>
+            <Text>
+              Responded shows the number of detected events that have received a
+              response.
+            </Text>
+          </ManualStep>
+          <ManualStep number={4}>
+            <Text>
+              Resolved shows the number of clog events that have been cleared or
+              resolved.
+            </Text>
+          </ManualStep>
         </View>
       </ManualSection>
 

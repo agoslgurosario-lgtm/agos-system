@@ -18,6 +18,7 @@ import CriticalNodes from "../components/userManual/map/CriticalNodes";
 import ObstructedCanals from "../components/userManual/map/ObstructedCanals";
 import WaterLevel from "../components/userManual/map/WaterLevel";
 import WasteComposition from "../components/userManual/map/WasteComposition";
+import SatelliteMapView from "../components/userManual/map/SatelliteMapView";
 
 // ALERTS
 import AlertAccess from "../components/userManual/alerts/AlertAccess";
@@ -42,8 +43,13 @@ import RecentReports from "../components/userManual/reports/RecentReports";
 import AddReport from "../components/userManual/reports/AddReport";
 import AddEditReport from "../components/userManual/reports/AddEditReport";
 //import WasteCollected from "../components/userManual/reports/WasteCollected";
-import UploadEvidence from "../components/userManual/reports/UploadEvidence";
-import SubmissionStatus from "../components/userManual/reports/SubmissionStatus";
+//import UploadEvidence from "../components/userManual/reports/UploadEvidence";
+//import SubmissionStatus from "../components/userManual/reports/SubmissionStatus";
+
+import SensorReadings from "../components/userManual/readings/SensorReadings";
+import SensorReadingSummary from "../components/userManual/readings/SensorReadingSummary";
+import SensorReadingDetails from "../components/userManual/readings/SensorReadingDetails";
+import SensorReadingFilters from "../components/userManual/readings/SensorReadingFilters";
 
 import Profile from "../components/userManual/profile/Profile";
 
@@ -53,6 +59,7 @@ import Profile from "../components/userManual/profile/Profile";
 
 const MAP_SECTIONS = [
   "Map Access",
+  "Satellite Map View",
   "Understanding the Map",
   "Zooming the Map",
   "Monitoring Points",
@@ -77,6 +84,13 @@ const ANALYTICS_SECTIONS = [
   "Classified Waste Type",
 ];
 
+const SENSOR_READING_SECTIONS = [
+  "Sensor Readings",
+  "Reading Summary Cards",
+  "Individual Sensor Readings",
+  "Reading Filters",
+];
+
 const CLOG_EVENT_SECTIONS = [
   "Clog Events",
   "Event Summary",
@@ -90,8 +104,8 @@ const REPORT_SECTIONS = [
   "Creating a New Report",
   "Add or Edit Report",
   //"Waste Collected",
-  "Upload Evidence",
-  "Submission Status",
+  //"Upload Evidence",
+  //"Submission Status",
 ];
 
 const PROFILE_SECTIONS = ["Profile"];
@@ -180,6 +194,14 @@ export default function UserManualScreen() {
     );
   }, [normalizedSearch]);
 
+  const sensorReadingMatches = useMemo(() => {
+    if (!normalizedSearch) return true;
+
+    return SENSOR_READING_SECTIONS.some((section) =>
+      section.toLowerCase().includes(normalizedSearch),
+    );
+  }, [normalizedSearch]);
+
   /* ================================================= */
   /* WHICH MAIN CATEGORY SHOULD SHOW?                 */
   /* ================================================= */
@@ -193,6 +215,10 @@ export default function UserManualScreen() {
   const shouldShowAnalytics =
     (selectedFilter === "All" || selectedFilter === "Analytics") &&
     analyticsMatches;
+
+  const shouldShowSensorReadings =
+    (selectedFilter === "All" || selectedFilter === "Readings") &&
+    sensorReadingMatches;
 
   const shouldShowClogEvents =
     (selectedFilter === "All" || selectedFilter === "Clog Events") &&
@@ -214,6 +240,7 @@ export default function UserManualScreen() {
     !mapMatches &&
     !alertMatches &&
     !analyticsMatches &&
+    !sensorReadingMatches &&
     !clogEventMatches &&
     !reportMatches &&
     !profileMatches;
@@ -287,15 +314,15 @@ export default function UserManualScreen() {
         {/* ACTIVE FILTER                                      */}
         {/* ================================================= */}
 
-        <View className="mb-4 px-5">
-          <View className="self-start rounded-full bg-[#E8EEF7] px-3 py-1.5">
-            <Text className="text-[9px] font-bold text-[#203D70]">
-              {selectedFilter === "All"
-                ? "ALL SECTIONS"
-                : selectedFilter.toUpperCase()}
-            </Text>
+        {selectedFilter !== "All" && (
+          <View className="mb-4 px-5">
+            <View className="self-start rounded-full bg-[#E8EEF7] px-3 py-1.5">
+              <Text className="text-[9px] font-bold text-[#203D70]">
+                {selectedFilter.toUpperCase()}
+              </Text>
+            </View>
           </View>
-        </View>
+        )}
 
         {/* ================================================= */}
         {/* NO RESULTS                                        */}
@@ -321,6 +348,11 @@ export default function UserManualScreen() {
             <MapAccess
               expanded={!!expandedSections["Map Access"]}
               onPress={() => toggleSection("Map Access")}
+            />
+
+            <SatelliteMapView
+              expanded={!!expandedSections["Satellite Map View"]}
+              onPress={() => toggleSection("Satellite Map View")}
             />
 
             <MapUnderstanding
@@ -469,6 +501,37 @@ export default function UserManualScreen() {
           </View>
         )}
 
+        {/* ================================================= */}
+        {/* SENSOR READINGS                                  */}
+        {/* ================================================= */}
+
+        {shouldShowSensorReadings && (
+          <View className="px-5">
+            <SectionTitle
+              title="Sensor Readings"
+              description="Learn how to view, filter, and understand sensor measurements."
+            />
+
+            <SensorReadings
+              expanded={!!expandedSections["Sensor Readings"]}
+              onPress={() => toggleSection("Sensor Readings")}
+            />
+            {/* Section 2: Reading Summary Cards */}
+            <SensorReadingSummary
+              expanded={!!expandedSections["Reading Summary Cards"]}
+              onPress={() => toggleSection("Reading Summary Cards")}
+            />
+            <SensorReadingDetails
+              expanded={!!expandedSections["Individual Sensor Readings"]}
+              onPress={() => toggleSection("Individual Sensor Readings")}
+            />
+            <SensorReadingFilters
+              expanded={!!expandedSections["Reading Filters"]}
+              onPress={() => toggleSection("Reading Filters")}
+            />
+          </View>
+        )}
+
         {/* REPORTS */}
 
         {shouldShowReports && (
@@ -503,15 +566,15 @@ export default function UserManualScreen() {
               onPress={() => toggleSection("Waste Collected")}
             /> */}
 
-            <UploadEvidence
+            {/* <UploadEvidence
               expanded={!!expandedSections["Upload Evidence"]}
               onPress={() => toggleSection("Upload Evidence")}
-            />
+            /> */}
 
-            <SubmissionStatus
+            {/* <SubmissionStatus
               expanded={!!expandedSections["Submission Status"]}
               onPress={() => toggleSection("Submission Status")}
-            />
+            /> */}
           </View>
         )}
 
