@@ -31,7 +31,7 @@ export default function StepDetail({
   return (
     <div className="flex-1 px-6 py-5">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-sm text-green-700 font-small">
+        <span className="text-sm text-green-700 font-medium">
           Step {stepIndex + 1} of {totalSteps}
         </span>
         <PreviousNextButtons
@@ -39,6 +39,7 @@ export default function StepDetail({
           onNext={onNext}
           hasPrevious={hasPrevious}
           hasNext={hasNext}
+          nextLabel="Next"
         />
       </div>
 

@@ -118,10 +118,15 @@ export default function TopicTabs({
                 buttonRefs.current[topic.id] = el
               }}
               onClick={() => handleTabClick(topic)}
-              className={`flex items-center gap-1.5 px-5 py-2 text-xs font-semibold rounded-full border-2 whitespace-nowrap transition-colors
-                ${isActive
-                  ? "bg-emerald-50 border-blue-900 text-blue-900"
-                  : "bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700"}`}
+              className={`flex items-center gap-1.5 shrink-0 px-3 py-2 text-xs font-medium rounded-full border
+              whitespace-nowrap select-none cursor-pointer
+              active:scale-95
+              focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1
+              ${
+                isActive
+                  ? "bg-blue-900 text-white shadow-sm hover:bg-[#1565BC]"
+                  : "bg-gray-50 border-gray-300 text-slate-700 hover:bg-blue-200 hover:border-gray-300 hover:text-gray-950"
+              }`}
             >
               {topic.label}
               {isDropdownTopic && (
