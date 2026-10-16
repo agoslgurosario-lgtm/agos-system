@@ -32,7 +32,7 @@ export default function StepsList({
   onSelect,
 }: StepsListProps) {
   return (
-    <div className="w-64 shrink-0 border-r border-gray-100 px-5 py-5">
+    <div data-tour="steps-list" className="w-64 shrink-0 border-r border-gray-100 px-5 py-5">
       <h3 className="font-semibold text-gray-900 mb-1">{title}</h3>
       <p className="text-xs text-gray-500 mb-4">{description}</p>
       <ol className="space-y-1">

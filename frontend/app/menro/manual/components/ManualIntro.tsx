@@ -1,4 +1,8 @@
-export default function ManualIntro() {
+interface ManualIntroProps {
+  onStartTour?: () => void
+}
+
+export default function ManualIntro({ onStartTour }: ManualIntroProps) {
   return (
     <div className="bg-white px-6 pt-5 pb-4 flex items-center gap-3 border-b border-gray-100">
       <div className="w-10 h-10 rounded-lg bg-blue-900 flex items-center justify-center text-white shrink-0">
@@ -13,6 +17,14 @@ export default function ManualIntro() {
           This manual covers the step-by-step guide for using the AGOS system
         </p>
       </div>
+      {onStartTour && (
+        <button
+          onClick={onStartTour}
+          className="ml-auto text-xs font-medium text-green-700 border border-green-700 rounded-lg px-3 py-1.5 hover:bg-green-50"
+        >
+          Take a tour
+        </button>
+      )}
     </div>
   )
 }
