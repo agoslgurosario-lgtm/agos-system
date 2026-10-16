@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import Alert, AlertRead
 from apps.sensor_nodes.services import hotspot_at
+from apps.sensor_nodes.models import NodeAssignmentHistory
 
 
 class AlertSerializer(serializers.ModelSerializer):
@@ -19,13 +20,25 @@ class AlertSerializer(serializers.ModelSerializer):
     def get_node_name(self, obj):
         return obj.node.node_name if obj.node else None
 
+    def _history(self, node):
+        cache = self.context.setdefault('_hist', {})
+        if node.pk not in cache:
+            cache[node.pk] = list(
+                NodeAssignmentHistory.objects.filter(node=node).order_by('-started_at')
+            )
+        return cache[node.pk]
+
     def get_barangay_name(self, obj):
         if obj.report:
             return obj.report.barangay.barangay_name
         if not obj.node:
             return None
-        _, _, _, barangay_name = hotspot_at(obj.node, obj.timestamp)
-        return barangay_name or None
+        ts = obj.timestamp
+        for row in self._history(obj.node):
+            if row.started_at <= ts and (row.ended_at is None or row.ended_at > ts):
+                return row.barangay_name or None
+        b = obj.node.barangay
+        return b.barangay_name if b else None
     
     def get_is_read(self, obj):
         ids = self.context.get('_read_ids')
