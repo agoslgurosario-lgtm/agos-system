@@ -34,7 +34,9 @@ class ClogEventListView(generics.ListCreateAPIView):
         from django.utils import timezone
 
         month_param = self.request.query_params.get('month')
-        qs = ClogEvent.objects.select_related('node', 'node__barangay', 'node__hotspot')
+        qs = ClogEvent.objects.select_related(
+            'node__barangay', 'node__hotspot', 'classification__reading'
+        )
 
         if month_param == 'All':
             pass

@@ -17,7 +17,10 @@ class AlertListView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        qs = Alert.objects.select_related('node', 'event', 'report__barangay').order_by('-timestamp')
+        qs = Alert.objects.select_related(
+            'node__barangay', 'node__hotspot', 'report__barangay',
+            'health_log', 'event__classification__reading',
+        ).order_by('-timestamp')
         
         if user.user_role == 'Barangay':
             qs = qs.filter(node__barangay=user.barangay)
