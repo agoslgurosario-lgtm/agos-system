@@ -29,7 +29,7 @@ class SensorNodeListView(generics.ListCreateAPIView):
         return [IsAdmin()]
 
     def get_queryset(self):
-        qs = SensorNode.objects.select_related('barangay', 'hotspot')
+        qs = SensorNode.objects.select_related('barangay__rainfall_condition', 'hotspot')
 
         if self.request.user.user_role == 'Barangay':
             qs = qs.filter(barangay=self.request.user.barangay)

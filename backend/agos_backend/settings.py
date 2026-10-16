@@ -121,6 +121,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'axes.middleware.AxesMiddleware',
+    'agos_backend.timing.TimingMiddleware',
 ]
 
 AUTHENTICATION_BACKENDS = [

@@ -1,4 +1,5 @@
 import re
+import time
 from rest_framework import serializers
 from .models import SensorNode, SystemHealthLog, MaintenanceLog, NodeAssignmentHistory
 from apps.barangay.models import Barangay
@@ -13,28 +14,25 @@ CODE_PATTERN = re.compile(r'^[A-Za-z0-9\-]+$')
 ONLINE_MARGIN_SECONDS = 120
 
 
-def get_online_window_seconds(node, recent_readings):
-    """
-    How long after its last reading a node still counts as online.
-    = 2 x (current rainfall-tier interval, or the node's last observed
-    gap between readings if that was longer) + a small margin.
-    """
-    from django.db.models import Max
+_THR_CACHE = {'at': 0.0, 'rows': {}, 'longest': 300}
+
+def _load_intervals():
     from apps.rainfall.models import AlertThreshold
+    now = time.monotonic()
+    if now - _THR_CACHE['at'] > 60:
+        rows = dict(AlertThreshold.objects.values_list('condition', 'reading_interval_seconds'))
+        _THR_CACHE.update(at=now, rows=rows, longest=max(rows.values(), default=300))
+    return _THR_CACHE['rows'], _THR_CACHE['longest']
+
+
+def get_online_window_seconds(node, recent_readings):
     from apps.rainfall.services import get_effective_condition
 
     barangay = node.barangay
     condition = get_effective_condition(barangay) if barangay else 'Unknown'
 
-    tier_interval = (
-        AlertThreshold.objects.filter(condition=condition)
-        .values_list('reading_interval_seconds', flat=True)
-        .first()
-    ) or 300
-    longest = (
-        AlertThreshold.objects.aggregate(m=Max('reading_interval_seconds'))['m']
-        or tier_interval
-    )
+    rows, longest = _load_intervals()
+    tier_interval = rows.get(condition) or 300
 
     interval = tier_interval
     if len(recent_readings) >= 2:
