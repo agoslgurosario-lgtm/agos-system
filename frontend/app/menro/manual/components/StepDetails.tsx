@@ -21,6 +21,7 @@ interface StepDetailProps {
   onNext: () => void
   hasPrevious: boolean
   hasNext: boolean
+  nextLabel?: string
 }
 
 export default function StepDetail({
@@ -35,6 +36,7 @@ export default function StepDetail({
   onNext,
   hasPrevious,
   hasNext,
+  nextLabel,
 }: StepDetailProps) {
   const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null)
 
@@ -50,47 +52,52 @@ export default function StepDetail({
           onNext={onNext}
           hasPrevious={hasPrevious}
           hasNext={hasNext}
+          nextLabel={nextLabel}
         />
       </div>
 
-      <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
-      <p className="text-xs text-gray-500 mt-1 mb-4 whitespace-pre-line">{description}</p>
+      <div data-tour="step-content">
+        <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
+        <p className="text-xs text-gray-500 mt-1 mb-4 whitespace-pre-line">{description}</p>
+      </div>
 
       {/* Main Step Image */}
       {imageUrl ? (
-        <div className="group mb-5 flex flex-col items-center">
+        <div className="mb-5 flex justify-center">
           <button
             type="button"
+            data-tour="step-image"
             onClick={() => setLightboxImage({ src: imageUrl, alt: title })}
-            className="inline-block cursor-pointer"
+            className="group relative inline-block cursor-pointer overflow-hidden rounded-lg border border-gray-200"
           >
-            <img
-              src={imageUrl}
-              alt={title}
-              className="block max-w-full h-auto max-h-[400px] rounded-lg border border-gray-200 shadow-md transition-shadow duration-200 group-hover:shadow-[0_12px_32px_rgba(0,0,0,0.35)]"
-            />
+            <img src={imageUrl} alt={title} className="block bg-gray-50" />
+
+            {/* Gray overlay */}
+            <span className="pointer-events-none absolute inset-0 bg-gray-900/40 opacity-0 transition-opacity group-hover:opacity-100" />
+
+            {/* Click to expand label */}
+            <span className="absolute bottom-2 right-2 flex items-center gap-1.5 rounded-md bg-black/60 text-white text-xs px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-3 w-3"
+              >
+                <polyline points="15 3 21 3 21 9" />
+                <polyline points="9 21 3 21 3 15" />
+                <line x1="21" y1="3" x2="14" y2="10" />
+                <line x1="3" y1="21" x2="10" y2="14" />
+              </svg>
+              Click to expand
+            </span>
           </button>
-          <span className="mt-2 flex items-center gap-1 self-end rounded-md bg-black/70 px-2 py-1 text-[11px] text-white opacity-0 transition-opacity group-hover:opacity-100">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-3 w-3"
-            >
-              <polyline points="15 3 21 3 21 9" />
-              <polyline points="9 21 3 21 3 15" />
-              <line x1="21" y1="3" x2="14" y2="10" />
-              <line x1="3" y1="21" x2="10" y2="14" />
-            </svg>
-            Click to expand
-          </span>
         </div>
       ) : (
-        <div className="bg-gray-100 rounded-lg h-64 flex items-center justify-center text-gray-400 text-sm mb-5">
+        <div data-tour="step-image" className="bg-gray-100 rounded-lg h-64 flex items-center justify-center text-gray-400 text-sm mb-5">
           Screenshot placeholder
         </div>
       )}
@@ -106,7 +113,7 @@ export default function StepDetail({
           </p>
 
           {section.imageUrl ? (
-            <div className="group mb-5 flex flex-col items-center">
+            <div className="mb-5 flex justify-center">
               <button
                 type="button"
                 onClick={() =>
@@ -115,32 +122,33 @@ export default function StepDetail({
                     alt: section.label || "Section image",
                   })
                 }
-                className="inline-block cursor-pointer"
+                className="group relative inline-block cursor-pointer overflow-hidden rounded-lg border border-gray-200"
               >
                 <img
                   src={section.imageUrl}
                   alt={section.label || "Section image"}
-                  className="block max-w-full h-auto max-h-[350px] rounded-lg border border-gray-200 shadow-md transition-shadow duration-200 group-hover:shadow-[0_12px_32px_rgba(0,0,0,0.35)]"
+                  className="block"
                 />
+                <span className="pointer-events-none absolute inset-0 bg-gray-900/40 opacity-0 transition-opacity group-hover:opacity-100" />
+                <span className="pointer-events-none absolute bottom-2 right-2 flex items-center gap-1 rounded-md bg-black/70 px-2 py-1 text-[11px] text-white opacity-0 transition-opacity group-hover:opacity-100">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-3 w-3"
+                  >
+                    <polyline points="15 3 21 3 21 9" />
+                    <polyline points="9 21 3 21 3 15" />
+                    <line x1="21" y1="3" x2="14" y2="10" />
+                    <line x1="3" y1="21" x2="10" y2="14" />
+                  </svg>
+                  Click to expand
+                </span>
               </button>
-              <span className="mt-2 flex items-center gap-1 self-end rounded-md bg-black/70 px-2 py-1 text-[11px] text-white opacity-0 transition-opacity group-hover:opacity-100">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-3 w-3"
-                >
-                  <polyline points="15 3 21 3 21 9" />
-                  <polyline points="9 21 3 21 3 15" />
-                  <line x1="21" y1="3" x2="14" y2="10" />
-                  <line x1="3" y1="21" x2="10" y2="14" />
-                </svg>
-                Click to expand
-              </span>
             </div>
           ) : (
             <div className="bg-gray-100 rounded-lg h-64 flex items-center justify-center text-gray-400 text-sm mb-5">
@@ -150,8 +158,10 @@ export default function StepDetail({
         </div>
       ))}
 
-      <h3 className="text-sm font-semibold text-gray-900 mb-1">Why is this important?</h3>
-      <p className="text-xs text-gray-500 mb-4">{whyItMatters}</p>
+      <div data-tour="step-why">
+        <h3 className="text-sm font-semibold text-gray-900 mb-1">Why is this important?</h3>
+        <p className="text-xs text-gray-500 mb-4">{whyItMatters}</p>
+      </div>
     </div>
 
     {/* Lightbox */}
