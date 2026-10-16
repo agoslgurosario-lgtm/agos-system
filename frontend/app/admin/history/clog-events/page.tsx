@@ -232,7 +232,7 @@ export default function ClogEvents() {
 
   useEffect(() => { refetchAll() }, [selectedMonth])
 
-  usePolling(refetchAll, 30000)
+  usePolling(refetchAll, 120000)
 
   const printRows = filtered.map(c => [
     c.event_id,

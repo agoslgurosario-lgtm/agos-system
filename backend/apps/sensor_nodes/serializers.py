@@ -152,10 +152,18 @@ class SensorNodeSerializer(serializers.ModelSerializer):
         }
 
     def _latest(self, obj):
-        return SensorReading.objects.filter(node=obj).order_by('-timestamp').first()
+        if not hasattr(obj, '_latest_reading_cache'):
+            obj._latest_reading_cache = (
+                SensorReading.objects.filter(node=obj).order_by('-timestamp').first()
+            )
+        return obj._latest_reading_cache
 
     def _latest_health(self, obj):
-        return SystemHealthLog.objects.filter(node=obj).order_by('-checked_at').first()
+        if not hasattr(obj, '_latest_health_cache'):
+            obj._latest_health_cache = (
+                SystemHealthLog.objects.filter(node=obj).order_by('-checked_at').first()
+            )
+        return obj._latest_health_cache
 
     def get_barangay_details(self, obj):
         barangay = obj.barangay

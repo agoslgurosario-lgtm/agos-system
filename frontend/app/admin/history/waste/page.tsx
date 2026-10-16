@@ -158,7 +158,7 @@ export default function Waste() {
 
   useEffect(() => { refetchAll() }, [selectedMonth])
 
-  usePolling(refetchAll, 30000)
+  usePolling(refetchAll, 120000)
 
   const printRows = filtered.map(c => [
     c.classification_id,

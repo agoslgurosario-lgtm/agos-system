@@ -400,7 +400,7 @@ export default function Dashboard() {
     refetchAll()
   }, [])
 
-  usePolling(refetchAll, 30000)
+  usePolling(refetchAll, 120000)
 
   useWebSocket({
     path: "/ws/alerts/",

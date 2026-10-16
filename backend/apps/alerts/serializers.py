@@ -28,8 +28,12 @@ class AlertSerializer(serializers.ModelSerializer):
         return barangay_name or None
     
     def get_is_read(self, obj):
-        user = self.context['request'].user
-        return obj.reads.filter(user=user).exists()
+        ids = self.context.get('_read_ids')
+        if ids is None:
+            user = self.context['request'].user
+            ids = set(AlertRead.objects.filter(user=user).values_list('alert_id', flat=True))
+            self.context['_read_ids'] = ids
+        return obj.alert_id in ids
 
     def get_alert_context(self, obj):
         """

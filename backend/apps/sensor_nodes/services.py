@@ -191,7 +191,7 @@ def hotspot_at(node, timestamp):
         node=node, started_at__lte=timestamp
     ).filter(
         Q(ended_at__isnull=True) | Q(ended_at__gt=timestamp)
-    ).order_by('-started_at').first()
+    ).select_related('hotspot', 'barangay').order_by('-started_at').first()
 
     if row:
         return row.hotspot, row.hotspot_name, row.barangay, row.barangay_name

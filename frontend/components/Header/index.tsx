@@ -206,7 +206,7 @@ export default function Header() {
     }
 
     sync()
-    const interval = setInterval(sync, 30000)
+    const interval = setInterval(sync, 120000)
     document.addEventListener('visibilitychange', onVisible)
     return () => {
       clearInterval(interval)
