@@ -212,20 +212,25 @@ export default function AlertList({ expanded, onPress }: Props) {
             How to View an Alert
           </Text>
 
-          <ManualStep
-            number={1}
-            text="Review the alert type and severity displayed on the alert card."
-          />
+          <ManualStep number={1}>
+            <Text>
+              Review the alert type and severity displayed on the alert card.
+            </Text>
+          </ManualStep>
 
-          <ManualStep
-            number={2}
-            text="Check the location, waste type, and time information shown on the card."
-          />
+          <ManualStep number={2}>
+            <Text>
+              Check the location, waste type, and time information shown on the
+              card.
+            </Text>
+          </ManualStep>
 
-          <ManualStep
-            number={3}
-            text="Tap an alert card to view its detailed information and current monitoring status."
-          />
+          <ManualStep number={3}>
+            <Text>
+              Tap an alert card to view its detailed information and current
+              monitoring status.s
+            </Text>
+          </ManualStep>
 
           {/* ============================================== */}
           {/* TIP */}

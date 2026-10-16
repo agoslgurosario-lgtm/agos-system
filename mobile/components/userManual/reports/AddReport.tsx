@@ -15,7 +15,7 @@ type Props = {
 export default function AddReport({ expanded, onPress }: Props) {
   const [isImageVisible, setIsImageVisible] = useState(false);
 
-  const addReportImage = require("../../../assets/images/userManual/reports/add-report.jpg");
+  const addReportImage = require("../../../assets/images/userManual/reports/add-report.png");
 
   return (
     <ManualSection
@@ -26,10 +26,7 @@ export default function AddReport({ expanded, onPress }: Props) {
       expanded={expanded}
       onPress={onPress}
     >
-      {/* ================================= */}
       {/* SCREENSHOT */}
-      {/* ================================= */}
-
       <View className="mx-5 mt-5">
         <Pressable
           onPress={() => setIsImageVisible(true)}
@@ -39,7 +36,7 @@ export default function AddReport({ expanded, onPress }: Props) {
             <Image
               source={addReportImage}
               resizeMode="contain"
-              className="w-full h-[230px]"
+              className="h-[230px] w-full"
               style={{
                 backgroundColor: "#F8FAFC",
               }}
@@ -64,35 +61,28 @@ export default function AddReport({ expanded, onPress }: Props) {
         </Pressable>
       </View>
 
-      {/* ================================= */}
       {/* INSTRUCTIONS */}
-      {/* ================================= */}
-
       <View className="mt-4 px-4">
-        <ManualStep
-          number={1}
-          text="Tap the + Add Report button on the Reports page."
-        />
+        <ManualStep number={1}>
+          <Text>Tap the + Add Report button on the Reports page.</Text>
+        </ManualStep>
 
-        <View className="mt-1">
-          <ManualStep
-            number={2}
-            text="The Add Report form will open and allow you to enter information about the clearing operation."
-          />
-        </View>
+        <ManualStep number={2}>
+          <Text>
+            The Add Report form will open and allow you to enter information
+            about the clearing operation.
+          </Text>
+        </ManualStep>
 
-        <View className="mt-1">
-          <ManualStep
-            number={3}
-            text="Complete the required information before saving or submitting the report."
-          />
-        </View>
+        <ManualStep number={3}>
+          <Text>
+            Complete the required information before saving or submitting the
+            report.
+          </Text>
+        </ManualStep>
       </View>
 
-      {/* ================================= */}
       {/* TIP */}
-      {/* ================================= */}
-
       <View className="mx-5 mt-3">
         <ManualTip>
           Make sure the information entered in the report is complete and
@@ -100,10 +90,7 @@ export default function AddReport({ expanded, onPress }: Props) {
         </ManualTip>
       </View>
 
-      {/* ================================= */}
       {/* FULLSCREEN IMAGE VIEWER */}
-      {/* ================================= */}
-
       <ImageViewing
         images={[
           {

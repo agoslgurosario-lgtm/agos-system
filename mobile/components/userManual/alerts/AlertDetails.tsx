@@ -111,30 +111,39 @@ export default function AlertDetails({ expanded, onPress }: Props) {
             Details You Can Review
           </Text>
 
-          <ManualStep
-            number={1}
-            text="Check the alert title and severity to understand the urgency of the detected event."
-          />
+          <ManualStep number={1}>
+            <Text>
+              Check the alert title and severity to understand the urgency of
+              the detected event.
+            </Text>
+          </ManualStep>
 
-          <ManualStep
-            number={2}
-            text="Review the Node and Barangay to identify where the event was detected."
-          />
+          <ManualStep number={2}>
+            <Text>
+              Review the Node and Barangay to identify where the event was
+              detected.
+            </Text>
+          </ManualStep>
 
-          <ManualStep
-            number={3}
-            text="Check the detection date and time to determine when the event was recorded."
-          />
+          <ManualStep number={3}>
+            <Text>
+              Check the detection date and time to determine when the event was
+              recorded.
+            </Text>
+          </ManualStep>
+          <ManualStep number={4}>
+            <Text>
+              Review the water level, flow rate, and clog percentage shown under
+              the alert details.
+            </Text>
+          </ManualStep>
 
-          <ManualStep
-            number={4}
-            text="Review the water level, flow rate, and clog percentage shown under the alert details."
-          />
-
-          <ManualStep
-            number={5}
-            text="Review the waste composition and confidence information when available."
-          />
+          <ManualStep number={5}>
+            <Text>
+              Review the waste composition and confidence information when
+              available.
+            </Text>
+          </ManualStep>
         </View>
 
         {/* ================================================= */}

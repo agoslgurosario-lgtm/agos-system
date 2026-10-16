@@ -66,30 +66,38 @@ export default function Profile({ expanded, onPress }: Props) {
       {/* ================================= */}
 
       <View className="mt-4 px-4">
-        <ManualStep
-          number={1}
-          text="From the bottom navigation bar, tap the Profile tab."
-        />
+        <ManualStep number={1}>
+          <Text>
+            From the bottom navigation bar, tap the Profile tab to access your
+            account information and settings.
+          </Text>
+        </ManualStep>
+        <ManualStep number={2}>
+          <Text>
+            The Profile page will open and display the user's account
+            information.
+          </Text>
+        </ManualStep>
+        <ManualStep number={3}>
+          <Text>
+            Review the displayed account information, including the user's name,
+            position, email address, role, assigned barangay, and account
+            status.
+          </Text>
+        </ManualStep>
 
-        <ManualStep
-          number={2}
-          text="The Profile page will open and display the user's account information."
-        />
+        <ManualStep number={4}>
+          <Text>
+            Tap User Manual to access the system's user manual and instructions.
+          </Text>
+        </ManualStep>
 
-        <ManualStep
-          number={3}
-          text="Review the displayed name, position, email address, role, assigned barangay, and account status."
-        />
-
-        <ManualStep
-          number={4}
-          text="Tap User Manual to access the system's user manual and instructions."
-        />
-
-        <ManualStep
-          number={5}
-          text="Tap Log Out when you want to securely sign out of the account."
-        />
+        <ManualStep number={5}>
+          <Text>
+            Tap Log Out to securely sign out of the account when finished using
+            the system, especially on shared devices.
+          </Text>
+        </ManualStep>
       </View>
 
       {/* ================================= */}

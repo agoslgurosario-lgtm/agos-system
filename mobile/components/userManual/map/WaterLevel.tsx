@@ -19,7 +19,7 @@ type Props = {
 export default function WaterLevel({ expanded, onPress }: Props) {
   return (
     <ManualSection
-      number={7}
+      number={8}
       title="AVERAGE WATER LEVEL"
       description="Displays the average water level recorded across monitoring nodes in your barangay."
       icon={<Waves size={18} color="#203D70" />}
@@ -149,8 +149,7 @@ export default function WaterLevel({ expanded, onPress }: Props) {
             </View>
 
             <Text className="flex-1 text-[10px] leading-4 text-slate-600">
-              {`Check the average water level for a quick overview of conditions
-              across your barangay's monitored locations.`}
+              {`Check the average water level for a quick overview of conditions across your barangay's monitored locations.`}
             </Text>
           </View>
 

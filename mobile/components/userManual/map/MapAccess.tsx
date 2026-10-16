@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { View, Image, Text, Pressable } from "react-native";
 import ImageViewing from "react-native-image-viewing";
-import { Map } from "lucide-react-native";
+import { Map, ZoomIn } from "lucide-react-native";
 
 import ManualSection from "../common/ManualSection";
 import ManualStep from "../common/ManualStep";
@@ -14,7 +14,7 @@ type Props = {
 export default function MapAccess({ expanded, onPress }: Props) {
   const [isImageVisible, setIsImageVisible] = useState(false);
 
-  const mapImage = require("../../../assets/images/userManual/map/localized-canal-map.jpg");
+  const mapImage = require("../../../assets/images/userManual/map/localized-canal-map.png");
 
   return (
     <>
@@ -57,20 +57,26 @@ export default function MapAccess({ expanded, onPress }: Props) {
               Follow these steps
             </Text>
 
-            <ManualStep
-              number={1}
-              text="Open the AGOS application on your mobile device and log in using your registered account."
-            />
+            <ManualStep number={1}>
+              <Text>
+                Open the AGOS application on your mobile device and log in using
+                your registered account.
+              </Text>
+            </ManualStep>
 
-            <ManualStep
-              number={2}
-              text="From the bottom navigation menu, tap the Map icon to open the mapping module."
-            />
+            <ManualStep number={2}>
+              <Text>
+                From the bottom navigation menu, tap the Map icon to open the
+                mapping module.
+              </Text>
+            </ManualStep>
 
-            <ManualStep
-              number={3}
-              text="The Localized Canal Map will be displayed, showing the monitored canal areas and their corresponding locations."
-            />
+            <ManualStep number={3}>
+              <Text>
+                The Localized Canal Map will be displayed, showing the monitored
+                canal areas and their corresponding locations.
+              </Text>
+            </ManualStep>
           </View>
 
           {/* ============================= */}
@@ -94,43 +100,50 @@ export default function MapAccess({ expanded, onPress }: Props) {
             </View>
           </View>
 
-          {/* ============================= */}
+          {/* =============================== */}
           {/* MAP IMAGE */}
-          {/* ============================= */}
-          <Pressable
-            onPress={() => setIsImageVisible(true)}
-            className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
-          >
-            <View className="relative">
-              <Image
-                source={mapImage}
-                style={{
-                  width: "100%",
-                  height: 280,
-                  backgroundColor: "#F8FAFC",
-                }}
-                resizeMode="contain"
-              />
+          {/* =============================== */}
+          <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            {/* Screenshot Header */}
+            <View className="flex-row items-center justify-between border-b border-slate-100 px-4 py-3">
+              <Text className="text-[11px] font-bold text-slate-700">
+                Localized Canal Map
+              </Text>
 
-              {/* Zoom Badge */}
-              <View className="absolute bottom-3 right-3 rounded-full bg-slate-900/80 px-3 py-2">
-                <Text className="text-[10px] font-semibold text-white">
-                  🔍 Tap to enlarge
+              <View className="flex-row items-center rounded-full bg-blue-50 px-2.5 py-1">
+                <ZoomIn size={10} color="#2563EB" />
+                <Text className="ml-1 text-[8px] font-bold text-blue-600">
+                  TAP TO ENLARGE
                 </Text>
               </View>
             </View>
 
-            {/* IMAGE CAPTION */}
-            <View className="border-t border-slate-100 px-4 py-3">
-              <Text className="text-center text-xs font-semibold text-slate-700">
-                Localized Canal Map
-              </Text>
+            {/* Clickable Image */}
+            <Pressable
+              onPress={() => setIsImageVisible(true)}
+              className="bg-slate-50"
+            >
+              <Image
+                source={mapImage}
+                resizeMode="contain"
+                style={{
+                  width: "100%",
+                  height: 500,
+                  backgroundColor: "#F8FAFC",
+                }}
+              />
 
-              <Text className="mt-1 text-center text-[10px] text-slate-400">
-                Tap to zoom and explore the map
-              </Text>
-            </View>
-          </Pressable>
+              {/* Tap Overlay
+              <View className="absolute bottom-3 left-0 right-0 items-center">
+                <View className="flex-row items-center rounded-full bg-black/60 px-3 py-2">
+                  <ZoomIn size={13} color="#FFFFFF" />
+                  <Text className="ml-1.5 text-[9px] font-semibold text-white">
+                    Tap image to enlarge
+                  </Text>
+                </View>
+              </View> */}
+            </Pressable>
+          </View>
 
           {/* ============================= */}
           {/* USER TIP */}

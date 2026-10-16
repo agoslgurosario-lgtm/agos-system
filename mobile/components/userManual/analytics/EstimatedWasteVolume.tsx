@@ -164,10 +164,12 @@ export default function EstimatedWasteVolume({ expanded, onPress }: Props) {
           {/* ================================================= */}
 
           <View className="mt-5">
-            <ManualStep
-              number={1}
-              text="Compare the estimated amount of Biodegradable, Recyclable, Residual, and Special Waste."
-            />
+            <ManualStep number={1}>
+              <Text>
+                Compare the estimated amount of Biodegradable, Recyclable,
+                Residual, and Special Waste.
+              </Text>
+            </ManualStep>
           </View>
         </View>
       </ManualSection>

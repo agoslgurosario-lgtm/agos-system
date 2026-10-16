@@ -36,7 +36,7 @@ export default function ReportsAccess({ expanded, onPress }: Props) {
             <Image
               source={reportsImage}
               resizeMode="contain"
-              className="w-full h-[430px]"
+              className="h-[430px] w-full"
               style={{
                 backgroundColor: "#F8FAFC",
               }}
@@ -63,20 +63,26 @@ export default function ReportsAccess({ expanded, onPress }: Props) {
 
       {/* INSTRUCTIONS */}
       <View className="mt-4 px-4">
-        <ManualStep
-          number={1}
-          text="Tap the Reports tab from the bottom navigation menu to open the Canal Monitoring Reports page."
-        />
+        <ManualStep number={1}>
+          <Text>
+            Tap the Reports tab from the bottom navigation menu to open the
+            Canal Monitoring Reports page.
+          </Text>
+        </ManualStep>
 
-        <ManualStep
-          number={2}
-          text="Review the summary cards to see the total reports, submitted reports, draft reports, and reports pending review."
-        />
+        <ManualStep number={2}>
+          <Text>
+            Review the summary cards to see the total reports, submitted
+            reports, draft reports, and reports pending review.
+          </Text>
+        </ManualStep>
 
-        <ManualStep
-          number={3}
-          text="Review the Recent Reports section to see the reports that have already been created."
-        />
+        <ManualStep number={3}>
+          <Text>
+            Review the Recent Reports section to see the reports that have
+            already been created.
+          </Text>
+        </ManualStep>
       </View>
 
       {/* TIP */}

@@ -6,6 +6,7 @@ const filters = [
   "Map",
   "Alerts",
   "Analytics",
+  "Readings",
   "Clog Events",
   "Reports",
   "Profile",

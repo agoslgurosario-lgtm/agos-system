@@ -7,6 +7,7 @@ import {
   SearchCheck,
   ClipboardCheck,
   Trash2,
+  ZoomIn,
 } from "lucide-react-native";
 import ImageViewing from "react-native-image-viewing";
 
@@ -20,12 +21,12 @@ type Props = {
 export default function WasteComposition({ expanded, onPress }: Props) {
   const [isImageVisible, setIsImageVisible] = useState(false);
 
-  const wasteCompositionImage = require("../../../assets/images/userManual/map/waste-composition.jpg");
+  const wasteCompositionImage = require("../../../assets/images/userManual/map/waste-composition.png");
 
   return (
     <>
       <ManualSection
-        number={8}
+        number={9}
         title="WASTE COMPOSITION"
         description="Displays the distribution of waste types recorded within your barangay."
         icon={<Trash2 size={18} color="#203D70" />}
@@ -45,25 +46,38 @@ export default function WasteComposition({ expanded, onPress }: Props) {
             {/* IMAGE PREVIEW */}
             {/* =============================== */}
 
-            <Pressable
-              onPress={() => setIsImageVisible(true)}
-              className="overflow-hidden rounded-xl bg-slate-50"
-            >
-              <View className="relative">
-                <Image
-                  source={wasteCompositionImage}
-                  className="h-[180px] w-full"
-                  resizeMode="contain"
-                />
+            {/* =============================== */}
+            {/* MAP IMAGE */}
+            {/* =============================== */}
+            <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              <View className="flex-row items-center justify-between border-b border-slate-100 px-4 py-3">
+                <Text className="text-[11px] font-bold text-slate-700">
+                  Waste Composition Example
+                </Text>
 
-                {/* Zoom Badge */}
-                <View className="absolute bottom-2 right-2 rounded-full bg-slate-900/80 px-3 py-2">
-                  <Text className="text-[10px] font-semibold text-white">
-                    🔍 Tap to enlarge
+                <View className="flex-row items-center rounded-full bg-blue-50 px-2.5 py-1">
+                  <ZoomIn size={10} color="#2563EB" />
+                  <Text className="ml-1 text-[8px] font-bold text-blue-600">
+                    TAP TO ENLARGE
                   </Text>
                 </View>
               </View>
-            </Pressable>
+
+              <Pressable
+                onPress={() => setIsImageVisible(true)}
+                className="bg-slate-50"
+              >
+                <Image
+                  source={wasteCompositionImage}
+                  resizeMode="contain"
+                  style={{
+                    width: "100%",
+                    height: 500,
+                    backgroundColor: "#F8FAFC",
+                  }}
+                />
+              </Pressable>
+            </View>
 
             {/* =============================== */}
             {/* IMAGE CAPTION */}

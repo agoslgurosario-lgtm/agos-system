@@ -16,7 +16,7 @@ export default function AlertAccess({ expanded, onPress }: Props) {
   const [isImageVisible, setIsImageVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState(0);
 
-  const alertAccessImage = require("../../../assets/images/userManual/alerts/alert-access.jpg");
+  const alertAccessImage = require("../../../assets/images/userManual/alerts/alert-access.png");
 
   const alertScreenImage = require("../../../assets/images/userManual/alerts/alert-screen.png");
 
@@ -49,10 +49,12 @@ export default function AlertAccess({ expanded, onPress }: Props) {
           {/* STEP 1 */}
           {/* ================================================= */}
 
-          <ManualStep
-            number={1}
-            text="Open the application and on the top right corner is where the notification bell is located."
-          />
+          <ManualStep number={1}>
+            <Text>
+              Open the application and on the top right corner is where the
+              notification bell is located.
+            </Text>
+          </ManualStep>
 
           {/* ================================================= */}
           {/* MAP SCREENSHOT */}
@@ -61,43 +63,54 @@ export default function AlertAccess({ expanded, onPress }: Props) {
           <View className="mb-4 mt-1 overflow-hidden rounded-2xl border border-slate-300 bg-white">
             <View className="border-b border-slate-100 px-3 py-2">
               <Text className="text-center text-[10px] font-bold text-slate-700">
-                Localized Canal Map
+                How to Access Alerts
               </Text>
             </View>
 
-            <Pressable onPress={() => openImage(0)} className="bg-slate-50">
-              <View className="relative">
+            {/* =============================== */}
+            {/* MAP IMAGE */}
+            {/* =============================== */}
+            <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              <View className="flex-row items-center justify-between border-b border-slate-100 px-4 py-3">
+                <Text className="text-[11px] font-bold text-slate-700">
+                  Alerts
+                </Text>
+
+                <View className="flex-row items-center rounded-full bg-blue-50 px-2.5 py-1">
+                  <ZoomIn size={10} color="#2563EB" />
+                  <Text className="ml-1 text-[8px] font-bold text-blue-600">
+                    TAP TO ENLARGE
+                  </Text>
+                </View>
+              </View>
+
+              <Pressable
+                onPress={() => setIsImageVisible(true)}
+                className="bg-slate-50"
+              >
                 <Image
                   source={alertAccessImage}
                   resizeMode="contain"
                   style={{
                     width: "100%",
-                    height: 230,
+                    height: 500,
+                    backgroundColor: "#F8FAFC",
                   }}
                 />
-
-                {/* Zoom Badge */}
-                <View className="absolute bottom-2 right-2 rounded-full bg-slate-900/80 px-3 py-2">
-                  <View className="flex-row items-center">
-                    <ZoomIn size={11} color="#FFFFFF" />
-
-                    <Text className="ml-1 text-[9px] font-semibold text-white">
-                      Tap to enlarge
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </Pressable>
+              </Pressable>
+            </View>
           </View>
 
           {/* ================================================= */}
           {/* STEP 2 */}
           {/* ================================================= */}
 
-          <ManualStep
-            number={2}
-            text="Tap the Notification Bell located at the upper-right portion of the application."
-          />
+          <ManualStep number={2}>
+            <Text>
+              Tap the Notification Bell located at the upper-right portion of
+              the application.
+            </Text>
+          </ManualStep>
 
           {/* ================================================= */}
           {/* BELL EXPLANATION */}
@@ -126,10 +139,12 @@ export default function AlertAccess({ expanded, onPress }: Props) {
           {/* STEP 3 */}
           {/* ================================================= */}
 
-          <ManualStep
-            number={3}
-            text="The Alerts screen will be displayed after tapping the notification bell."
-          />
+          <ManualStep number={3}>
+            <Text>
+              The Alerts screen will be displayed after tapping the notification
+              bell.
+            </Text>
+          </ManualStep>
 
           {/* ================================================= */}
           {/* ALERT SCREENSHOT */}
@@ -175,10 +190,11 @@ export default function AlertAccess({ expanded, onPress }: Props) {
           {/* STEP 4 */}
           {/* ================================================= */}
 
-          <ManualStep
-            number={4}
-            text="Select an alert from the list to view its detailed information."
-          />
+          <ManualStep number={4}>
+            <Text>
+              Select an alert from the list to view its detailed information.
+            </Text>
+          </ManualStep>
 
           {/* ================================================= */}
           {/* ALERT FLOW */}

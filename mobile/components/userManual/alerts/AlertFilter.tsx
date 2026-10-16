@@ -173,30 +173,25 @@ export default function AlertFilter({ expanded, onPress }: Props) {
             How to Filter Alerts
           </Text>
 
-          <ManualStep
-            number={1}
-            text="Open the Alerts screen and locate the filter options."
-          />
+          <ManualStep number={1}>
+            <Text>Open the Alerts screen and locate the filter options.</Text>
+          </ManualStep>
 
-          <ManualStep
-            number={2}
-            text='Select "All" to display all available alerts.'
-          />
+          <ManualStep number={2}>
+            <Text>Select "All" to display all available alerts.</Text>
+          </ManualStep>
 
-          <ManualStep
-            number={3}
-            text='Select "Clog" to display clog-related alerts.'
-          />
+          <ManualStep number={3}>
+            <Text>Select "Clog" to display clog-related alerts.</Text>
+          </ManualStep>
 
-          <ManualStep
-            number={4}
-            text='Select "Water Level" to display water-level alerts.'
-          />
+          <ManualStep number={4}>
+            <Text>Select "Water Level" to display water-level alerts.</Text>
+          </ManualStep>
 
-          <ManualStep
-            number={5}
-            text="Review the filtered alerts displayed on the screen."
-          />
+          <ManualStep number={5}>
+            <Text>Review the filtered alerts displayed on the screen.</Text>
+          </ManualStep>
 
           {/* ================================================= */}
           {/* TIP */}

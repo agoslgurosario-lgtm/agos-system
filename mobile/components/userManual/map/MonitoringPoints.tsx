@@ -26,7 +26,7 @@ export default function MonitoringPoints({ expanded, onPress }: Props) {
   return (
     <>
       <ManualSection
-        number={4}
+        number={5}
         title="MONITORING POINTS"
         description="Shows the number of sensor nodes deployed within your barangay."
         icon={<MapPin size={18} color="#203D70" />}
@@ -246,7 +246,7 @@ export default function MonitoringPoints({ expanded, onPress }: Props) {
                 className="bg-slate-50"
               >
                 <Image
-                  source={require("../../../assets/images/userManual/map/node-info.jpg")}
+                  source={require("../../../assets/images/userManual/map/node-info.png")}
                   resizeMode="contain"
                   style={{
                     width: "100%",
@@ -431,7 +431,7 @@ export default function MonitoringPoints({ expanded, onPress }: Props) {
           {/* Image */}
           <View className="flex-1 items-center justify-center">
             <Image
-              source={require("../../../assets/images/userManual/map/node-info.jpg")}
+              source={require("../../../assets/images/userManual/map/node-info.png")}
               resizeMode="contain"
               style={{
                 width: "100%",

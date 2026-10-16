@@ -94,15 +94,17 @@ export default function SolidDebrisDetection({ expanded, onPress }: Props) {
           {/* ================================================= */}
 
           <View className="mt-5">
-            <ManualStep
-              number={1}
-              text="Review the monitoring point listed under Solid Debris Detection."
-            />
-
-            <ManualStep
-              number={2}
-              text="Check the displayed status to determine whether solid debris has been detected."
-            />
+            <ManualStep number={1}>
+              <Text>
+                Review the monitoring point listed under Solid Debris Detection.
+              </Text>
+            </ManualStep>
+            <ManualStep number={2}>
+              <Text>
+                Check the displayed status to determine whether solid debris has
+                been detected.
+              </Text>
+            </ManualStep>
           </View>
         </View>
       </ManualSection>

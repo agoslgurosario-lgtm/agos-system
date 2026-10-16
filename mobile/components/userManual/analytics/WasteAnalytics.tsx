@@ -99,20 +99,26 @@ export default function WasteAnalytics({ expanded, onPress }: Props) {
             How to View Waste Analytics
           </Text>
 
-          <ManualStep
-            number={1}
-            text="Tap the Analytics tab from the bottom navigation menu to open the Waste Analytics page."
-          />
+          <ManualStep number={1}>
+            <Text>
+              Tap the Analytics tab from the bottom navigation menu to open the
+              Waste Analytics page.
+            </Text>
+          </ManualStep>
 
-          <ManualStep
-            number={2}
-            text="Review the Estimated Waste Volume, Solid Debris Detection, and Classified Waste Type sections."
-          />
+          <ManualStep number={2}>
+            <Text>
+              Review the Estimated Waste Volume, Solid Debris Detection, and
+              Classified Waste Type sections.
+            </Text>
+          </ManualStep>
 
-          <ManualStep
-            number={3}
-            text="Use the calendar icon to select a specific month and view the corresponding waste monitoring data."
-          />
+          <ManualStep number={3}>
+            <Text>
+              Use the calendar icon to select a specific month and view the
+              corresponding waste monitoring data.
+            </Text>
+          </ManualStep>
 
           {/* ================================================= */}
           {/* CALENDAR EXAMPLE */}
