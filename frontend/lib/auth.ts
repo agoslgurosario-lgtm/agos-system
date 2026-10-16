@@ -1,5 +1,7 @@
 "use client"
 
+import { clearWsTokenCache } from "./hooks/useWebSocket"
+
 export const ACCOUNT_INACTIVE_MESSAGE = 'Your account is not active. Please contact your administrator.'
 const CLIENT_HEADER = { 'X-Requested-With': 'agos-web' }
 
@@ -23,6 +25,7 @@ export const setUser = (user: object) => {
 export const clearAuth = () => {
   localStorage.removeItem("user")
   document.cookie = "user=; path=/; max-age=0; samesite=Lax"
+  clearWsTokenCache()
 }
 
 export const logout = async () => {

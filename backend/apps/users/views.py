@@ -16,6 +16,8 @@ from .throttles import LoginRateThrottle, OTPRateThrottle
 import time
 import threading
 from axes.models import AccessAttempt
+from rest_framework.throttling import ScopedRateThrottle
+
 
 def is_locked_out(email, ip):
     return AccessAttempt.objects.filter(
@@ -497,6 +499,8 @@ class AgreePrivacyView(APIView):
 
 class WSTokenView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'ws_token'
 
     def get(self, request):
         raw_token = request.COOKIES.get('access_token')

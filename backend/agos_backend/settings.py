@@ -180,6 +180,8 @@ DATABASES = {
         'HOST': os.getenv('DB_HOST'),
         'PORT': os.getenv('DB_PORT'),
         'DISABLE_SERVER_SIDE_CURSORS': True,
+        'CONN_MAX_AGE': 60,
+        'CONN_HEALTH_CHECKS': True,  # drops dead connections instead of erroring
     }
 }
 
@@ -256,7 +258,8 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_THROTTLE_RATES': {
         'anon': '100/hour',
-        'user': '1000/hour',
+        'user': '5000/hour',
+        'ws_token': '60/min',
         'login': '5/min',
         'otp': '5/min',
     },
