@@ -129,6 +129,8 @@ class SensorNodeSerializer(serializers.ModelSerializer):
     last_reading_at = serializers.SerializerMethodField()
     is_force_sleeping = serializers.SerializerMethodField()
 
+    prev_hotspot = serializers.SerializerMethodField()
+
     class Meta:
         model = SensorNode
         fields = [
@@ -141,12 +143,23 @@ class SensorNodeSerializer(serializers.ModelSerializer):
             'water_level', 'water_flow_rate', 'clog_pct', 'condition',
             'water_status', 'clog_status',
             'health_status', 'is_online', 'last_seen', 'firmware_version',
-            'last_reading_at', 'device_model',
+            'last_reading_at', 'device_model', 'prev_hotspot',
         ]
         extra_kwargs = {
             'node_name': {'read_only': True},
             'installed_at': {'required': False},
             'forced_sleep_until': {'read_only': True},
+        }
+
+    def get_prev_hotspot(self, obj):
+        hid = getattr(obj, 'prev_hotspot_id', None)
+        if hid is None:
+            return None
+        return {
+            'hotspot_id': hid,
+            'name': obj.prev_hotspot_name,
+            'barangay_id': obj.prev_barangay_id,
+            'barangay_name': obj.prev_barangay_name,
         }
 
     def _latest(self, obj):

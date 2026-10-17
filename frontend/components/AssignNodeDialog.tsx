@@ -57,6 +57,7 @@ type Props = {
   onCancel: () => void
   onConfirm: (payload: AssignNodeDialogPayload) => void
   onNoChanges?: () => void
+  assign?: boolean
 }
 
 export function AssignNodeDialog({
@@ -68,8 +69,10 @@ export function AssignNodeDialog({
   onCancel,
   onConfirm,
   onNoChanges,
+  assign,
 }: Props) {
-  const isEdit = !!node
+  const hasFixedNode = !!node
+  const isEdit = hasFixedNode && !assign
 
   const [availableNodes, setAvailableNodes] = useState<DialogAvailableNode[]>([])
   const [loadingAvailableNodes, setLoadingAvailableNodes] = useState(false)
@@ -130,7 +133,7 @@ export function AssignNodeDialog({
 
   // Populate the form when reassigning a fixed node, reset otherwise.
   useEffect(() => {
-    if (node) {
+    if (node && !assign) {
       setBarangay(String(node.barangay_details?.barangay_id ?? ''))
       const currentHotspot = String(node.hotspot_details?.hotspot_id ?? '')
       setHotspot(currentHotspot)
@@ -183,7 +186,7 @@ export function AssignNodeDialog({
 
   const handleConfirmClick = () => {
     const errors: Record<string, string> = {}
-    if (!isEdit && !selectedNode.trim()) errors.selectedNode = "This field is required."
+    if (!hasFixedNode && !selectedNode.trim()) errors.selectedNode = "This field is required."
     if (!barangay.trim()) errors.barangay = "This field is required."
     if (!hotspot.trim()) errors.hotspot = "This field is required."
     if (!installedAt.trim()) {
@@ -218,7 +221,7 @@ export function AssignNodeDialog({
     }
 
     onConfirm({
-      selectedNodeId: isEdit ? null : selectedNode,
+      selectedNodeId: hasFixedNode ? null : selectedNode,
       barangay,
       hotspot,
       installedAt,
@@ -235,7 +238,12 @@ export function AssignNodeDialog({
                 {isEdit ? <MapPinPen className="md:h-7.5 md:w-7.5" /> : <MapPinPlus className="md:h-7.5 md:w-7.5" />}
               </div>
               <div className="flex flex-col">
-                <p className="font-bold text-base md:text-lg">{isEdit ? node?.node_name ?? 'Edit Assignment' : 'Assign Node'}</p>
+                <p className="font-bold text-base md:text-lg">{isEdit
+                  ? node?.node_name ?? 'Edit Assignment'
+                  : assign && node
+                    ? `Assign ${node.node_name}`
+                    : 'Assign Node'}
+                </p>
                 <p className="text-[10px] md:text-sm text-[#727272]">
                   {isEdit ? "Update this node's hotspot assignment." : 'Assign an available node to a canal hotspot.'}
                 </p>
@@ -263,7 +271,7 @@ export function AssignNodeDialog({
 
               <div className="flex gap-3 border-t border-[#C6C6C8] p-2.5 md:p-4">
                 {/* Node select — create only */}
-                {!isEdit && (
+                {!hasFixedNode && (
                   <div ref={selectedNodeRef}>
                     <Field className="flex gap-1.5 flex-col w-[274px] md:w-[310px]">
                       <FieldLabel className="text-[#122A48] text-xs md:text-sm">

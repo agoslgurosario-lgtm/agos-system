@@ -28,6 +28,7 @@ import { useFillRows } from "@/components/hooks/useFillRows"
 import { PrintReport } from "@/components/PrintReport/PrintReport"
 import { useToast } from "@/components/hooks/useToast"
 import { Toast } from "@/components/Toast"
+import { AssignNodeDialog, AssignNodeDialogPayload } from "@/components/AssignNodeDialog"
 
 // lib
 import { DIALOG_COLOR } from "@/lib/constant"
@@ -43,6 +44,9 @@ type SensorNode = {
   node_name: string
   availability_status: string
   status: string
+  hotspot_details?: any
+  barangay_details?: any
+  prev_hotspot?: { hotspot_id: number; name: string; barangay_id: number | null; barangay_name: string } | null
 }
 
 type DialogState = {
@@ -155,7 +159,7 @@ export default function NodeManagement() {
 
   const [successDialog, setSuccessDialog] = useState<{ open: boolean }>({ open: false })
   const [errorDialog, setErrorDialog] = useState<{ open: boolean; message: string }>({ open: false, message: '' })
-  const [actionResult, setActionResult] = useState<{ name: string; action: string } | null>(null)
+  const [actionResult, setActionResult] = useState<{ name: string; action: string; goToAssign?: boolean } | null>(null)
   const [loadingMessage, setLoadingMessage] = useState<{ title: string; description: string }>({
     title: "Saving Changes",
     description: "Processing details. Please wait.",
@@ -167,8 +171,15 @@ export default function NodeManagement() {
   const [confirmDialog, setConfirmDialog] = useState<DialogState>({ open: false })
   const [cancelDialog, setCancelDialog] = useState<DialogState>({ open: false })
   const [unassignDialog, setUnassignDialog] = useState<DialogState>({ open: false, node: null })
+  const [reassignPrompt, setReassignPrompt] = useState<DialogState>({ open: false, node: null })
+  const [assignDialog, setAssignDialog] = useState<DialogState>({ open: false, node: null })
+  const [prevAvailable, setPrevAvailable] = useState(true)
+  const [assignBarangays, setAssignBarangays] = useState<any[]>([])
+  const [assignHotspots, setAssignHotspots] = useState<any[]>([])
+  const [assignLoadingData, setAssignLoadingData] = useState(false)
   const [decommissionDialog, setDecommissionDialog] = useState<DialogState>({ open: false, node: null })
   const [decommissionGuardDialog, setDecommissionGuardDialog] = useState<DialogState>({ open: false, node: null })
+  const [assignCancelDialog, setAssignCancelDialog] = useState<DialogState>({ open: false })
 
   // history print/export states
   const [historyExporting, setHistoryExporting] = useState(false)
@@ -203,6 +214,19 @@ export default function NodeManagement() {
   const total     = sensorNodes.filter(n => n.availability_status !== 'Retired').length
   const available = sensorNodes.filter(n => n.availability_status === 'Available').length
   const occupied  = sensorNodes.filter(n => n.availability_status === 'Occupied').length
+
+  const assignMarkers = assignHotspots.map((h: any) => {
+    const occupant = sensorNodes.find(n => n.availability_status === 'Occupied' && n.hotspot_details?.hotspot_id === h.hotspot_id)
+    return {
+      latitude: h.latitude,
+      longitude: h.longitude,
+      label: occupant ? `${occupant.node_name} – ${occupant.barangay_details?.barangay_name ?? ''}` : h.name,
+      condition: occupant ? 'Occupied' : 'Available',
+      sublabel: occupant ? `Occupying: ${h.name}` : 'Available hotspot',
+      usePin: !!occupant,
+      barangay_id: h.barangay_details?.barangay_id ?? null,
+    }
+  })
 
   useEffect(() => {
     if (triggerPrint) {
@@ -536,6 +560,92 @@ export default function NodeManagement() {
   }
 
   // handlers
+  const handleAssignClick = async (node: SensorNode) => {
+    setAssignLoadingData(true)
+    try {
+      const API = process.env.NEXT_PUBLIC_API_URL
+      const [bRes, hRes] = await Promise.all([
+        fetchWithAuth(`${API}/api/barangays/`),
+        fetchWithAuth(`${API}/api/hotspots/`),
+      ])
+      if (!bRes.ok || !hRes.ok) throw new Error()
+      const b = await bRes.json()
+      const h = await hRes.json()
+      setAssignBarangays(b.results ?? b)
+      setAssignHotspots(h.results ?? h)
+
+      const prev = node.prev_hotspot
+      if (!prev) {
+        setAssignDialog({ open: true, node })
+        return
+      }
+
+      // is the old hotspot still free?
+      let free = false
+      if (prev.barangay_id) {
+        const res = await fetchWithAuth(`${API}/api/hotspots/barangay/${prev.barangay_id}/available/`)
+        if (res.ok) {
+          const d = await res.json()
+          free = (d.results ?? d).some((x: any) => x.hotspot_id === prev.hotspot_id)
+        }
+      }
+      setPrevAvailable(free)
+      setReassignPrompt({ open: true, node })
+    } catch {
+      setErrorDialog({ open: true, message: 'Could not load assignment data. Please try again.' })
+    } finally {
+      setAssignLoadingData(false)
+    }
+  }
+
+  const openAssignFromPrompt = () => {
+    const node = reassignPrompt.node
+    setReassignPrompt({ open: false, node: null })
+    setAssignDialog({ open: true, node })
+  }
+
+  const handleReassignYes = async () => {
+    const node = reassignPrompt.node!
+    const prev = node.prev_hotspot!
+    setReassignPrompt({ open: false, node: null })
+    setLoadingMessage({ title: 'Re-assigning Node', description: `Assigning ${node.node_name} to ${prev.name}. Please wait.` })
+    setLoadingDialog({ open: true })
+    try {
+      await api.patch(`/api/sensor-nodes/${node.node_id}/`, {
+        barangay: prev.barangay_id,
+        hotspot: prev.hotspot_id,
+        installed_at: new Date().toISOString(),
+      })
+      setLoadingDialog({ open: false })
+      setActionResult({ name: node.node_name, action: `re-assigned to ${prev.name}`, goToAssign: true })
+      setSuccessDialog({ open: true })
+    } catch (err: any) {
+      setLoadingDialog({ open: false })
+      setErrorDialog({ open: true, message: err?.detail ?? err?.error ?? 'Could not re-assign this node. Please try again.' })
+    }
+  }
+
+  const handleAssignConfirm = async (payload: AssignNodeDialogPayload) => {
+    const node = assignDialog.node!
+    const hotspotName = assignHotspots.find(h => String(h.hotspot_id) === payload.hotspot)?.name ?? 'the selected hotspot'
+    setAssignDialog({ open: false, node: null })
+    setLoadingMessage({ title: 'Assigning Node', description: `Assigning ${node.node_name}. Please wait.` })
+    setLoadingDialog({ open: true })
+    try {
+      await api.patch(`/api/sensor-nodes/${node.node_id}/`, {
+        barangay: parseInt(payload.barangay),
+        hotspot: parseInt(payload.hotspot),
+        installed_at: payload.installedAt ? new Date(payload.installedAt).toISOString() : undefined,
+      })
+      setLoadingDialog({ open: false })
+      setActionResult({ name: node.node_name, action: `assigned to ${hotspotName}`, goToAssign: true })
+      setSuccessDialog({ open: true })
+    } catch (err: any) {
+      setLoadingDialog({ open: false })
+      setErrorDialog({ open: true, message: err?.detail ?? err?.error ?? 'Something went wrong. Please try again.' })
+    }
+  }
+  
   const handleConfirmationDialog = () => {
     const errors: Record<string, string> = {}
     if (!nodeCode.trim()) errors.nodeCode = "This field is required."
@@ -595,7 +705,7 @@ export default function NodeManagement() {
       if (isEdit) {
         const updated = await api.patch(`/api/sensor-nodes/${nodeFormDialog.node!.node_id}/`, payload)
         nodesCache.setData(prev => prev.map(n =>
-          n.node_id === nodeFormDialog.node!.node_id ? { ...n, ...updated } : n
+          n.node_id === nodeFormDialog.node!.node_id ? { ...n, ...updated, prev_hotspot: n.prev_hotspot } : n
         ))
         setActionResult({ name: updated.node_name, action: 'updated' })
         setNodeFormDialog({ open: false, node: null })
@@ -631,7 +741,13 @@ export default function NodeManagement() {
       await api.post(`/api/sensor-nodes/${node.node_id}/unassign/`, {})
       nodesCache.setData(prev => prev.map(n =>
         n.node_id === node.node_id
-          ? { ...n, availability_status: 'Available', status: 'Active' }
+          ? { ...n, availability_status: 'Available', status: 'Active',
+            prev_hotspot: n.hotspot_details ? {
+              hotspot_id: n.hotspot_details.hotspot_id,
+              name: n.hotspot_details.name,
+              barangay_id: n.barangay_details?.barangay_id ?? null,
+              barangay_name: n.barangay_details?.barangay_name ?? '',
+            } : n.prev_hotspot }
           : n
       ))
       setActionResult({ name: node.node_name, action: 'unassigned and is now available' })
@@ -664,12 +780,10 @@ export default function NodeManagement() {
   }
 
   const handleSuccessConfirm = () => {
-    const wasAdd = actionResult?.action === 'added'
+    const goToAssign = actionResult?.action === 'added' || actionResult?.goToAssign
     setSuccessDialog({ open: false })
     setActionResult(null)
-    if (wasAdd) {
-      router.push('/admin/assign')
-    }
+    if (goToAssign) router.push('/admin/assign')
   }
 
   const handleExportHistory = async () => {
@@ -842,6 +956,21 @@ export default function NodeManagement() {
                                 <SquarePen size={16} /> Edit
                               </Button>
 
+                              <Button
+                                onClick={() => handleAssignClick(node)}
+                                disabled={node.status === 'Maintenance' || assignLoadingData}
+                                title={node.status === 'Maintenance' ? 'Cannot assign a node while it is under maintenance' : undefined}
+                                className={`text-xs flex gap-2 rounded-lg border py-3.5 px-3 ${
+                                  node.status === 'Maintenance'
+                                    ? 'text-[#A0A0A0] bg-[#F0F0F0] border-[#D0D0D0] cursor-not-allowed'
+                                    : 'text-[#1565BC] bg-[#DBEAFE] hover:bg-[#bfdcfb] cursor-pointer border-[#1565BC80]'
+                                }`}
+                              >
+                                {node.prev_hotspot
+                                  ? <><MapPinPen size={16} /> Re-assign</>
+                                  : <><MapPinPlus size={16} /> Assign</>}
+                              </Button>
+
                               <div className="relative">
                                 <Button
                                   id={`menu-btn-${node.node_id}`}
@@ -886,6 +1015,13 @@ export default function NodeManagement() {
                                 <SquarePen size={16} /> Edit
                               </Button>
 
+                                <Button
+                                  onClick={() => setUnassignDialog({ open: true, node })}
+                                  className="flex gap-2 text-[#FF9705] rounded-lg bg-[#FFF3E0] hover:bg-[#ffe6c2] cursor-pointer border border-[#FF970580] py-3.5 px-3 text-xs"
+                                >
+                                  <Unplug size={16} /> Unassign
+                                </Button>
+
                               <div className="relative">
                                 <Button
                                   id={`menu-btn-${node.node_id}`}
@@ -907,12 +1043,6 @@ export default function NodeManagement() {
                                       className="flex items-center gap-2 w-full px-3 py-2.5 text-left text-xs text-[#1565BC] hover:bg-[#DBEAFE] cursor-pointer"
                                     >
                                       <History size={14} /> View History
-                                    </button>
-                                    <button
-                                      onClick={() => { setOpenMenuId(null); setUnassignDialog({ open: true, node }) }}
-                                      className="flex items-center gap-2 w-full px-3 py-2.5 text-left text-xs text-[#FF9705] hover:bg-[#FFF3E0] cursor-pointer"
-                                    >
-                                      <Unplug size={14} /> Unassign
                                     </button>
                                     <button
                                       onClick={() => { setOpenMenuId(null); setDecommissionGuardDialog({ open: true, node }) }}
@@ -1522,6 +1652,57 @@ export default function NodeManagement() {
         onConfirm={handleKeyModalDone}
       />
 
+      {/* Re-assign prompt */}
+      <Dialog open={reassignPrompt.open} onOpenChange={(o) => { if (!o) setReassignPrompt({ open: false, node: null }) }}>
+        <DialogContent className="!max-w-[300px] sm:!max-w-[400px] bg-[#FAFCFD] border border-[#C6C6C8] rounded-lg shadow-[0_6px_4px_-4px_rgba(0,0,0,0.2)] [&>button]:cursor-pointer">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg" style={{ backgroundColor: DIALOG_COLOR.lightblue }}>
+                <MapPinPen className="w-5 h-5 sm:w-6 sm:h-6" color={DIALOG_COLOR.blue} />
+              </div>
+              <DialogTitle className="font-bold text-[#122A48] text-base sm:text-lg">Re-assign Node</DialogTitle>
+            </div>
+          </DialogHeader>
+          <div className="flex flex-col">
+            <p className="text-[#122A48] text-[12px] sm:text-[15px] text-justify">
+              {prevAvailable
+                ? <><strong>{reassignPrompt.node?.node_name}</strong> was last assigned to <strong>{reassignPrompt.node?.prev_hotspot?.name}</strong>. Re-assign it to that hotspot?</>
+                : <><strong>{reassignPrompt.node?.prev_hotspot?.name}</strong> is no longer available. Assign <strong>{reassignPrompt.node?.node_name}</strong> to a new hotspot.</>}
+            </p>
+            <hr className="my-3 mb-4" />
+            <div className="flex gap-3 justify-end">
+              <Button
+                onClick={openAssignFromPrompt}
+                className="rounded-lg border border-[#C6C6C8] px-4 h-8 sm:h-9 cursor-pointer text-[11px] sm:text-sm bg-transparent hover:bg-[#edebeb] text-[#727272]"
+              >
+                {prevAvailable ? 'No, assign to new hotspot' : 'Assign to new hotspot'}
+              </Button>
+              {prevAvailable && (
+                <Button
+                  onClick={handleReassignYes}
+                  className="rounded-lg border border-[#C6C6C8] px-4 h-8 sm:h-9 cursor-pointer text-[11px] sm:text-sm"
+                  style={{ backgroundColor: DIALOG_COLOR.blue }}
+                >
+                  Yes, re-assign
+                </Button>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign dialog */}
+      <AssignNodeDialog
+        open={assignDialog.open}
+        node={assignDialog.node as any}
+        assign
+        allBarangays={assignBarangays}
+        allHotspotMarkers={assignMarkers}
+        loadingBarangays={assignLoadingData}
+        onCancel={() => setAssignCancelDialog({ open: true })}
+        onConfirm={handleAssignConfirm}
+      />
+
       {/* Unassign dialog */}
       <DialogModal
         open={unassignDialog.open}
@@ -1534,6 +1715,23 @@ export default function NodeManagement() {
         description={<> Are you sure you want to unassign <strong>{unassignDialog.node?.node_name}</strong> from its hotspot? It will return to Available. </>}
         cancelLabel="Cancel"
         confirmLabel="Unassign"
+      />
+
+      {/* Cancel assignment dialog */}
+      <DialogModal
+        open={assignCancelDialog.open}
+        onClose={() => setAssignCancelDialog({ open: false })}
+        onConfirm={() => {
+          setAssignCancelDialog({ open: false })
+          setAssignDialog({ open: false, node: null })
+        }}
+        color={DIALOG_COLOR.lightred}
+        icon={X}
+        iconColor={DIALOG_COLOR.red}
+        title="Cancel Assignment"
+        description="Are you sure you want to cancel?"
+        cancelLabel="Keep Editing"
+        confirmLabel="Yes, Cancel"
       />
 
       {/* Decommission dialog */}

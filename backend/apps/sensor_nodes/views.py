@@ -10,6 +10,7 @@ from apps.users.permissions import IsAdmin, IsAdminOrMENRO, IsAdminOrMENROOrBara
 from apps.users.authentication import CookieJWTAuthentication
 from apps.rainfall.services import get_effective_condition, AlertThreshold
 from apps.audit_logs.utils import log_action
+from django.db.models import OuterRef, Subquery
 import secrets
 from django.contrib.auth.hashers import make_password
 from agos_backend.pdf_utils import render_to_pdf
@@ -29,7 +30,16 @@ class SensorNodeListView(generics.ListCreateAPIView):
         return [IsAdmin()]
 
     def get_queryset(self):
-        qs = SensorNode.objects.select_related('barangay__rainfall_condition', 'hotspot')
+        latest = NodeAssignmentHistory.objects.filter(
+            node=OuterRef('pk'), hotspot__isnull=False
+        ).order_by('-started_at')
+
+        qs = SensorNode.objects.select_related('barangay__rainfall_condition', 'hotspot').annotate(
+            prev_hotspot_id=Subquery(latest.values('hotspot_id')[:1]),
+            prev_hotspot_name=Subquery(latest.values('hotspot_name')[:1]),
+            prev_barangay_id=Subquery(latest.values('barangay_id')[:1]),
+            prev_barangay_name=Subquery(latest.values('barangay_name')[:1]),
+        )
 
         if self.request.user.user_role == 'Barangay':
             qs = qs.filter(barangay=self.request.user.barangay)
