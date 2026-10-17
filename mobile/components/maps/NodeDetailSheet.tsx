@@ -21,9 +21,9 @@ interface NodeDetailSheetProps {
   onClose: () => void
   onRespond?: (nodeId: string | number) => void
   onMarkCleared?: (nodeId: string | number) => void
+  onCreateReport?: (nodeId: string | number) => void
 }
 
-// matches CanalMapScreen/web's CONDITION_COLORS exactly
 const STATUS_COLORS: Record<CanalStatus, string> = {
   Normal: '#1565BC',
   Warning: '#FF9705',
@@ -36,6 +36,7 @@ export default function NodeDetailSheet({
   onClose,
   onRespond,
   onMarkCleared,
+  onCreateReport,
 }: NodeDetailSheetProps) {
 
   const sheetHeight = Dimensions.get('window').height
@@ -160,6 +161,22 @@ export default function NodeDetailSheet({
           label="Clog percentage"
           value={node.clogPercentage != null ? `${node.clogPercentage}%` : '— %'}
         />
+
+        <View style={styles.divider} />
+
+        {/* report */}
+        <View style={styles.sectionHeader}>
+          <Feather name="file-text" size={13} color="#2F6FED" />
+          <Text style={styles.sectionTitle}>REPORT</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.reportButton}
+          activeOpacity={0.85}
+          onPress={() => onCreateReport?.(node.id)}
+        >
+          <Feather name="plus" size={16} color="#FFFFFF" />
+          <Text style={styles.reportButtonText}>Create Report</Text>
+        </TouchableOpacity>
       </Animated.View>
     </Modal>
   )
@@ -228,4 +245,15 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   rowLabel: { fontSize: 13, color: '#5B6472' },
   rowValue: { fontSize: 13, color: '#1A1A1A', fontWeight: '600' },
+    reportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#1d4ed8',
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginTop: 2,
+  },
+  reportButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
 })

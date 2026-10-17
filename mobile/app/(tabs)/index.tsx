@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useRouter } from 'expo-router'
 import { View, Text, Button, Pressable, ScrollView, ActivityIndicator, RefreshControl  } from 'react-native'
 import { Feather } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -87,6 +88,8 @@ function StatCard({ icon, title, value, subtitle, subtitleColor, }: {
 }
 
 export default function TabOneScreen() {
+  const router = useRouter()
+  
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null)
 
   const { nodes, mappableNodes, stats, composition, totalWasteKg, loading, refreshing, error, refetch } = useMapData()
@@ -211,6 +214,10 @@ export default function TabOneScreen() {
           node={selectedNode}
           visible={selectedNode !== null}
           onClose={() => setSelectedNodeId(null)}
+          onCreateReport={() => {
+            setSelectedNodeId(null)
+            router.push('/new-report' as any)
+          }}
         />
       </ScrollView>
     </SafeAreaView>
