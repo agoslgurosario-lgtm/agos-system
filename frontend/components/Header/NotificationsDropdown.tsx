@@ -27,24 +27,27 @@ export default function NotificationsDropdown({ alertHref, unreadCount, onUnread
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const [error, setError] = useState(false)
+  const [reloadTick, setReloadTick] = useState(0)
 
   useEffect(() => {
     if (!open) return
     let cancelled = false
     async function loadAlerts() {
       setLoading(true)
+      setError(false)
       try {
         const data = await api.get(`/api/alerts/?page_size=5`)
         if (!cancelled) setAlerts(data.results ?? [])
       } catch {
-        if (!cancelled) setAlerts([])
+        if (!cancelled) setError(true)
       } finally {
         if (!cancelled) setLoading(false)
       }
     }
     loadAlerts()
     return () => { cancelled = true }
-  }, [open])
+  }, [open, reloadTick])
 
   useEffect(() => {
     if (!open) return
@@ -111,8 +114,13 @@ export default function NotificationsDropdown({ alertHref, unreadCount, onUnread
           <hr />
 
           <div className="max-h-80 overflow-y-auto">
-            {loading ? (
+            {loading && alerts.length === 0 ? (
               <p className="text-center text-xs text-[#727272] py-8">Loading…</p>
+            ) : error && alerts.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-8">
+                <p className="text-center text-sm font-medium text-[#D81010]">Couldn&apos;t load notifications.</p>
+                <button onClick={() => setReloadTick(t => t + 1)} className="text-xs font-semibold text-[#1565BC] hover:underline cursor-pointer">Retry</button>
+              </div>
             ) : alerts.length === 0 ? (
               <p className="text-center text-sm font-medium text-[#727272] py-8">You&apos;re all caught up.</p>
             ) : (

@@ -20,9 +20,10 @@ import { usePolling } from "@/components/hooks/usePolling"
 import { useFillRows } from "@/components/hooks/useFillRows"
 import { DashboardSkeleton } from "@/components/Skeleton/Admin/DashboardSkeleton"
 
-// auth
+// auth / lib
 import { fetchWithAuth } from "@/lib/auth"
 import { monthOf, formatMonthLabel } from "@/lib/reportOptions"
+import { formatWeight } from "@/lib/formatWeight"
 import type { CanalMonitoringReport } from "@/types/report"
 import { useWebSocket } from "@/lib/hooks/useWebSocket"
 import { usePageCache } from "@/components/hooks/usePageCache"
@@ -732,7 +733,7 @@ export default function Dashboard() {
                     } else if (key.endsWith('_pct') || key === 'confidence') {
                       displayValue = `${Number(value).toFixed(1)}%`
                     } else if (key === 'estimated_volume') {
-                      displayValue = `${value} kg`
+                      displayValue = formatWeight(Number(value))
                     } else if (key === 'battery_voltage') {
                       displayValue = `${Number(value).toFixed(2)} V`
                     } else if (key === 'signal_strength') {
@@ -1040,7 +1041,7 @@ export default function Dashboard() {
               </div>
               <div className="flex justify-between">
                 <p className="text-[#727272]">Est. Volume</p>
-                <p className="font-medium">{selectedWaste.estimated_volume} kg</p>
+                <p className="font-medium">{formatWeight(selectedWaste.estimated_volume)}</p>
               </div>
 
               <hr />

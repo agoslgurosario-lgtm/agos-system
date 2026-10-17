@@ -24,6 +24,7 @@ import { useWebSocket } from "@/lib/hooks/useWebSocket"
 import { usePolling } from "@/components/hooks/usePolling"
 import { usePageCache } from "@/components/hooks/usePageCache";
 import { SpinnerIcon } from "@/components/SpinnerIcon";
+import { formatWeight } from "@/lib/formatWeight";
 
 
 type SensorNode = {
@@ -45,6 +46,7 @@ type SensorNode = {
   water_flow_rate: number | null
   clog_pct: number | null
   installed_at: string
+  is_online?: boolean
 }
 
 type SensorReadings = {
@@ -204,6 +206,12 @@ export default function Resources() {
   const getLatestClogPct = (nodeId: number) => {
     const latestReading = latestReadingMap[nodeId] ?? null
     const fallbackNode = allSensorNodes.find(n => n.node_id === nodeId)
+
+    // No recent reading turn to offline
+    if (fallbackNode && fallbackNode.is_online === false) {
+      return { clogPct: null, latestReading }
+    }
+
     return {
       clogPct: latestReading?.clog_pct ?? fallbackNode?.clog_pct ?? null,
       latestReading,
@@ -215,8 +223,6 @@ export default function Resources() {
     initialRows: 3,
     deps: [loading],
   })
-  
-  const { paginated, currentPage, setCurrentPage, totalItems, itemsPerPage } = usePagination(nodesWithHotspot, 3)
   
   const latestWasteByNode = allWasteClassification.reduce((acc, waste) => {
     const nodeId = waste.node_details.node_id
@@ -248,11 +254,14 @@ export default function Resources() {
     return clogB - clogA
   })
 
+  const { paginated, currentPage, setCurrentPage, totalItems, itemsPerPage } = usePagination(rankedNodes, 5)
+
   const priorityQueue = rankedNodes.map((node, index) => {
     const pct = getLatestClogPct(node.node_id).clogPct
     const rankInfo = getClogRankLevel(pct)
     const waste = latestWasteByNode[node.node_id]
     const openEvent = openEventByNode[node.node_id]
+    const isUnknown = rankInfo.label === 'UNKNOWN'
 
     return {
       rank: index + 1,
@@ -261,8 +270,8 @@ export default function Resources() {
       pct,
       label: rankInfo.label,
       action: rankInfo.action,
-      wasteType: waste && waste.dominant_waste_type !== 'None' ? waste.dominant_waste_type : '—',
-      kg: waste ? waste.estimated_volume : null,
+      wasteType: !isUnknown && waste && waste.dominant_waste_type !== 'None' ? waste.dominant_waste_type : '—',
+      kg: !isUnknown && waste ? waste.estimated_volume : null,
       hoursOpen: openEvent
         ? Math.max(0, Math.round((Date.now() - new Date(openEvent.detected_at).getTime()) / 3600000))
         : null,
@@ -273,6 +282,7 @@ export default function Resources() {
   const totalSensorNodes = nodesWithHotspot.length
 
   const criticalAreas = nodesWithHotspot.filter(node => {
+    if (node.is_online === false) return false
     const latest = latestReadingMap[node.node_id]
     return (latest?.overall_status ?? latest?.reading_status) === 'Critical'
   }).length
@@ -282,7 +292,7 @@ export default function Resources() {
     0
   )
 
-  const clearedAreas = allClogs.filter(c => c.status === 'Cleared').length
+  const clearedAreas = allClogs.filter(c => c.status === 'Cleared' || c.status === 'Verified').length
 
   const fetchAllResourceData = useCallback(async () => {
     await Promise.allSettled([
@@ -309,6 +319,9 @@ export default function Resources() {
   useWebSocket({
     path: "/ws/sensor-readings/",
     onMessage: (reading) => {
+      sensorNodesCache.setData(prev =>
+        prev.map(n => n.node_id === reading.node_details?.node_id ? { ...n, is_online: true } : n)
+      )
       readingsCache.setData(prev =>
         prev.some(r => r.reading_id === reading.reading_id)
           ? prev.map(r => r.reading_id === reading.reading_id ? reading : r)
@@ -358,9 +371,9 @@ export default function Resources() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 w-full text-[#122A48]">
           {[
           { icon: <RadioTower size={20} color="#2C7B3C" />, bg: "bg-[#CDE3DE]", count: totalSensorNodes, label: "Total Assigned Sensor Nodes" },
-          { icon: <Trash2 size={20} color="#122A48" />, bg: "bg-[#CDE3DE]", count: `${totalWaste.toFixed(1)} kg`, label: "Total Waste" },
+          { icon: <Trash2 size={20} color="#122A48" />, bg: "bg-[#CDE3DE]", count: formatWeight(totalWaste), label: "Total Waste" },
           { icon: <TriangleAlert size={20} color="#D81010" />, bg: "bg-[#FFE5E5]", count: criticalAreas, label: "Critical Areas" },
-          { icon: <BadgeCheck size={20} color="#1565BC" />, bg: "bg-[#1565BC29]", count: clearedAreas, label: "Cleared Areas" },
+          { icon: <BadgeCheck size={20} color="#1565BC" />, bg: "bg-[#1565BC29]", count: clearedAreas, label: "Cleared Clogs" },
         ].map(card => (
             <div key={card.label} className="rounded-lg border-2 border-[#C6C6C8] h-17 min-[2560px]:h-20 min-[3840px]:h-24 w-full flex items-center p-3 gap-3 relative bg-[#FAFCFD] shadow-[0_5px_4px_-4px_rgba(0,0,0,0.2)]">
               <div className={`${card.bg} rounded-lg p-2`}>{card.icon}</div>
@@ -375,11 +388,11 @@ export default function Resources() {
         {/* waste hotspot, trash accumulated, priority */}
           <div className="flex gap-2 text-[#122A48] mt-2 h-70">
           {/* waste hotspot */}
-          <div className="rounded-lg border border-[#C6C6C8] shadow-[0_5px_4px_-4px_rgba(0,0,0,0.2)] bg-[#FAFCFD] flex-1 min-w-[320px]">
+          <div className="rounded-lg border border-[#C6C6C8] shadow-[0_5px_4px_-4px_rgba(0,0,0,0.2)] bg-[#FAFCFD] flex-1 min-w-[320px] flex flex-col overflow-hidden">
             <div className="w-full">
               <p className="font-bold p-2 text-sm">WASTE HOTSPOT STATUS</p>
             </div>
-            <div>
+            <div className="flex-1 overflow-y-auto">
               <Table>
                 <TableHeader className="bg-[#F5F6F9]">
                   <TableRow>
@@ -399,7 +412,7 @@ export default function Resources() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    paginated.map((node) => {
+                    nodesWithHotspot.map((node) => {
                       const latestReading = latestReadingMap[node.node_id]
                       const clogPct = getLatestClogPct(node.node_id).clogPct
                       const clogSeverity = getClogSeverity(clogPct)
@@ -484,7 +497,7 @@ export default function Resources() {
                         Clog: {item.pct === null ? "—" : `${Math.round(item.pct)}%`}
                       </p>
                       <p className="text-[11px] text-[#727272]">
-                        {item.wasteType} · {item.kg === null ? "— kg" : `${item.kg.toFixed(1)} kg (est.)`}
+                        {item.wasteType} · {item.kg === null ? "—" : `${formatWeight(item.kg)} (est.)`}
                       </p>
                       <p className="text-[11px] text-[#727272]">
                         {item.hoursOpen === null ? "No open clog" : `Open for ${item.hoursOpen} h`}
@@ -576,7 +589,7 @@ export default function Resources() {
                   <TableHead className="text-left text-xs text-[#727272]">LOCATION</TableHead>
                   <TableHead className="text-left text-xs text-[#727272]" title="Based on water flow rate (60%) and rising water level (40%)">CLOG SEVERITY INDEX</TableHead>
                   <TableHead className="text-left text-xs text-[#727272]">DOMINANT WASTE TYPE</TableHead>
-                  <TableHead className="text-left text-xs text-[#727272]">ESTIMATED WASTE (kg)</TableHead>
+                  <TableHead className="text-left text-xs text-[#727272]">ESTIMATED WASTE</TableHead>
                   <TableHead className="text-left text-xs text-[#727272]">OPEN FOR</TableHead>
                   <TableHead className="text-left text-xs text-[#727272]">STATUS</TableHead>
                   <TableHead className="text-left text-xs text-[#727272]">LAST UPDATED</TableHead>
@@ -594,11 +607,12 @@ export default function Resources() {
                   </TableCell>
                 </TableRow>
               ) : (
-                rankedNodes.map((node) => {
+                paginated.map((node) => {
                   const { clogPct, latestReading } = getLatestClogPct(node.node_id)
                   const clogSeverity = getClogSeverity(clogPct)
                   const latestWaste = latestWasteByNode[node.node_id]
                   const hoursOpen = getHoursOpen(node.node_id)
+                  const isUnknown = clogSeverity.label === 'Unknown'
 
                   return (
                     <TableRow
@@ -635,11 +649,11 @@ export default function Resources() {
                       </TableCell>
 
                       <TableCell className="text-left text-xs">
-                        {latestWaste && latestWaste.dominant_waste_type !== 'None' ? latestWaste.dominant_waste_type : "—"}
+                        {!isUnknown && latestWaste && latestWaste.dominant_waste_type !== 'None' ? latestWaste.dominant_waste_type : "—"}
                       </TableCell>
 
                       <TableCell className="text-left text-xs">
-                        {latestWaste ? `${latestWaste.estimated_volume.toFixed(2)} kg (est.)` : "—"}
+                        {!isUnknown && latestWaste ? `${formatWeight(latestWaste.estimated_volume)} (est.)` : "—"}
                       </TableCell>
 
                       <TableCell className="text-left text-xs">

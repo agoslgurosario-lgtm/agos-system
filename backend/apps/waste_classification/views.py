@@ -45,7 +45,7 @@ class WasteClassificationListView(generics.ListCreateAPIView):
         user = self.request.user
         if user.user_role == 'Barangay':
             qs = qs.filter(node__barangay=user.barangay)
-        return qs
+        return qs.order_by('-timestamp')
 
 
 class WasteClassificationDetailView(generics.RetrieveUpdateDestroyAPIView):

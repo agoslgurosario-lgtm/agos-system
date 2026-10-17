@@ -5,6 +5,7 @@ import { FaWater, FaExclamationTriangle, FaPlug, FaBatteryQuarter, FaSignal, FaE
 
 import { api } from "@/lib/api"
 import { ALERT_STYLE } from "@/lib/constant"
+import { formatWeight } from "@/lib/formatWeight"
 import { AlertDetailDialog } from "@/components/Alerts/AlertDetailDialog"
 
 
@@ -18,6 +19,10 @@ type WaterContext = {
   water_level?: number
   water_flow_rate?: number | null
   water_flow?: string
+  water_level_pct?: number | null
+  rainfall_condition?: string
+  warning_pct?: number
+  critical_pct?: number
 }
 
 type HealthContext = {
@@ -141,7 +146,7 @@ export function  ContextRow({ alertType, ctx }: { alertType: string; ctx: AlertC
             <div className="flex flex-wrap gap-x-4">
               <span>Dominant: <span className="font-semibold text-[#122A48]">{c.dominant_waste_type}</span></span>
               {c.estimated_volume != null && (
-                <span>Est. Volume: <span className="font-semibold text-[#122A48]">{Number(c.estimated_volume).toFixed(2)} kg</span></span>
+                <span>Est. Volume: <span className="font-semibold text-[#122A48]">{formatWeight(Number(c.estimated_volume))}</span></span>
               )}
               {c.confidence != null && (
                 <span>Confidence: <span className="font-semibold text-[#122A48]">{Math.round(c.confidence)}%</span></span>
@@ -179,6 +184,18 @@ export function  ContextRow({ alertType, ctx }: { alertType: string; ctx: AlertC
             Flow: <span className="font-semibold text-[#122A48]">{c.water_flow}</span>
           </span>
         )}
+        {c.water_level_pct != null && (
+          <span>
+            Level: <span className="font-semibold text-[#122A48]">{c.water_level_pct}%</span> of canal depth
+          </span>
+        )}
+        {c.rainfall_condition && (
+          <span>
+            Rainfall: <span className="font-semibold text-[#122A48]">{c.rainfall_condition}</span>
+            {c.warning_pct != null && c.critical_pct != null &&
+              ` (Warning ≥ ${c.warning_pct}%, Critical ≥ ${c.critical_pct}%)`}
+          </span>
+        )}
       </div>
     )
   }
@@ -196,7 +213,7 @@ export function  ContextRow({ alertType, ctx }: { alertType: string; ctx: AlertC
           )}
           {c.estimated_volume != null && (
             <span>
-              Est. Volume: <span className="font-semibold text-[#122A48]">{c.estimated_volume} kg</span>
+              Est. Volume: <span className="font-semibold text-[#122A48]">{formatWeight(Number(c.estimated_volume))}</span>
             </span>
           )}
           {c.confidence != null && (

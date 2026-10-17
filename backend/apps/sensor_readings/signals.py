@@ -88,14 +88,25 @@ def handle_abnormal_reading(sender, instance, created, **kwargs):
             should_alert = cooldown_expired or is_escalation
 
         if should_alert:
+            from apps.rainfall.services import get_effective_condition, get_thresholds
+            node = instance.node
+            condition = get_effective_condition(node.barangay) if node.barangay else 'Unknown'
+            warn_pct, crit_pct = get_thresholds(condition)
+            depth = node.hotspot.canal_depth if node.hotspot else None
+            level_pct = round(instance.water_level / depth * 100, 1) if depth else None
+
             Alert.objects.create(
                 node=instance.node,
                 alert_type='Water_Level_Rising',
                 alert_context={
-                    'severity':        instance.reading_status,
-                    'water_level':     instance.water_level,
-                    'water_flow_rate': instance.water_flow_rate,
-                    'water_flow':      instance.water_flow,
+                    'severity':         instance.reading_status,
+                    'water_level':      instance.water_level,
+                    'water_flow_rate':  instance.water_flow_rate,
+                    'water_flow':       instance.water_flow,
+                    'water_level_pct':  level_pct,
+                    'rainfall_condition': condition,
+                    'warning_pct':      warn_pct,
+                    'critical_pct':     crit_pct,
                 }
             )
 

@@ -68,16 +68,16 @@ type Clogs = {
     dominant_waste_type: string
   } | null
   auto_cleared: boolean
-  clear_reason: 'Manual' | 'Auto-cleared' | 'Clear readings' | null
+  clear_reason: 'Manual Clear' | 'Auto-cleared' | 'Clear readings' | null
 }
 
 const CLEAR_REASON_LABEL: Record<string, string> = {
-  'Manual': 'Cleared manually',
+  'Manual Clear': 'Cleared manually',
   'Auto-cleared': 'Auto-cleared after 7 days',
   'Clear readings': 'Clear readings',
 }
 const CLEAR_REASON_SHORT: Record<string, string> = {
-  'Manual': 'Manual clear',
+  'Manual Clear': 'Manual clear',
   'Auto-cleared': 'Auto clear (7 days)',
   'Clear readings': 'Clear readings',
 }
@@ -563,7 +563,12 @@ export default function ClogEvents() {
                 {selectedClog.clear_reason && (
                   <div className="flex justify-between text-xs">
                     <p>Reason</p>
-                    <p>{clearReasonLabel(selectedClog.clear_reason)}</p>
+                    <p>
+                      {clearReasonLabel(selectedClog.clear_reason)}
+                      {selectedClog.clear_reason === 'Manual Clear' && selectedClog.cleared_by_details
+                        ? ` by ${selectedClog.cleared_by_details.first_name} ${selectedClog.cleared_by_details.last_name}`
+                        : ''}
+                    </p>
                   </div>
                 )}
 

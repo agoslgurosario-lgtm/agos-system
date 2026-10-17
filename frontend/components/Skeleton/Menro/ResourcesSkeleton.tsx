@@ -125,7 +125,7 @@ export function ResourcesSkeleton() {
               <TableHead className="text-left text-xs text-[#727272]">LOCATION</TableHead>
               <TableHead className="text-left text-xs text-[#727272]">CLOG SEVERITY INDEX</TableHead>
               <TableHead className="text-left text-xs text-[#727272]">DOMINANT WASTE TYPE</TableHead>
-              <TableHead className="text-left text-xs text-[#727272]">ESTIMATED WASTE (kg)</TableHead>
+              <TableHead className="text-left text-xs text-[#727272]">ESTIMATED WASTE</TableHead>
               <TableHead className="text-left text-xs text-[#727272]">OPEN FOR</TableHead>
               <TableHead className="text-left text-xs text-[#727272]">STATUS</TableHead>
               <TableHead className="text-left text-xs text-[#727272]">LAST UPDATED</TableHead>

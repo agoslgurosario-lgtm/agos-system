@@ -17,6 +17,7 @@ import { useWebSocket } from "@/lib/hooks/useWebSocket"
 import { usePageCache } from "@/components/hooks/usePageCache"
 import { printReport } from "@/lib/printReport"
 import { getUser } from "@/lib/auth"
+import { formatWeight, formatWeightIn, pickWeightUnit } from "@/lib/formatWeight"
 
 // react
 import { useEffect, useState, useCallback } from "react"
@@ -170,7 +171,7 @@ export default function Waste() {
     `${Number(c.residual_pct).toFixed(2)}%`,
     `${Number(c.special_waste_pct).toFixed(2)}%`,
     `${Number(c.confidence).toFixed(2)}%`,
-    `${Number(c.estimated_volume).toFixed(2)} kg`,
+    formatWeight(Number(c.estimated_volume)),
     c.timestamp ? new Date(c.timestamp).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—',
   ])
 
@@ -447,8 +448,8 @@ export default function Waste() {
                   </div>
                   {/* estimated weight */}
                   <div className="flex justify-between text-xs mt-1">
-                    <p>Estimated weight (kg)</p>
-                    <p className="text-left">{selectedWaste.estimated_volume} kg</p>
+                    <p>Estimated weight</p>
+                    <p className="text-left">{formatWeight(selectedWaste.estimated_volume)}</p>
                   </div>
                   {/* location */}
                   <div className="flex justify-between text-xs mt-1">

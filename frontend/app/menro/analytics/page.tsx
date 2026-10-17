@@ -32,6 +32,7 @@ import { usePolling } from "@/components/hooks/usePolling"
 import { usePageCache } from "@/components/hooks/usePageCache";
 import { SpinnerIcon } from "@/components/SpinnerIcon";
 import { printReport } from "@/lib/printReport";
+import { formatWeight, formatWeightIn, pickWeightUnit } from "@/lib/formatWeight"
 import { getUser } from "@/lib/auth";
 
 
@@ -151,6 +152,7 @@ export default function Analytics() {
     (sum, w) => sum + (w.estimated_volume || 0) * (w.special_waste_pct || 0) / 100,
     0
   )
+  const cardUnit = pickWeightUnit([totalWaste])
 
   const filtered = wasteClassification
 
@@ -171,6 +173,7 @@ export default function Analytics() {
     .sort((a, b) => b.total - a.total)
 
   const maxBarangayWaste = Math.max(...wasteByBarangay.map(b => b.total), 0)
+  const barUnit = pickWeightUnit([maxBarangayWaste])
 
   // waste composition percentages
   const compositionData = [
@@ -190,7 +193,7 @@ export default function Analytics() {
     `${Number(c.residual_pct).toFixed(2)}%`,
     `${Number(c.special_waste_pct).toFixed(2)}%`,
     `${Number(c.confidence).toFixed(2)}%`,
-    `${Number(c.estimated_volume).toFixed(2)} kg`,
+    formatWeight(Number(c.estimated_volume)),
     c.timestamp ? new Date(c.timestamp).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—',
   ])
 
@@ -266,7 +269,7 @@ useWebSocket({
               <div className={`${card.bg} rounded-lg p-2`}>{card.icon}</div>
               <div className="flex flex-col">
                 <span className="text-xl font-bold text-[#122A48] leading-tight">
-                  {formatKg(card.count)} <span className="text-xs font-normal">kg</span>
+                  {formatWeightIn(card.count, cardUnit)}
                 </span>
                 <p className="text-xs text-[#122A48]">{card.label}</p>
               </div>
@@ -298,7 +301,7 @@ useWebSocket({
                         style={{ width: `${displayWidthPct}%` }}
                       />
                       <span className="text-xs text-[#122A48] whitespace-nowrap">
-                        {formatKg(b.total)}kg
+                        {formatWeightIn(b.total, barUnit)}
                       </span>
                     </div>
                   </div>
@@ -396,7 +399,7 @@ useWebSocket({
                     <TableCell className="text-left text-xs">{w.residual_pct?.toFixed(2)}%</TableCell>
                     <TableCell className="text-left text-xs">{w.special_waste_pct?.toFixed(2)}%</TableCell>
                     <TableCell className="text-left text-xs">{(w.confidence).toFixed(2)}%</TableCell>
-                    <TableCell className="text-left text-xs">{w.estimated_volume.toFixed(2)} kg</TableCell>
+                    <TableCell className="text-left text-xs">{formatWeight(w.estimated_volume)}</TableCell>
                     <TableCell className="text-left text-xs">
                       {new Date(w.timestamp).toLocaleString()}
                     </TableCell>
