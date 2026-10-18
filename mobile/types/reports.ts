@@ -57,6 +57,7 @@ export interface CanalMonitoringReport {
   waste_medical_kg: number | null
   waste_other_kg: number | null
   waste_other_label: string
+  custom_waste: ReportCustomWaste[]
 
   // Barangay response
   assigned_personnel: string | null
@@ -73,4 +74,18 @@ export interface CanalMonitoringReport {
   barangay_details: BarangayDetails | null
   reported_by_details: ReportUser | null
   media: ReportMedia[]
+}
+
+export interface CustomWasteType {
+  waste_type_id: number
+  name: string
+  status: 'Pending' | 'Approved' | 'Rejected'
+}
+
+export interface ReportCustomWaste {
+  item_id: number
+  waste_type: number
+  waste_type_name: string
+  waste_type_status: 'Pending' | 'Approved' | 'Rejected'
+  weight_kg: number
 }

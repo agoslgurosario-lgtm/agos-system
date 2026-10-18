@@ -26,6 +26,7 @@ const SEVERITY_MAP: Record<string, 'critical' | 'warning' | 'info'> = {
   Low_Battery: 'info',
   Weak_Signal: 'info',
   Sensor_Failure: 'info',
+  Waste_Type_Rejected: 'info',
 }
 
 const SEVERITY_RANK: Record<string, number> = { critical: 3, warning: 2, info: 1 }

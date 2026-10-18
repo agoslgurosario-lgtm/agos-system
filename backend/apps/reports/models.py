@@ -153,3 +153,50 @@ class ReportMedia(models.Model):
 
     def __str__(self):
         return f"Media {self.media} - {self.media_type}"
+
+
+class CustomWasteType(models.Model):
+    STATUS_CHOICES = [('Pending', 'Pending'), ('Approved', 'Approved'), ('Rejected', 'Rejected')]
+
+    waste_type_id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=40)
+    name_key = models.CharField(max_length=40, unique=True)  # lowercase, for duplicate checks
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='Pending')
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='+', db_column='created_by'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='+', db_column='reviewed_by'
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    rejection_reason = models.CharField(max_length=200, blank=True, default='')
+
+    class Meta:
+        db_table = 'tbl_custom_waste_types'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class ReportCustomWaste(models.Model):
+    """One row per custom waste type recorded on a report (the 'Other' entries)."""
+    item_id = models.AutoField(primary_key=True)
+    report = models.ForeignKey(
+        CanalMonitoringReport, on_delete=models.CASCADE,
+        related_name='custom_waste', db_column='report_id'
+    )
+    waste_type = models.ForeignKey(
+        CustomWasteType, on_delete=models.PROTECT, db_column='waste_type_id'
+    )
+    weight_kg = models.FloatField(validators=[MinValueValidator(0)])
+
+    class Meta:
+        db_table = 'tbl_report_custom_waste'
+        unique_together = ('report', 'waste_type')
+
+    def __str__(self):
+        return f"{self.report_id}: {self.waste_type.name} {self.weight_kg} kg"

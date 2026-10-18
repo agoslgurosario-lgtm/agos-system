@@ -4,8 +4,15 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
 from .models import Alert
-from .consumers import ALERTS_GROUP, ALERTS_STAFF_GROUP
+from .consumers import ALERTS_STAFF_GROUP, barangay_group
 from .serializers import AlertSerializer
+
+
+def alert_barangay_id(alert):
+    """Barangay this alert belongs to (None for e.g. an unassigned node)."""
+    if alert.alert_type == 'Waste_Type_Rejected':
+        return alert.barangay_id
+    return alert.node.barangay_id if alert.node else None
 
 
 def build_alert_payload(alert):
@@ -15,6 +22,7 @@ def build_alert_payload(alert):
         'alert_type': alert.alert_type,
         'node_name': serializer.get_node_name(alert),
         'barangay_name': serializer.get_barangay_name(alert),
+        'barangay_id': alert_barangay_id(alert),
         'timestamp': alert.timestamp.isoformat(),
         'is_read': False,  # a brand-new alert has no reads yet
         'alert_context': serializer.get_alert_context(alert),
@@ -26,11 +34,20 @@ def broadcast_new_alert(sender, instance, created, **kwargs):
     if not created:
         return  # only broadcast on creation, not on updates (e.g. mark-as-read)
 
+    bid = alert_barangay_id(instance)
+    groups = []
+    if instance.alert_type == 'Waste_Type_Rejected':
+        if bid:
+            groups = [barangay_group(bid)]       # that barangay only
+    else:
+        groups = [ALERTS_STAFF_GROUP]            # Admin / MENRO / MENRO Staff
+        if instance.alert_type != 'Report_Submitted' and bid:
+            groups.append(barangay_group(bid))   # plus the barangay that owns the node
+
+    if not groups:
+        return
+
     channel_layer = get_channel_layer()
-    # Report_Submitted is staff-only — the filing barangay doesn't need to be told
-    # about its own submission. Everything else keeps going to everyone, unchanged.
-    group = ALERTS_STAFF_GROUP if instance.alert_type == 'Report_Submitted' else ALERTS_GROUP
-    async_to_sync(channel_layer.group_send)(
-        group,
-        {"type": "alert_message", "alert": build_alert_payload(instance)}
-    )
+    message = {"type": "alert_message", "alert": build_alert_payload(instance)}
+    for group in groups:
+        async_to_sync(channel_layer.group_send)(group, message)

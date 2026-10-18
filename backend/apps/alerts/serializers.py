@@ -29,6 +29,8 @@ class AlertSerializer(serializers.ModelSerializer):
         return cache[node.pk]
 
     def get_barangay_name(self, obj):
+        if obj.barangay_id:
+            return obj.barangay.barangay_name
         if obj.report:
             return obj.report.barangay.barangay_name
         if not obj.node:
@@ -61,6 +63,9 @@ class AlertSerializer(serializers.ModelSerializer):
         Report_Submitted    → report_id, purok, severity, date_observed
         """
         t = obj.alert_type
+
+        if t == 'Waste_Type_Rejected':
+            return obj.alert_context or {}
 
         if t == 'Report_Submitted':
             if not obj.report:

@@ -155,10 +155,13 @@ export default function ViewReportScreen() {
 
   const wasteRows = [
     ...WASTE_ROWS.map((row) => ({ label: row.label, kg: Number(report[row.key] ?? 0) })),
-    {
-      label: report.waste_other_label ? `Other (${report.waste_other_label})` : "Other",
-      kg: report.waste_other_kg ?? 0,
-    },
+    ...(report.waste_other_kg || report.waste_other_label
+      ? [{
+          label: report.waste_other_label ? `Other (${report.waste_other_label})` : "Other",
+          kg: report.waste_other_kg ?? 0,
+        }]
+      : []),
+    ...(report.custom_waste ?? []).map((c) => ({ label: c.waste_type_name, kg: c.weight_kg })),
   ];
 
   const photosBy = (category: string) => report.media.filter((m) => m.media_category === category);

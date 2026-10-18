@@ -2,7 +2,8 @@ from django.urls import path
 from .views import (
     CanalMonitoringReportListView, CanalMonitoringReportDetailView, CanalMonitoringReportExportView,
     MyReportsListView,
-    ReportMediaListView, ReportMediaUploadView, ReportMediaDetailView, ReportMediaByClogEventView, SignatoryStatusView
+    ReportMediaListView, ReportMediaUploadView, ReportMediaDetailView, ReportMediaByClogEventView, SignatoryStatusView,
+    CustomWasteTypeListCreateView, CustomWasteTypeReviewView, 
 )
 
 urlpatterns = [
@@ -15,4 +16,6 @@ urlpatterns = [
     path('report-media/<int:media>/', ReportMediaDetailView.as_view()),
     path('canal-reports/signatory-status/', SignatoryStatusView.as_view()),
     path('report-media/clog-event/<int:event_id>/', ReportMediaByClogEventView.as_view(), name='report-media-by-clog-event'),
+    path('custom-waste-types/', CustomWasteTypeListCreateView.as_view()),
+    path('custom-waste-types/<int:waste_type_id>/', CustomWasteTypeReviewView.as_view()),
 ]

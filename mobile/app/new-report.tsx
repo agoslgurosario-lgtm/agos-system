@@ -15,8 +15,9 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import type {
   CanalMonitoringReport, ReportSeverity, WaterLevel, ObstructionCoverage,
-  WaterFlowCondition
+  WaterFlowCondition, CustomWasteType,
 } from "@/types/reports";
+import { AddOtherWasteModal } from "@/components/reports/AddOtherWasteModal";
 import { SubmitReportModal } from "@/components/reports/SubmitReportModal";
 import { IncompleteReportModal } from "@/components/reports/IncompleteReportModal";
 import { PhotoPreviewModal } from "@/components/reports/PhotoPreviewModal";
@@ -58,6 +59,7 @@ interface ReportFormState {
   wasteMedicalKg: string;
   wasteOtherKg: string;
   wasteOtherLabel: string;
+  customWaste: { wasteTypeId: number; name: string; status: string; kg: string }[];
 
   // Barangay response
   assignedPersonnel: string;
@@ -95,6 +97,7 @@ const INITIAL_STATE: ReportFormState = {
   wasteMedicalKg: "",
   wasteOtherKg: "",
   wasteOtherLabel: "",
+  customWaste: [],
 
   assignedPersonnel: "",
   dateResponded: null,
@@ -265,6 +268,8 @@ const WASTE_KG_FIELDS: { key: WasteKgKey; label: string }[] = [
   { key: "wasteOtherKg", label: "Other (kg)" },
 ];
 
+const WASTE_GRID_FIELDS = WASTE_KG_FIELDS.filter((w) => w.key !== "wasteOtherKg");
+
 // lays fields out two per row; a lone last field gets a spacer so it doesn't stretch full width
 function FieldPairs<T extends { key: string }>({ items, render }: {
   items: T[];
@@ -419,6 +424,7 @@ function isFormEmpty(f: ReportFormState): boolean {
     !f.dateObserved && !f.severity &&
     !f.waterLevel && !f.obstructionCoverage && !f.waterFlowCondition &&
     WASTE_KG_FIELDS.every((w) => !f[w.key].trim()) && !f.wasteOtherLabel.trim() &&
+    f.customWaste.length === 0 &&
     !f.assignedPersonnel.trim() && !f.dateResponded && !f.actionTaken.trim() &&
     !f.remarks.trim() &&
     f.beforePhotos.length === 0 && f.afterPhotos.length === 0 && f.evidencePhotos.length === 0
@@ -491,6 +497,15 @@ export default function NewReportScreen() {
 
   const barangayName = user?.barangay_details?.barangay_name ?? "Your barangay";
 
+  const [wasteTypes, setWasteTypes] = useState<CustomWasteType[]>([]);
+  const [isAddWasteVisible, setIsAddWasteVisible] = useState(false);
+
+  useEffect(() => {
+    api.get("/api/custom-waste-types/")
+      .then((list: CustomWasteType[]) => setWasteTypes(list))
+      .catch(() => {});
+  }, []);
+
   // Load an existing in-progress report when continuing one
   useEffect(() => {
     if (!params.report_id) return;
@@ -538,6 +553,12 @@ export default function NewReportScreen() {
           wasteMedicalKg: num(report.waste_medical_kg),
           wasteOtherKg: num(report.waste_other_kg),
           wasteOtherLabel: report.waste_other_label ?? "",
+          customWaste: (report.custom_waste ?? []).map((c) => ({
+            wasteTypeId: c.waste_type,
+            name: c.waste_type_name,
+            status: c.waste_type_status,
+            kg: c.weight_kg > 0 ? String(c.weight_kg) : "",
+          })),
 
           assignedPersonnel: report.assigned_personnel ?? "",
           dateResponded: report.date_responded ? new Date(report.date_responded) : null,
@@ -559,10 +580,24 @@ export default function NewReportScreen() {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  // Waste Collected is always the sum of the waste composition categories (kg)
+  const addCustomWaste = (t: CustomWasteType) => {
+    setWasteTypes((prev) => (prev.some((p) => p.waste_type_id === t.waste_type_id) ? prev : [...prev, t]));
+    setForm((prev) =>
+      prev.customWaste.some((c) => c.wasteTypeId === t.waste_type_id)
+        ? prev
+        : { ...prev, customWaste: [...prev.customWaste, { wasteTypeId: t.waste_type_id, name: t.name, status: t.status, kg: "" }] }
+    );
+  };
+  const updateCustomKg = (id: number, kg: string) =>
+    setForm((prev) => ({ ...prev, customWaste: prev.customWaste.map((c) => (c.wasteTypeId === id ? { ...c, kg } : c)) }));
+  const removeCustomWaste = (id: number) =>
+    setForm((prev) => ({ ...prev, customWaste: prev.customWaste.filter((c) => c.wasteTypeId !== id) }));
+
+  const customWasteKg = form.customWaste.reduce((sum, c) => sum + parseAmount(c.kg), 0);
   const wasteTotalKg =
-    Math.round(WASTE_KG_FIELDS.reduce((sum, w) => sum + parseAmount(form[w.key]), 0) * 100) / 100;
-  const hasAnyWaste = WASTE_KG_FIELDS.some((w) => form[w.key].trim() !== "");
+    Math.round((WASTE_KG_FIELDS.reduce((sum, w) => sum + parseAmount(form[w.key]), 0) + customWasteKg) * 100) / 100;
+  const hasAnyWaste =
+    WASTE_KG_FIELDS.some((w) => form[w.key].trim() !== "") || form.customWaste.some((c) => c.kg.trim() !== "");
 
   // Creates a nearly-empty in-progress report the first time something needs one.
   // Every field is optional server-side, so an empty body is valid.
@@ -697,6 +732,7 @@ export default function NewReportScreen() {
       waste_medical_kg: kg(form.wasteMedicalKg),
       waste_other_kg: kg(form.wasteOtherKg),
       waste_other_label: form.wasteOtherLabel.trim(),
+      custom_waste: form.customWaste.map((c) => ({ waste_type: c.wasteTypeId, weight_kg: parseAmount(c.kg) })),
 
       assigned_personnel: textOrNull(form.assignedPersonnel),
       date_responded: form.dateResponded ? form.dateResponded.toISOString() : null,
@@ -720,6 +756,9 @@ export default function NewReportScreen() {
     if (!form.dateResponded) missing.push("Date / time responded");
     if (!form.actionTaken.trim()) missing.push("Action taken");
     if (wasteTotalKg <= 0) missing.push("Waste composition (at least one category)");
+    form.customWaste.forEach((c) => {
+      if (parseAmount(c.kg) <= 0) missing.push(`Weight for ${c.name}`);
+    });
     if (form.beforePhotos.length === 0) missing.push("Before Cleanup photo");
     if (form.afterPhotos.length === 0) missing.push("After Cleanup photo");
     return missing;
@@ -952,7 +991,7 @@ export default function NewReportScreen() {
             </Text>
 
             <FieldPairs
-              items={WASTE_KG_FIELDS}
+              items={WASTE_GRID_FIELDS}
               render={(f) => (
                 <Field
                   label={f.label}
@@ -964,13 +1003,60 @@ export default function NewReportScreen() {
               )}
             />
 
-            <View className="mb-1">
-              <Field
-                label="Other — specify"
-                value={form.wasteOtherLabel}
-                onChangeText={(t) => update("wasteOtherLabel", t)}
-                placeholder="e.g. wood, construction debris, mattress"
-              />
+            <View className="mt-1 border-t border-[#e2e8f0] pt-2.5">
+              <Text className="mb-1 text-xs font-bold text-[#334155]">Other Waste (kg)</Text>
+              <Text className="mb-2 text-[11px] leading-4 text-[#94a3b8]">
+                Anything not listed above, like wood or a mattress. Types you add are saved for your next report, and other barangays see them once MENRO approves.
+              </Text>
+
+              {form.customWaste.map((c) => (
+                <View key={c.wasteTypeId} className="mb-2 flex-row items-end gap-2">
+                  <View className="flex-1">
+                    <Field
+                      label={c.status === "Pending" ? `${c.name} (kg) · pending approval` : `${c.name} (kg)`}
+                      value={c.kg}
+                      onChangeText={(t) => updateCustomKg(c.wasteTypeId, sanitizeDecimal(t))}
+                      placeholder="0.00"
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => removeCustomWaste(c.wasteTypeId)}
+                    className="mb-0.5 h-10 w-10 items-center justify-center rounded-xl bg-[#fee2e2]"
+                  >
+                    <MaterialCommunityIcons name="close" size={18} color="#dc2626" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+
+              <TouchableOpacity
+                onPress={() => setIsAddWasteVisible(true)}
+                className="flex-row items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#94a3b8] py-2.5"
+              >
+                <MaterialCommunityIcons name="plus" size={16} color="#475569" />
+                <Text className="text-[13px] font-semibold text-[#475569]">Add other waste</Text>
+              </TouchableOpacity>
+
+              {(form.wasteOtherKg.trim() !== "" || form.wasteOtherLabel.trim() !== "") && (
+                <View className="mt-2.5">
+                  <Text className="mb-1 text-[11px] text-[#94a3b8]">From your earlier draft:</Text>
+                  <Field
+                    label="Other (kg)"
+                    value={form.wasteOtherKg}
+                    onChangeText={(t) => update("wasteOtherKg", sanitizeDecimal(t))}
+                    placeholder="0.00"
+                    keyboardType="decimal-pad"
+                  />
+                  <View className="mt-2">
+                    <Field
+                      label="Other — specify"
+                      value={form.wasteOtherLabel}
+                      onChangeText={(t) => update("wasteOtherLabel", t)}
+                      placeholder="e.g. wood"
+                    />
+                  </View>
+                </View>
+              )}
             </View>
           </View>
 
@@ -1134,6 +1220,15 @@ export default function NewReportScreen() {
       />
 
       <DraftSavedModal visible={isDraftSavedVisible} onClose={handleDraftSavedClose} />
+
+      <AddOtherWasteModal
+        visible={isAddWasteVisible}
+        onClose={() => setIsAddWasteVisible(false)}
+        wasteTypes={wasteTypes}
+        excludeIds={form.customWaste.map((c) => c.wasteTypeId)}
+        onPick={addCustomWaste}
+        onCreated={addCustomWaste}
+      />
     </SafeAreaView>
   );
 }

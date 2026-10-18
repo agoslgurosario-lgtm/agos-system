@@ -23,6 +23,11 @@ export const ALERT_META: Record<AlertType, { label: string; icon: keyof typeof I
     icon: "warning-outline",
     tier: "Critical",
   },
+  Waste_Type_Rejected: {
+    label: "Waste Type Not Approved",
+    icon: "close-circle-outline",
+    tier: null,
+  },
 };
 
 export const ALERT_STYLE: Record<AlertType, { indicator: string; badgeBg: string; badgeText: string}> ={
@@ -45,5 +50,10 @@ export const ALERT_STYLE: Record<AlertType, { indicator: string; badgeBg: string
     indicator: "#D81010",
     badgeBg: "bg-[#FFE5E5]",
     badgeText: "text-[#D81010]",
+  },
+  Waste_Type_Rejected: {
+    indicator: "#7C3AED",
+    badgeBg: "bg-[#EDE4FC]",
+    badgeText: "text-[#7C3AED]",
   },
 };

@@ -32,6 +32,7 @@ import { useFillRows } from "@/components/hooks/useFillRows"
 import { SpinnerIcon } from "@/components/SpinnerIcon"
 import StyledBadge from "@/components/StyledBadge"
 import { PrintCanalReport } from "@/components/PrintReport/PrintCanalReport"
+import { PendingWasteTypes } from "@/components/PendingWasteTypes"
 
 // types
 import type { CanalMonitoringReport, ReportBarangay, ReportSeverity } from "@/types/report"
@@ -238,6 +239,8 @@ export default function BarangayReports() {
             </Select>
 
           </div>
+
+          {["MENRO", "MENRO_Staff"].includes(currentUser?.user_role ?? "") && <PendingWasteTypes />}
         </div>
 
         {/* barangay reports table */}

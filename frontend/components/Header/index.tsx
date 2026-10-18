@@ -55,6 +55,7 @@ const pageTitles: Record<string, string> = {
   "/admin/health": "Sensor Nodes Health",
   "/admin/audit": "System Audit Logs",
   "/admin/settings": "Settings",
+  "/admin/maintenance-logs": "Maintenance Logs",
   "/admin/manual": "Admin User Manual",
   "/menro/map": "Regional Map Monitoring",
   "/menro/alerts": "Alerts",

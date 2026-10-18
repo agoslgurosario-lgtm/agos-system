@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Modal, Pressable, Text, View } from "react-native";
-import { Alert, ClogAlertContext, WaterLevelAlertContext } from "../../types/alert";
+import { Alert, ClogAlertContext, WaterLevelAlertContext, WasteTypeRejectedContext } from "../../types/alert";
 import { ALERT_META, ALERT_STYLE } from "../../constants/alerts";
 
 interface Props {
@@ -27,6 +27,23 @@ function ContextDetails({ alert }: { alert: Alert }) {
 
   const hasWaterData =
     context.water_level != null || context.water_flow_rate != null || context.water_flow;
+
+  if (alert.alert_type === "Waste_Type_Rejected") {
+    const c = alert.alert_context as WasteTypeRejectedContext;
+    return (
+      <View className="gap-2">
+        <Text className="text-slate-500 text-[12px]">
+          Waste type: <Text className="font-semibold text-slate-800">{c.waste_type ?? "—"}</Text>
+        </Text>
+        <Text className="text-slate-500 text-[12px]">
+          Reason: <Text className="font-semibold text-slate-800">{c.reason ?? "—"}</Text>
+        </Text>
+        <Text className="text-slate-400 text-[11px] mt-1">
+          You can add it again with a clearer name, or record it under one of the existing categories.
+        </Text>
+      </View>
+    );
+  }
 
   if (isWaterLevel) {
     if (!hasWaterData) return null;
@@ -170,10 +187,12 @@ export default function AlertModal({ alert, visible, onClose }: Props) {
           {/* INFORMATION */}
 
           <View className="gap-3">
-            <View className="flex-row justify-between">
-              <Text className="text-slate-500">Node</Text>
-              <Text className="font-semibold">{alert.node_name ?? "—"}</Text>
-            </View>
+            {alert.alert_type !== "Waste_Type_Rejected" && (
+              <View className="flex-row justify-between">
+                <Text className="text-slate-500">Node</Text>
+                <Text className="font-semibold">{alert.node_name ?? "—"}</Text>
+              </View>
+            )}
 
             <View className="flex-row justify-between">
               <Text className="text-slate-500">Barangay</Text>
@@ -181,7 +200,9 @@ export default function AlertModal({ alert, visible, onClose }: Props) {
             </View>
 
             <View className="flex-row justify-between">
-              <Text className="text-slate-500">Detected</Text>
+              <Text className="text-slate-500">
+                {alert.alert_type === "Waste_Type_Rejected" ? "Reviewed" : "Detected"}
+              </Text>
               <Text className="font-semibold">{formatDetectedAt(alert.timestamp)}</Text>
             </View>
           </View>

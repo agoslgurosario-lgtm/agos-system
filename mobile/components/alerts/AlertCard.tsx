@@ -1,5 +1,5 @@
 import { Pressable, Text, View } from "react-native";
-import { Alert, ClogAlertContext } from "../../types/alert";
+import { Alert, ClogAlertContext, WasteTypeRejectedContext } from "../../types/alert";
 import { ALERT_META, ALERT_STYLE } from "../../constants/alerts";
 
 interface Props {
@@ -22,6 +22,8 @@ export default function AlertCard({ alert, onPress }: Props) {
   const meta = ALERT_META[alert.alert_type];
   const style = ALERT_STYLE[alert.alert_type];
   const context = alert.alert_context as ClogAlertContext;
+  const wasteCtx = alert.alert_context as WasteTypeRejectedContext;
+  const isWasteType = alert.alert_type === "Waste_Type_Rejected";
 
   return (
     <Pressable
@@ -70,6 +72,16 @@ export default function AlertCard({ alert, onPress }: Props) {
           <View className="border-b border-slate-200 my-3" />
 
           {/* Details */}
+          {isWasteType ? (
+            <View>
+              <Text className="text-[9px] text-slate-400 uppercase">WASTE TYPE</Text>
+              <Text className="text-[12px] font-semibold mt-1">{wasteCtx.waste_type ?? "—"}</Text>
+              <Text className="text-[11px] text-slate-500 mt-1" numberOfLines={2}>
+                Reason: {wasteCtx.reason ?? "—"}
+              </Text>
+              <Text className="text-[10px] text-slate-400 mt-1">{formatRelativeTime(alert.timestamp)}</Text>
+            </View>
+          ) : (
           <View className="flex-row justify-between">
             {/* Severity */}
             <View className="items-start">
@@ -112,6 +124,7 @@ export default function AlertCard({ alert, onPress }: Props) {
               </Text>
             </View>
           </View>
+          )}
         </View>
       </View>
     </Pressable>

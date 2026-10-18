@@ -13,6 +13,7 @@ class Alert(models.Model):
         ('Weak_Signal',         'Weak Signal'),
         ('Sensor_Failure',      'Sensor Failure'),
         ('Report_Submitted',    'Report Submitted'),
+        ('Waste_Type_Rejected', 'Waste Type Rejected'),
     ]
 
     alert_id = models.AutoField(primary_key=True)
@@ -42,6 +43,14 @@ class Alert(models.Model):
         on_delete=models.SET_NULL,
         null=True, blank=True,
         db_column='health_log_id'
+    )
+    barangay = models.ForeignKey(
+        'barangay.Barangay',
+        on_delete=models.CASCADE,
+        db_column='barangay_id',
+        null=True,
+        blank=True,
+        related_name='+',
     )
     alert_type = models.CharField(max_length=25, choices=ALERT_TYPE_CHOICES)
     alert_context = models.JSONField(default=dict, blank=True)

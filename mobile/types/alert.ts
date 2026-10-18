@@ -2,7 +2,8 @@ export type AlertType =
   | "Water_Level_Rising"
   | "Low_Clog_Alert"
   | "Moderate_Clog_Alert"
-  | "Critical_Clog";
+  | "Critical_Clog"
+  | "Waste_Type_Rejected";
 
 export type ClogTier = "Low" | "Moderate" | "Critical";
 
@@ -26,7 +27,12 @@ export interface WaterLevelAlertContext {
   water_flow_rate?: number | null;
 }
 
-export type AlertContext = ClogAlertContext | WaterLevelAlertContext | Record<string, never>;
+export interface WasteTypeRejectedContext {
+  waste_type?: string;
+  reason?: string;
+}
+
+export type AlertContext = ClogAlertContext | WaterLevelAlertContext | WasteTypeRejectedContext | Record<string, never>;
 
 export interface Alert {
   alert_id: number;

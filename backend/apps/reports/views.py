@@ -9,11 +9,13 @@ from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
-from .models import CanalMonitoringReport, ReportMedia
-from .serializers import CanalMonitoringReportSerializer, ReportMediaSerializer
+from .models import CanalMonitoringReport, ReportMedia, CustomWasteType
+from .serializers import CanalMonitoringReportSerializer, ReportMediaSerializer, CustomWasteTypeSerializer
+from .waste_types import clean_name, name_key, find_similar, find_fixed_match
+from django.db import IntegrityError
 from apps.users.permissions import (
     IsBarangay, IsAdminOrMENROOrBarangay, IsAdminOrMENROOfficer,
-    CanAccessOwnCanalReport, CanAccessOwnCanalReportMedia,
+    CanAccessOwnCanalReport, CanAccessOwnCanalReportMedia, IsMENRO, IsMENROOrStaff,
 )
 from apps.audit_logs.utils import log_action
 from django_filters.rest_framework import DjangoFilterBackend
@@ -134,11 +136,12 @@ class CanalMonitoringReportListView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         user = self.request.user
+        base = CanalMonitoringReport.objects.select_related(
+            'barangay', 'reported_by'
+        ).prefetch_related('reportmedia_set', 'custom_waste__waste_type')
         if user.user_role == 'Barangay':
-            return CanalMonitoringReport.objects.filter(
-                barangay=user.barangay
-            ).order_by('-date_observed')
-        return CanalMonitoringReport.objects.filter(is_submitted=True).order_by('-date_observed')
+            return base.filter(barangay=user.barangay).order_by('-date_observed')
+        return base.filter(is_submitted=True).order_by('-date_observed')
 
     def perform_create(self, serializer):
         if serializer.validated_data.get('is_submitted'):
@@ -154,14 +157,16 @@ class CanalMonitoringReportListView(generics.ListCreateAPIView):
 
 
 class CanalMonitoringReportDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = CanalMonitoringReport.objects.all()
+    queryset = CanalMonitoringReport.objects.select_related(
+        'barangay', 'reported_by'
+    ).prefetch_related('reportmedia_set', 'custom_waste__waste_type')
     serializer_class = CanalMonitoringReportSerializer
     lookup_field = 'report_id'
     permission_classes = [CanAccessOwnCanalReport]
 
     def perform_update(self, serializer):
         was_submitted = serializer.instance.is_submitted
-        if serializer.validated_data.get('is_submmited') and not was_submitted:
+        if serializer.validated_data.get('is_submitted') and not was_submitted:
             _require_complete_signatories(serializer.instance.barangay)
         report = serializer.save()
         if report.is_submitted and not was_submitted:
@@ -237,7 +242,9 @@ class MyReportsListView(generics.ListAPIView):
     permission_classes = [IsBarangay]
 
     def get_queryset(self):
-        return CanalMonitoringReport.objects.filter(
+        return CanalMonitoringReport.objects.select_related(
+            'barangay', 'reported_by'
+        ).prefetch_related('reportmedia_set', 'custom_waste__waste_type').filter(
             barangay=self.request.user.barangay
         ).order_by('-date_observed')
 
@@ -330,3 +337,134 @@ class SignatoryStatusView(APIView):
     def get(self, request):
         missing = _missing_signatory_positions(request.user.barangay)
         return Response({'complete': not missing, 'missing': missing})
+
+
+class CustomWasteTypeListCreateView(generics.ListCreateAPIView):
+    serializer_class = CustomWasteTypeSerializer
+    pagination_class = None
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['status']
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsBarangay()]
+        return [IsAdminOrMENROOrBarangay()]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = CustomWasteType.objects.select_related('created_by__barangay')
+        if user.user_role == 'Barangay':
+            # approved types for everyone + this barangay's own pending ones
+            qs = qs.filter(Q(status='Approved') | Q(status='Pending', created_by__barangay=user.barangay))
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        try:
+            name = clean_name(request.data.get('name'))
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        key = name_key(name)
+
+        existing = CustomWasteType.objects.filter(name_key=key).first()
+        if existing:
+            if existing.status == 'Rejected':
+                return Response(
+                    {'error': f'"{existing.name}" was reviewed and not accepted as a waste type.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            return Response(self.get_serializer(existing).data, status=status.HTTP_200_OK)
+
+        custom_by_key = dict(
+            CustomWasteType.objects.exclude(status='Rejected').values_list('name_key', 'name')
+        )
+        similar = find_similar(key, custom_by_key)
+        if similar:
+            return Response(
+                {'error': f'"{name}" looks like "{similar}", which already exists.', 'suggestion': similar},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            obj = CustomWasteType.objects.create(name=name, name_key=key, created_by=request.user)
+        except IntegrityError:  # two users added the same name at the same moment
+            obj = CustomWasteType.objects.get(name_key=key)
+
+        log_action(
+            user=request.user,
+            action='Added Custom Waste Type',
+            affected_table='tbl_custom_waste_types',
+            new_value=f"{obj.name} (Pending)",
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+        return Response(self.get_serializer(obj).data, status=status.HTTP_201_CREATED)
+
+
+class CustomWasteTypeReviewView(APIView):
+    """MENRO officer or staff: approve (optionally renaming) or reject a pending type."""
+    permission_classes = [IsMENROOrStaff]
+
+    def patch(self, request, waste_type_id):
+        obj = get_object_or_404(CustomWasteType, pk=waste_type_id)
+        if obj.status != 'Pending':
+            return Response({'error': 'This waste type was already reviewed.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        action = request.data.get('action')
+        if action not in ('approve', 'reject'):
+            return Response({'error': 'action must be "approve" or "reject".'}, status=status.HTTP_400_BAD_REQUEST)
+
+        old_name = obj.name
+
+        if action == 'reject':
+            reason = (request.data.get('reason') or '').strip()
+            if not reason:
+                return Response({'error': 'Please give a reason for rejecting this waste type.'}, status=status.HTTP_400_BAD_REQUEST)
+            if len(reason) > 200:
+                return Response({'error': 'The reason must be 200 characters or fewer.'}, status=status.HTTP_400_BAD_REQUEST)
+            obj.status = 'Rejected'
+            obj.rejection_reason = reason
+        else:
+            new_name = request.data.get('name')
+            if new_name is not None:
+                try:
+                    name = clean_name(new_name)
+                except ValueError as e:
+                    return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+                key = name_key(name)
+                if CustomWasteType.objects.filter(name_key=key).exclude(pk=obj.pk).exists():
+                    return Response(
+                        {'error': f'"{name}" already exists. Reject this one instead.'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                obj.name, obj.name_key = name, key
+
+            builtin = find_fixed_match(obj.name_key)
+            if builtin:
+                return Response(
+                    {'error': f'"{obj.name}" is the same as the built-in category "{builtin}". Reject it with a reason instead.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            obj.status = 'Approved'
+
+        obj.reviewed_by = request.user
+        obj.reviewed_at = timezone.now()
+        obj.save()
+
+        if action == 'reject':
+            creator = obj.created_by
+            if creator and creator.barangay_id:
+                Alert.objects.create(
+                    alert_type='Waste_Type_Rejected',
+                    barangay_id=creator.barangay_id,
+                    alert_context={'waste_type': obj.name, 'reason': obj.rejection_reason},
+                )
+
+        log_action(
+            user=request.user,
+            action=f'{obj.status} Custom Waste Type',
+            affected_table='tbl_custom_waste_types',
+            old_value=old_name,
+            new_value=obj.name,
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+        return Response(CustomWasteTypeSerializer(obj).data)

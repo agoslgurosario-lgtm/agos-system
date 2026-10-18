@@ -16,19 +16,20 @@ PUSH_ALERT_TYPES = {
     'Moderate_Clog_Alert': ('Moderate clog detected', 'warning'),
     'Low_Clog_Alert':      ('Low clog detected', 'info'),
     'Water_Level_Rising':  ('Water level rising', 'warning'),
+    'Waste_Type_Rejected': ('Waste type not approved', 'info'),
 }
 
 
 def _recipient_tokens(alert):
-    # same rule as AlertListView: Barangay users only see their own barangay's nodes
-    if not alert.node or not alert.node.barangay_id:
+    barangay_id = alert.node.barangay_id if alert.node else alert.barangay_id
+    if not barangay_id:
         return []
     return list(
         DeviceToken.objects.filter(
             is_active=True,
             user__user_role='Barangay',
             user__status='Active',
-            user__barangay_id=alert.node.barangay_id,
+            user__barangay_id=barangay_id,
         ).values_list('token', flat=True)
     )
 
@@ -73,9 +74,13 @@ def notify_alert(alert):
     payload = build_alert_payload(alert)
 
     title, channel = spec
-    body = payload.get('node_name') or 'AGOS node'
-    if payload.get('barangay_name'):
-        body += f" • {payload['barangay_name']}"
+    if alert.alert_type == 'Waste_Type_Rejected':
+        ctx = alert.alert_context or {}
+        body = f"“{ctx.get('waste_type', 'Waste type')}” wasn't approved: {ctx.get('reason', '')}".strip()
+    else:
+        body = payload.get('node_name') or 'AGOS node'
+        if payload.get('barangay_name'):
+            body += f" • {payload['barangay_name']}"
 
     messages = [{
         'to': t,

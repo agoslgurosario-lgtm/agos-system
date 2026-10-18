@@ -167,3 +167,7 @@ class CanAccessOwnCanalReportMedia(BasePermission):
                 return False
             return (not report.is_submitted) or request.method in SAFE_METHODS
         return False
+
+
+class IsMENROOrStaff(_RolePermission):
+    allowed_roles = ['MENRO', 'MENRO_Staff']
