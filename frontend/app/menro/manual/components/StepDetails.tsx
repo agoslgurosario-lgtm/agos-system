@@ -24,6 +24,29 @@ interface StepDetailProps {
   nextLabel?: string
 }
 
+function ExpandLabel() {
+  return (
+    <span className="pointer-events-none absolute bottom-2 right-2 flex items-center gap-1 rounded-md bg-black/70 px-2 py-1 text-[11px] text-white opacity-0 transition-opacity group-hover:opacity-100">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="h-3 w-3"
+      >
+        <polyline points="15 3 21 3 21 9" />
+        <polyline points="9 21 3 21 3 15" />
+        <line x1="21" y1="3" x2="14" y2="10" />
+        <line x1="3" y1="21" x2="10" y2="14" />
+      </svg>
+      Click to expand
+    </span>
+  )
+}
+
 export default function StepDetail({
   stepIndex,
   totalSteps,
@@ -63,37 +86,20 @@ export default function StepDetail({
 
       {/* Main Step Image */}
       {imageUrl ? (
-        <div className="mb-5 flex justify-center">
+        <div className="group mb-5">
           <button
             type="button"
             data-tour="step-image"
             onClick={() => setLightboxImage({ src: imageUrl, alt: title })}
-            className="group relative inline-block cursor-pointer overflow-hidden rounded-lg border border-gray-200"
+            className="relative block w-full cursor-pointer overflow-hidden rounded-lg border border-gray-200"
           >
-            <img src={imageUrl} alt={title} className="block bg-gray-50" />
-
-            {/* Gray overlay */}
-            <span className="pointer-events-none absolute inset-0 bg-gray-900/40 opacity-0 transition-opacity group-hover:opacity-100" />
-
-            {/* Click to expand label */}
-            <span className="absolute bottom-2 right-2 flex items-center gap-1.5 rounded-md bg-black/60 text-white text-xs px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-3 w-3"
-              >
-                <polyline points="15 3 21 3 21 9" />
-                <polyline points="9 21 3 21 3 15" />
-                <line x1="21" y1="3" x2="14" y2="10" />
-                <line x1="3" y1="21" x2="10" y2="14" />
-              </svg>
-              Click to expand
-            </span>
+            <img
+              src={imageUrl}
+              alt={title}
+              className="block h-auto w-full"
+            />
+            <span className="pointer-events-none absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/20" />
+            <ExpandLabel />
           </button>
         </div>
       ) : (
@@ -113,7 +119,7 @@ export default function StepDetail({
           </p>
 
           {section.imageUrl ? (
-            <div className="mb-5 flex justify-center">
+            <div className="group mb-5">
               <button
                 type="button"
                 onClick={() =>
@@ -122,32 +128,15 @@ export default function StepDetail({
                     alt: section.label || "Section image",
                   })
                 }
-                className="group relative inline-block cursor-pointer overflow-hidden rounded-lg border border-gray-200"
+                className="relative block w-full cursor-pointer overflow-hidden rounded-lg border border-gray-200"
               >
                 <img
                   src={section.imageUrl}
                   alt={section.label || "Section image"}
-                  className="block"
+                  className="block h-auto w-full"
                 />
-                <span className="pointer-events-none absolute inset-0 bg-gray-900/40 opacity-0 transition-opacity group-hover:opacity-100" />
-                <span className="pointer-events-none absolute bottom-2 right-2 flex items-center gap-1 rounded-md bg-black/70 px-2 py-1 text-[11px] text-white opacity-0 transition-opacity group-hover:opacity-100">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="h-3 w-3"
-                  >
-                    <polyline points="15 3 21 3 21 9" />
-                    <polyline points="9 21 3 21 3 15" />
-                    <line x1="21" y1="3" x2="14" y2="10" />
-                    <line x1="3" y1="21" x2="10" y2="14" />
-                  </svg>
-                  Click to expand
-                </span>
+                <span className="pointer-events-none absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/20" />
+                <ExpandLabel />
               </button>
             </div>
           ) : (
