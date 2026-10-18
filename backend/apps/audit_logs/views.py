@@ -17,18 +17,26 @@ class AuditLogListView(generics.ListAPIView):
     pagination_class = None
 
     def get_queryset(self):
-        now = timezone.now()
-        return AuditLog.objects.filter(
-            timestamp__year=now.year, timestamp__month=now.month
-        ).order_by('-timestamp')
-
+        now = timezone.localtime()
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        next_month_start = (
+            month_start.replace(year=month_start.year + 1, month=1)
+            if month_start.month == 12
+            else month_start.replace(month=month_start.month + 1)
+        )
+        return (
+            AuditLog.objects
+            .select_related('user')
+            .filter(timestamp__gte=month_start, timestamp__lt=next_month_start)
+            .order_by('-timestamp')
+        )
 class AuditLogByUserView(generics.ListAPIView):
     serializer_class = AuditLogSerializer
     permission_classes = [IsAdmin]
 
     def get_queryset(self):
         user_id = self.kwargs['user_id']
-        return AuditLog.objects.filter(
+        return AuditLog.objects.select_related('user').filter(
             user__user_id=user_id
         ).order_by('-timestamp')
 
