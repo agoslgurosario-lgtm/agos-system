@@ -6,6 +6,8 @@ from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
+BACKUPS_TO_KEEP = 25
+
 
 def _get_backup_client():
     """S3 client for the backup storage (Backblaze B2). Separate from the
@@ -80,3 +82,21 @@ def _get_s3_client():
         aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
         region_name=settings.AWS_S3_REGION_NAME,
     )
+
+
+def prune_old_backups(keep: int = BACKUPS_TO_KEEP):
+    """Delete all but the newest `keep` backup zips. Only touches files named
+    agos_backup_*.zip, so nothing else in the bucket is ever deleted."""
+    client = _get_backup_client()
+    paginator = client.get_paginator('list_objects_v2')
+    backups = []
+    for page in paginator.paginate(Bucket=_bucket()):
+        for obj in page.get('Contents', []):
+            key = obj['Key']
+            if key.startswith('agos_backup_') and key.endswith('.zip'):
+                backups.append((obj['LastModified'], key))
+
+    backups.sort(reverse=True)  # newest first
+    for _, key in backups[keep:]:
+        client.delete_object(Bucket=_bucket(), Key=key)
+        logger.info("Deleted old backup: %s", key)

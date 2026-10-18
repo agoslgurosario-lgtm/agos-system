@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from .models import BackupConfig, BackupLog
 from .services import create_backup_archive
-from .supabase_backup import upload_backup_to_supabase
+from .supabase_backup import upload_backup_to_supabase, prune_old_backups
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,12 @@ def run_scheduled_backup_check():
             status='success',
             file_name=file_name,
         )
-        logger.info("Scheduled backup uploaded to Supabase: %s", file_name)
+        logger.info("Scheduled backup uploaded to backup storage: %s", file_name)
+
+        try:
+            prune_old_backups()
+        except Exception:
+            logger.exception("Could not prune old backups (backup itself succeeded).")
     except Exception as e:
         BackupLog.objects.create(
             backup_type='scheduled',

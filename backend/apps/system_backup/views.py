@@ -14,6 +14,7 @@ from apps.users.permissions import IsAdmin
 from .services import create_backup_archive, restore_backup_archive
 from .models import BackupLog, BackupConfig
 from .serializers import BackupConfigSerializer, BackupLogSerializer
+from .chunked_restore import start_server_restore
 
 
 class ManualBackupView(APIView):
@@ -175,50 +176,16 @@ class RestoreFromServerView(APIView):
 
     def post(self, request):
         file_name = request.data.get('file_name')
-
         if not file_name:
             return Response({'error': 'file_name is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Prevent path traversal — only allow a bare filename, not "../../something"
+        # Prevent path traversal: only allow a bare filename
         safe_name = os.path.basename(file_name)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            local_path = os.path.join(tmp_dir, safe_name)
+        upload_id = start_server_restore(safe_name, request.user.pk)
+        if upload_id is None:
+            return Response({'error': 'Another restore is already running.'},
+                            status=status.HTTP_409_CONFLICT)
 
-            try:
-                download_backup_from_supabase(safe_name, local_path)
-            except Exception as e:
-                return Response(
-                    {'error': f'Backup file not found in storage: {safe_name}'},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-
-            try:
-                restore_backup_archive(local_path)
-
-                BackupLog.objects.create(
-                    backup_type='restore',
-                    status='success',
-                    triggered_by=request.user,
-                    file_name=safe_name,
-                )
-                return Response({'message': 'System restored successfully.'})
-
-            except InvalidBackupError as e:
-                BackupLog.objects.create(
-                    backup_type='restore', status='failed',
-                    triggered_by=request.user, file_name=safe_name,
-                    error_message=str(e),
-                )
-                return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-            except Exception as e:
-                BackupLog.objects.create(
-                    backup_type='restore', status='failed',
-                    triggered_by=request.user, file_name=safe_name,
-                    error_message=str(e),
-                )
-                return Response(
-                    {'error': 'Restore failed because of a server problem. Please try again.'},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
+        return Response({'upload_id': upload_id, 'state': 'assembling'},
+                        status=status.HTTP_202_ACCEPTED)

@@ -27,6 +27,8 @@ from apps.users.permissions import IsAdmin
 from .models import BackupLog
 from .services import restore_backup_archive, InvalidBackupError
 
+from .supabase_backup import download_backup_from_supabase
+
 logger = logging.getLogger(__name__)
 
 UPLOAD_ROOT = os.path.join(tempfile.gettempdir(), 'agos_restore_uploads')
@@ -137,6 +139,65 @@ def _restore_worker(upload_id, total_chunks, file_name, user_id):
         shutil.rmtree(up_dir, ignore_errors=True)
         connections.close_all()
         _restore_lock.release()
+
+
+def _server_restore_worker(upload_id, file_name, user_id):
+    up_dir = _upload_dir(upload_id)
+    try:
+        os.makedirs(up_dir, exist_ok=True)
+        _write_status(upload_id, 'assembling')   # UI shows "Preparing backup file…"
+        zip_path = os.path.join(up_dir, 'downloaded.zip')
+
+        try:
+            download_backup_from_supabase(file_name, zip_path)
+        except Exception:
+            logger.exception("Could not download backup %s", file_name)
+            msg = f'Backup file could not be downloaded from storage: {file_name}'
+            _log_restore(user_id, file_name, ok=False, error=msg)
+            _write_status(upload_id, 'failed', error=msg)
+            return
+
+        _write_status(upload_id, 'restoring')
+        restore_backup_archive(zip_path)
+
+        _log_restore(user_id, file_name, ok=True)
+        _write_status(upload_id, 'done')
+
+    except InvalidBackupError as e:
+        logger.warning("Server restore rejected: %s", e)
+        _log_restore(user_id, file_name, ok=False, error=str(e))
+        _write_status(upload_id, 'failed', error=str(e))
+    except Exception as e:
+        logger.exception("Server restore failed.")
+        _log_restore(user_id, file_name, ok=False, error=str(e))
+        _write_status(
+            upload_id, 'failed',
+            error='Restore failed because of a server problem. Please try again, '
+                  'and contact your system administrator if it keeps happening.',
+        )
+    finally:
+        shutil.rmtree(up_dir, ignore_errors=True)
+        connections.close_all()
+        _restore_lock.release()
+
+
+def start_server_restore(file_name, user_id):
+    """Start a restore from a stored backup in the background.
+    Returns an upload_id, or None if another restore is already running."""
+    if not _restore_lock.acquire(blocking=False):
+        return None
+    try:
+        upload_id = str(uuid.uuid4())
+        _write_status(upload_id, 'assembling')
+        threading.Thread(
+            target=_server_restore_worker,
+            args=(upload_id, file_name, user_id),
+            daemon=True,
+        ).start()
+        return upload_id
+    except Exception:
+        _restore_lock.release()
+        raise
 
 
 # ---------- views ----------

@@ -80,34 +80,41 @@ export async function chunkedRestore(file: File, opts: Options): Promise<void> {
   if (!finishRes.ok) throw new Error(await readError(finishRes, "Could not start the restore"))
 
   // 3. Wait until the server says it's finished
-  const startedAt = Date.now()
-  let unknownCount = 0
-  while (Date.now() - startedAt < MAX_WAIT_MS) {
-    await sleep(POLL_EVERY_MS)
-    try {
-      const res = await fetch(`${opts.directUrl}/api/backup/restore/status/${uploadId}/`)
-      if (!res.ok) continue
-      const { state, error } = await res.json()
-
-      if (state === "done") return
-      if (state === "failed") throw Object.assign(new Error(error || "Restore failed."), { fatal: true })
-
-      if (state === "unknown") {
-        // The server lost track of it (e.g. it was restarted mid-restore).
-        if (++unknownCount >= 3) {
-          throw Object.assign(
-            new Error("The server stopped during the restore. Please check the backup log and try again."),
-            { fatal: true },
-          )
-        }
-        continue
-      }
-      unknownCount = 0
-      opts.onProgress?.(state === "assembling" ? "Preparing backup file…" : "Restoring system data…")
-    } catch (err: any) {
-      if (err?.fatal) throw err
-      // Network hiccup while the server is busy — keep polling.
-    }
+    await waitForRestore(opts.directUrl, uploadId, opts.onProgress)
   }
-  throw new Error("The restore is taking longer than expected. Please check the backup log.")
-}
+
+  export async function waitForRestore(
+    directUrl: string,
+    uploadId: string,
+    onProgress?: (message: string) => void,
+  ): Promise<void> {
+    const startedAt = Date.now()
+    let unknownCount = 0
+    while (Date.now() - startedAt < MAX_WAIT_MS) {
+      await sleep(POLL_EVERY_MS)
+      try {
+        const res = await fetch(`${directUrl}/api/backup/restore/status/${uploadId}/`)
+        if (!res.ok) continue
+        const { state, error } = await res.json()
+
+        if (state === "done") return
+        if (state === "failed") throw Object.assign(new Error(error || "Restore failed."), { fatal: true })
+
+        if (state === "unknown") {
+          if (++unknownCount >= 3) {
+            throw Object.assign(
+              new Error("The server stopped during the restore. Please check the backup log and try again."),
+              { fatal: true },
+            )
+          }
+          continue
+        }
+        unknownCount = 0
+        onProgress?.(state === "assembling" ? "Preparing backup file…" : "Restoring system data…")
+      } catch (err: any) {
+        if (err?.fatal) throw err
+        // Network hiccup while the server is busy: keep polling.
+      }
+    }
+    throw new Error("The restore is taking longer than expected. Please check the backup log.")
+  }

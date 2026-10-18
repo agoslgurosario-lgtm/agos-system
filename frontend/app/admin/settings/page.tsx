@@ -10,7 +10,7 @@ import { DatabaseBackup, Download, Upload, TriangleAlert, ShieldAlert, Bell, Tra
 import { api } from "@/lib/api"
 import { resolveSoundUrl} from '@/lib/soundUtils'
 import { DIALOG_COLOR } from "@/lib/constant"
-import { chunkedRestore } from "@/lib/chunkedRestore"
+import { chunkedRestore, waitForRestore } from "@/lib/chunkedRestore"
 
 // shadcn components
 import { Button } from "@/components/ui/button"
@@ -328,17 +328,26 @@ export default function Page() {
     if (!selectedRestorePoint) return
     setConfirmServerRestoreOpen(false)
     setRestoringFromServer(true)
-    setActionLoadingDialog({ open: true, title: "Restoring System", description: "Please wait while your system is being restored. This might take a minute — you'll be logged out automatically once it's done." })
+    setActionLoadingDialog({ open: true, title: "Restoring System", description: "Starting restore…" })
     try {
-      await api.post("/api/backup/restore-from-server/", {
+      const DIRECT_URL = process.env.NEXT_PUBLIC_BACKEND_DIRECT_URL
+      if (!DIRECT_URL) throw new Error("Backend URL is not configured.")
+
+      const res = await api.post("/api/backup/restore-from-server/", {
         file_name: selectedRestorePoint.file_name,
       })
+      if (!res?.upload_id) throw new Error("Could not start the restore.")
+
+      await waitForRestore(DIRECT_URL, res.upload_id, (message) =>
+        setActionLoadingDialog({ open: true, title: "Restoring System", description: message }),
+      )
+
       setActionLoadingDialog({ open: false, title: "", description: "" })
       setRestoreDoneDialog(true)
     } catch (err: any) {
       console.error(err)
       setActionLoadingDialog({ open: false, title: "", description: "" })
-      setActionErrorDialog({ open: true, message: err?.error || "Restore failed." })
+      setActionErrorDialog({ open: true, message: err?.error || err?.message || "Restore failed." })
     } finally {
       setRestoringFromServer(false)
       setSelectedRestorePoint(null)
