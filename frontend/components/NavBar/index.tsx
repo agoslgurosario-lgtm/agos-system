@@ -10,6 +10,7 @@ import { api } from "@/lib/api"
 import { getUserRole, clearAuth, getUser } from "@/lib/auth"
 import { useDrawer } from "@/lib/drawer-context"
 import { DIALOG_COLOR } from "@/lib/constant"
+import { useNavigationGuard } from "@/lib/navigation-guard"
 
 // component
 import { DialogModal } from "../DialogModal"
@@ -127,6 +128,7 @@ export default function NavBar() {
   const pathname = usePathname()
   const router = useRouter()
   const { drawerOpen, setDrawerOpen } = useDrawer()
+  const { guardClick, disableGuard } = useNavigationGuard()
 
   const fullName = currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : ""
   const nameFontSize = fullName.length > 12
@@ -173,6 +175,7 @@ export default function NavBar() {
     } catch (err) {
       console.log(err)
     } finally {
+      disableGuard() 
       clearAuth()
       window.location.href = "/login"
     }
@@ -239,6 +242,7 @@ export default function NavBar() {
                         <Link
                           key={child.href}
                           href={child.href}
+                          onClick={guardClick(child.href)} 
                           className={`
                             flex items-center gap-2.5 px-3 py-2 my-0.5 text-[11px] font-medium
                             transition-all duration-200 rounded-lg
@@ -263,6 +267,7 @@ export default function NavBar() {
               <Link
                 key={label}
                 href={href!}
+                onClick={guardClick(href!)}
                 className={`
                   flex items-center gap-3 px-[13px] mx-3.5 my-0.5 text-[12px] font-medium
                   transition-all duration-200 rounded-lg overflow-hidden whitespace-nowrap
@@ -379,7 +384,10 @@ export default function NavBar() {
                         <Link
                           key={child.href}
                           href={child.href}
-                          onClick={() => setDrawerOpen(false)}
+                          onClick={(e) => {
+                            guardClick(child.href)(e)
+                            if (!e.defaultPrevented) setDrawerOpen(false)
+                          }}
                           className={`
                             flex items-center gap-2.5 px-3 py-2 my-0.5 text-[11px] font-medium
                             rounded-lg transition-colors
@@ -404,7 +412,10 @@ export default function NavBar() {
               <Link
                 key={label}
                 href={href!}
-                onClick={() => setDrawerOpen(false)}
+                onClick={(e) => {
+                  guardClick(href!)(e)
+                  if (!e.defaultPrevented) setDrawerOpen(false)
+                }}
                 className={`
                   flex items-center gap-3 px-4 py-3 mx-3 my-0.5 text-[13px] font-medium
                   rounded-lg transition-colors

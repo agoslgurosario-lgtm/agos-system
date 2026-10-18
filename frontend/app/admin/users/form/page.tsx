@@ -14,6 +14,7 @@ import { SpinnerIcon } from "@/components/SpinnerIcon"
 // lib
 import { getErrorMessage } from "@/lib/utils";
 import { sameText } from "@/lib/formDiff";
+import { useUnsavedChangesGuard } from "@/lib/navigation-guard";
 
 // icons
 import { UserPlus, SquarePen, MapPin, UserRound, ClipboardCheck, UserCheck, Check, AlertTriangle, CheckCircle, BadgeCheck, X } from "lucide-react";
@@ -65,6 +66,8 @@ function FormInner() {
 
   // form us
   const [formLoading, setFormLoading] = useState<boolean>(isEdit)
+  const [saved, setSaved] = useState<boolean>(false)
+  const pendingHref = useRef<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [original, setOriginal] = useState<{
     fname: string; lname: string; email: string
@@ -153,17 +156,29 @@ function FormInner() {
     (hasNoOfficer(role) ||
       (sameText(position, original.position) && barangayId === original.barangayId))
 
+  const addHasInput =
+    !!fname.trim() || !!lname.trim() || !!email.trim() || !!position.trim() ||
+    !!role || barangayId !== null
+
+  const isDirty = !saved && (isEdit ? !!original && !isUnchanged : addHasInput)
+
+  useUnsavedChangesGuard(isDirty, (href) => {
+    pendingHref.current = href
+    setCancelDialog({ open: true })
+  })
+
   // handlers
   const handleCancelDialog = () => {
-    if (isUnchanged) {
+    pendingHref.current = null
+    if (!isDirty) {
       router.push('/admin/users')
       return
     }
     setCancelDialog({ open: true })
   }
   const handleCancelConfirm = () => {
-    setCancelDialog({ open: false})
-    router.push('/admin/users')
+    setCancelDialog({ open: false })
+    router.push(pendingHref.current ?? '/admin/users')
   }
 
   const handleConfirmationDialog = () => {
@@ -230,6 +245,7 @@ function FormInner() {
       }
 
       setLoadingDialog({ open: false })
+      setSaved(true)
 
       // If new admin was created, log out current admin
       if (!isEdit && role === 'Admin') {
@@ -311,7 +327,7 @@ function FormInner() {
 
           {/* right side */}
             <Button
-              onClick={() => router.push('/admin/users')}
+              onClick={handleCancelDialog}
               className="rounded-lg bg-[#FAFCFD] hover:bg-[#bdcfd7] px-3 py-3 text-xs text-[#122A48] border border-[#C6C6C8] cursor-pointer"
             >
               Back
@@ -878,7 +894,7 @@ function FormInner() {
       {/* Cancel dialog */}
       <DialogModal
         open={cancelDialog.open}
-        onClose={() => setCancelDialog({open: false})}
+        onClose={() => { pendingHref.current = null; setCancelDialog({ open: false }) }}
         onConfirm={handleCancelConfirm}
         color={isEdit ? DIALOG_COLOR.lightyellow : DIALOG_COLOR.lightred}
         icon={isEdit ? SquarePen : UserPlus}
