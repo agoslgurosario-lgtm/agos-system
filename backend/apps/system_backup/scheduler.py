@@ -18,7 +18,7 @@ def start():
 
     scheduler.add_job(
         run_scheduled_backup_check,
-        trigger=CronTrigger(hour=1, minute=7),  # runs daily at 2:00 AM
+        trigger=CronTrigger(hour=1, minute=16),  # runs daily at 2:00 AM
         id="run_scheduled_backup_check",
         max_instances=1,
         replace_existing=True,

@@ -30,20 +30,28 @@ _SINGLE_UPLOAD = TransferConfig(multipart_threshold=1024 ** 3, use_threads=False
 
 
 def upload_backup_to_supabase(local_file_path: str, file_name: str):
+    import os
     client = _get_s3_client()
+    size_mb = os.path.getsize(local_file_path) / (1024 * 1024)
+    logger.info("Uploading backup %s (%.1f MB) to bucket %s",
+                file_name, size_mb, settings.SUPABASE_S3_BACKUP_BUCKET)
     try:
-        client.upload_file(
-            local_file_path,
-            settings.SUPABASE_S3_BACKUP_BUCKET,
-            file_name,
-            Config=_SINGLE_UPLOAD,
+        with open(local_file_path, 'rb') as f:
+            client.put_object(
+                Bucket=settings.SUPABASE_S3_BACKUP_BUCKET,
+                Key=file_name,
+                Body=f,
+                ContentType='application/zip',
+            )
+    except ClientError as e:
+        meta = e.response.get('ResponseMetadata', {})
+        logger.error(
+            "Supabase upload failed: size=%.1fMB status=%s headers=%s body=%s",
+            size_mb, meta.get('HTTPStatusCode'), meta.get('HTTPHeaders'), e.response,
         )
-    except Exception as e:
-        # boto3 wraps the real error; dig it out so Render logs show it
-        cause = getattr(e, '__cause__', None)
-        if isinstance(cause, ClientError):
-            logger.error("Supabase upload error: %s", cause.response)
-        raise
+        raise RuntimeError(
+            f"Upload failed (HTTP {meta.get('HTTPStatusCode')}, {size_mb:.1f} MB)"
+        ) from e
     return file_name
 
 
