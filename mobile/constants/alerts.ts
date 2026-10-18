@@ -28,6 +28,11 @@ export const ALERT_META: Record<AlertType, { label: string; icon: keyof typeof I
     icon: "close-circle-outline",
     tier: null,
   },
+  Waste_Type_Approved: {
+    label: "Waste Type Approved",
+    icon: "checkmark-circle-outline",
+    tier: null,
+  },
 };
 
 export const ALERT_STYLE: Record<AlertType, { indicator: string; badgeBg: string; badgeText: string}> ={
@@ -55,5 +60,10 @@ export const ALERT_STYLE: Record<AlertType, { indicator: string; badgeBg: string
     indicator: "#7C3AED",
     badgeBg: "bg-[#EDE4FC]",
     badgeText: "text-[#7C3AED]",
+  },
+  Waste_Type_Approved: {
+    indicator: "#16A34A",
+    badgeBg: "bg-[#DCFCE7]",
+    badgeText: "text-[#16A34A]",
   },
 };

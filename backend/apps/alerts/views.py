@@ -1,7 +1,7 @@
 from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from .models import Alert, AlertRead
+from .models import Alert, AlertRead, BARANGAY_ONLY_ALERT_TYPES
 from .serializers import AlertSerializer
 from apps.users.permissions import IsAdmin, IsAdminOrMENROOrBarangay
 from django_filters.rest_framework import DjangoFilterBackend
@@ -26,7 +26,7 @@ class AlertListView(generics.ListAPIView):
         if user.user_role == 'Barangay':
             qs = qs.filter(Q(node__barangay=user.barangay) | Q(barangay=user.barangay))
         else:
-            qs = qs.exclude(alert_type='Waste_Type_Rejected')  # barangay-only notice
+            qs = qs.exclude(alert_type__in=BARANGAY_ONLY_ALERT_TYPES)  # barangay-only notices
 
         # barangay filter
         barangay_id = self.request.query_params.get('barangay')
@@ -66,7 +66,7 @@ class AlertMarkReadView(APIView):
             own_notice = alert.barangay_id is not None and alert.barangay_id == user.barangay_id
             if not (own_node or own_notice):
                 return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
-        elif alert.alert_type == 'Waste_Type_Rejected':
+        elif alert.alert_type in BARANGAY_ONLY_ALERT_TYPES:
             return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
 
 
@@ -78,7 +78,7 @@ class AlertUnreadCountView(APIView):
         if user.user_role == 'Barangay':
             queryset = Alert.objects.filter(Q(node__barangay=user.barangay) | Q(barangay=user.barangay))
         else:
-            queryset = Alert.objects.exclude(alert_type='Waste_Type_Rejected')
+            queryset = Alert.objects.exclude(alert_type__in=BARANGAY_ONLY_ALERT_TYPES)
 
         unread = queryset.exclude(reads__user=user).count()
         return Response({'unread_count': unread})
@@ -92,7 +92,7 @@ class AlertMarkAllReadView(APIView):
         if user.user_role == 'Barangay':
             queryset = Alert.objects.filter(Q(node__barangay=user.barangay) | Q(barangay=user.barangay))
         else:
-            queryset = Alert.objects.exclude(alert_type='Waste_Type_Rejected')
+            queryset = Alert.objects.exclude(alert_type__in=BARANGAY_ONLY_ALERT_TYPES)
 
         unread_ids = queryset.exclude(reads__user=user).values_list('alert_id', flat=True)
 

@@ -95,13 +95,13 @@ export default function BarangayReports() {
     .filter(r => filterSeverity === "All" || r.severity === filterSeverity)
     .sort((a, b) => sortKey(b) - sortKey(a) || b.report_id - a.report_id)
 
-  const { panelRef, tableWrapRef } = useFillRows({
+  const { panelRef, tableWrapRef, rows } = useFillRows({
     rowHeight: 56,
     initialRows: 6,
     deps: [loading],
   })
 
-  const { paginated, currentPage, setCurrentPage, totalItems, itemsPerPage } = usePagination(filteredReports, 6)
+  const { paginated, currentPage, setCurrentPage, totalItems, itemsPerPage } = usePagination(filteredReports, rows)
 
   const refetchAll = useCallback(async () => {
     await Promise.allSettled([

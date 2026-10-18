@@ -3,14 +3,14 @@ from django.dispatch import receiver
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
-from .models import Alert
+from .models import Alert, BARANGAY_ONLY_ALERT_TYPES
 from .consumers import ALERTS_STAFF_GROUP, barangay_group
 from .serializers import AlertSerializer
 
 
 def alert_barangay_id(alert):
     """Barangay this alert belongs to (None for e.g. an unassigned node)."""
-    if alert.alert_type == 'Waste_Type_Rejected':
+    if alert.alert_type in BARANGAY_ONLY_ALERT_TYPES:
         return alert.barangay_id
     return alert.node.barangay_id if alert.node else None
 
@@ -36,11 +36,11 @@ def broadcast_new_alert(sender, instance, created, **kwargs):
 
     bid = alert_barangay_id(instance)
     groups = []
-    if instance.alert_type == 'Waste_Type_Rejected':
+    if instance.alert_type in BARANGAY_ONLY_ALERT_TYPES:
         if bid:
             groups = [barangay_group(bid)]       # that barangay only
     else:
-        groups = [ALERTS_STAFF_GROUP]            # Admin / MENRO / MENRO Staff
+        groups = [ALERTS_STAFF_GROUP] 
         if instance.alert_type != 'Report_Submitted' and bid:
             groups.append(barangay_group(bid))   # plus the barangay that owns the node
 

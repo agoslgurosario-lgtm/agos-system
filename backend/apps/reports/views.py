@@ -406,7 +406,8 @@ class CustomWasteTypeReviewView(APIView):
 
     def patch(self, request, waste_type_id):
         obj = get_object_or_404(CustomWasteType, pk=waste_type_id)
-        if obj.status != 'Pending':
+        # Pending can be approved/rejected; a Rejected one can only be approved again (MENRO mistake)
+        if obj.status == 'Approved' or (obj.status == 'Rejected' and request.data.get('action') != 'approve'):
             return Response({'error': 'This waste type was already reviewed.'}, status=status.HTTP_400_BAD_REQUEST)
 
         action = request.data.get('action')
@@ -445,19 +446,27 @@ class CustomWasteTypeReviewView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             obj.status = 'Approved'
+            obj.rejection_reason = ''
 
         obj.reviewed_by = request.user
         obj.reviewed_at = timezone.now()
         obj.save()
 
-        if action == 'reject':
-            creator = obj.created_by
-            if creator and creator.barangay_id:
-                Alert.objects.create(
-                    alert_type='Waste_Type_Rejected',
-                    barangay_id=creator.barangay_id,
-                    alert_context={'waste_type': obj.name, 'reason': obj.rejection_reason},
-                )
+        creator = obj.created_by
+        if creator and creator.barangay_id:
+            if action == 'reject':
+                alert_type = 'Waste_Type_Rejected'
+                ctx = {'waste_type': obj.name, 'reason': obj.rejection_reason}
+            else:
+                alert_type = 'Waste_Type_Approved'
+                ctx = {'waste_type': obj.name}
+                if old_name != obj.name:  # MENRO renamed it while approving
+                    ctx['original_name'] = old_name
+            Alert.objects.create(
+                alert_type=alert_type,
+                barangay_id=creator.barangay_id,
+                alert_context=ctx,
+            )
 
         log_action(
             user=request.user,

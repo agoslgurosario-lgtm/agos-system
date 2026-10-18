@@ -17,6 +17,7 @@ PUSH_ALERT_TYPES = {
     'Low_Clog_Alert':      ('Low clog detected', 'info'),
     'Water_Level_Rising':  ('Water level rising', 'warning'),
     'Waste_Type_Rejected': ('Waste type not approved', 'info'),
+    'Waste_Type_Approved': ('Waste type approved', 'info'),
 }
 
 
@@ -74,9 +75,11 @@ def notify_alert(alert):
     payload = build_alert_payload(alert)
 
     title, channel = spec
+    ctx = alert.alert_context or {}
     if alert.alert_type == 'Waste_Type_Rejected':
-        ctx = alert.alert_context or {}
         body = f"“{ctx.get('waste_type', 'Waste type')}” wasn't approved: {ctx.get('reason', '')}".strip()
+    elif alert.alert_type == 'Waste_Type_Approved':
+        body = f"“{ctx.get('waste_type', 'Waste type')}” was approved. You can now use it in your reports."
     else:
         body = payload.get('node_name') or 'AGOS node'
         if payload.get('barangay_name'):

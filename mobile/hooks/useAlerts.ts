@@ -14,6 +14,7 @@ const ALL_ALERT_TYPES: AlertType[] = [
   "Moderate_Clog_Alert",
   "Critical_Clog",
   "Waste_Type_Rejected",
+  "Waste_Type_Approved",
 ];
 
 export function useAlerts(alertType: AlertTypeFilter, dateFilter: DateFilter) {

@@ -38,6 +38,29 @@ function kg(v: number | null) {
 
 export function PrintCanalReport({ report, generatedBy, signatoryNames }: PrintCanalReportProps) {
   if (typeof document === "undefined") return null
+  
+  const hasOldOther = Number(report.waste_other_kg ?? 0) > 0 || !!report.waste_other_label
+
+  // custom types first, then the old "Other" only if that old report has a value
+  const extraWaste: { key: string; label: string; value: number }[] = [
+    ...(report.custom_waste ?? []).map(w => ({
+      key: `custom-${w.item_id}`,
+      label: w.waste_type_name,
+      value: Number(w.weight_kg),
+    })),
+    ...(hasOldOther
+      ? [{
+          key: 'old-other',
+          label: report.waste_other_label ? `Other (${report.waste_other_label})` : 'Other',
+          value: Number(report.waste_other_kg ?? 0),
+        }]
+      : []),
+  ]
+
+  // pair them up to match the 2-column table
+  const extraRows = Array.from({ length: Math.ceil(extraWaste.length / 2) }, (_, i) =>
+    extraWaste.slice(i * 2, i * 2 + 2)
+  )
 
   const photoGroups = PHOTO_LABELS
     .map(([category, label]) => ({ label, photos: report.media.filter(m => m.media_category === category && m.file_url) }))
@@ -111,7 +134,15 @@ export function PrintCanalReport({ report, generatedBy, signatoryNames }: PrintC
         <tr><td className="print-canal-item-lbl">Foam</td><td className="print-canal-item-val">{kg(report.waste_foam_kg)}</td><td className="print-canal-item-gap" /><td className="print-canal-item-lbl">Clothes / Textiles</td><td className="print-canal-item-val">{kg(report.waste_textile_kg)}</td></tr>
         <tr><td className="print-canal-item-lbl">E-waste</td><td className="print-canal-item-val">{kg(report.waste_ewaste_kg)}</td><td className="print-canal-item-gap" /><td className="print-canal-item-lbl">Sanitary / Hygiene</td><td className="print-canal-item-val">{kg(report.waste_sanitary_kg)}</td></tr>
         <tr><td className="print-canal-item-lbl">Footwear / Rubber</td><td className="print-canal-item-val">{kg(report.waste_footwear_kg)}</td><td className="print-canal-item-gap" /><td className="print-canal-item-lbl">Medical</td><td className="print-canal-item-val">{kg(report.waste_medical_kg)}</td></tr>
-        <tr><td className="print-canal-item-lbl">Other{report.waste_other_label ? ` (${report.waste_other_label})` : ''}</td><td className="print-canal-item-val">{kg(report.waste_other_kg)}</td><td className="print-canal-item-gap" /><td className="print-canal-item-lbl" /><td className="print-canal-item-val" /></tr>
+        {extraRows.map(([a, b]) => (
+          <tr key={a.key}>
+            <td className="print-canal-item-lbl">{a.label}</td>
+            <td className="print-canal-item-val">{kg(a.value)}</td>
+            <td className="print-canal-item-gap" />
+            <td className="print-canal-item-lbl">{b?.label ?? ''}</td>
+            <td className="print-canal-item-val">{b ? kg(b.value) : ''}</td>
+          </tr>
+        ))}
       </tbody></table>
 
       <p className="print-canal-section-bar">Barangay Response</p>

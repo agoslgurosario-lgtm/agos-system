@@ -1,5 +1,5 @@
 import { Pressable, Text, View } from "react-native";
-import { Alert, ClogAlertContext, WasteTypeRejectedContext } from "../../types/alert";
+import { Alert, ClogAlertContext, WasteTypeRejectedContext, WasteTypeApprovedContext } from "../../types/alert";
 import { ALERT_META, ALERT_STYLE } from "../../constants/alerts";
 
 interface Props {
@@ -22,8 +22,10 @@ export default function AlertCard({ alert, onPress }: Props) {
   const meta = ALERT_META[alert.alert_type];
   const style = ALERT_STYLE[alert.alert_type];
   const context = alert.alert_context as ClogAlertContext;
-  const wasteCtx = alert.alert_context as WasteTypeRejectedContext;
-  const isWasteType = alert.alert_type === "Waste_Type_Rejected";
+  const wasteCtx = alert.alert_context as WasteTypeRejectedContext & WasteTypeApprovedContext;
+  const isWasteType =
+    alert.alert_type === "Waste_Type_Rejected" || alert.alert_type === "Waste_Type_Approved";
+  const isApproved = alert.alert_type === "Waste_Type_Approved";
 
   return (
     <Pressable
@@ -77,7 +79,11 @@ export default function AlertCard({ alert, onPress }: Props) {
               <Text className="text-[9px] text-slate-400 uppercase">WASTE TYPE</Text>
               <Text className="text-[12px] font-semibold mt-1">{wasteCtx.waste_type ?? "—"}</Text>
               <Text className="text-[11px] text-slate-500 mt-1" numberOfLines={2}>
-                Reason: {wasteCtx.reason ?? "—"}
+                {isApproved
+                  ? wasteCtx.original_name
+                    ? `Approved as “${wasteCtx.waste_type}” (you entered “${wasteCtx.original_name}”)`
+                    : "Approved. You can now use it in your reports."
+                  : `Reason: ${wasteCtx.reason ?? "—"}`}
               </Text>
               <Text className="text-[10px] text-slate-400 mt-1">{formatRelativeTime(alert.timestamp)}</Text>
             </View>

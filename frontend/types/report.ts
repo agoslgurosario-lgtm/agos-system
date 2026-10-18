@@ -59,6 +59,7 @@ export type CanalMonitoringReport = {
   waste_medical_kg: number | null
   waste_other_kg: number | null
   waste_other_label: string
+  custom_waste: ReportCustomWaste[]
 
   assigned_personnel: string | null
   date_responded: string | null
@@ -77,4 +78,12 @@ export type CanalMonitoringReport = {
   media: ReportMedia[]
 
   signatory_snapshot: Record<string, string> | null
+}
+
+export type ReportCustomWaste = {
+  item_id: number
+  waste_type: number
+  waste_type_name: string
+  waste_type_status: 'Pending' | 'Approved' | 'Rejected'
+  weight_kg: number
 }

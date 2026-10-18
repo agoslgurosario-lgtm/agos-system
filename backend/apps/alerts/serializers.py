@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Alert, AlertRead
+from .models import Alert, AlertRead, BARANGAY_ONLY_ALERT_TYPES
 from apps.sensor_nodes.services import hotspot_at
 from apps.sensor_nodes.models import NodeAssignmentHistory
 
@@ -64,7 +64,7 @@ class AlertSerializer(serializers.ModelSerializer):
         """
         t = obj.alert_type
 
-        if t == 'Waste_Type_Rejected':
+        if t in BARANGAY_ONLY_ALERT_TYPES:
             return obj.alert_context or {}
 
         if t == 'Report_Submitted':

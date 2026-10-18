@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Modal, Pressable, Text, View } from "react-native";
-import { Alert, ClogAlertContext, WaterLevelAlertContext, WasteTypeRejectedContext } from "../../types/alert";
+import { Alert, ClogAlertContext, WaterLevelAlertContext, WasteTypeRejectedContext, WasteTypeApprovedContext } from "../../types/alert";
 import { ALERT_META, ALERT_STYLE } from "../../constants/alerts";
 
 interface Props {
@@ -40,6 +40,25 @@ function ContextDetails({ alert }: { alert: Alert }) {
         </Text>
         <Text className="text-slate-400 text-[11px] mt-1">
           You can add it again with a clearer name, or record it under one of the existing categories.
+        </Text>
+      </View>
+    );
+  }
+
+  if (alert.alert_type === "Waste_Type_Approved") {
+    const c = alert.alert_context as WasteTypeApprovedContext;
+    return (
+      <View className="gap-2">
+        <Text className="text-slate-500 text-[12px]">
+          Waste type: <Text className="font-semibold text-slate-800">{c.waste_type ?? "—"}</Text>
+        </Text>
+        {c.original_name && (
+          <Text className="text-slate-500 text-[12px]">
+            You entered: <Text className="font-semibold text-slate-800">{c.original_name}</Text>
+          </Text>
+        )}
+        <Text className="text-slate-400 text-[11px] mt-1">
+          It's now available when you add "Other" waste to a report.
         </Text>
       </View>
     );
@@ -187,7 +206,7 @@ export default function AlertModal({ alert, visible, onClose }: Props) {
           {/* INFORMATION */}
 
           <View className="gap-3">
-            {alert.alert_type !== "Waste_Type_Rejected" && (
+            {alert.alert_type !== "Waste_Type_Rejected" && alert.alert_type !== "Waste_Type_Approved" && (
               <View className="flex-row justify-between">
                 <Text className="text-slate-500">Node</Text>
                 <Text className="font-semibold">{alert.node_name ?? "—"}</Text>
@@ -201,7 +220,7 @@ export default function AlertModal({ alert, visible, onClose }: Props) {
 
             <View className="flex-row justify-between">
               <Text className="text-slate-500">
-                {alert.alert_type === "Waste_Type_Rejected" ? "Reviewed" : "Detected"}
+                {alert.alert_type === "Waste_Type_Rejected" || alert.alert_type === "Waste_Type_Approved" ? "Reviewed" : "Detected"}
               </Text>
               <Text className="font-semibold">{formatDetectedAt(alert.timestamp)}</Text>
             </View>

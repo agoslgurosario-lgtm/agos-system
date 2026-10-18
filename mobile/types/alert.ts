@@ -3,7 +3,8 @@ export type AlertType =
   | "Low_Clog_Alert"
   | "Moderate_Clog_Alert"
   | "Critical_Clog"
-  | "Waste_Type_Rejected";
+  | "Waste_Type_Rejected"
+  | "Waste_Type_Approved";
 
 export type ClogTier = "Low" | "Moderate" | "Critical";
 
@@ -32,7 +33,12 @@ export interface WasteTypeRejectedContext {
   reason?: string;
 }
 
-export type AlertContext = ClogAlertContext | WaterLevelAlertContext | WasteTypeRejectedContext | Record<string, never>;
+export interface WasteTypeApprovedContext {
+  waste_type?: string;
+  original_name?: string; // only present if MENRO renamed it
+}
+
+export type AlertContext = ClogAlertContext | WaterLevelAlertContext | WasteTypeRejectedContext | WasteTypeApprovedContext | Record<string, never>;
 
 export interface Alert {
   alert_id: number;

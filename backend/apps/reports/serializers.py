@@ -138,7 +138,7 @@ class CustomWasteTypeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomWasteType
-        fields = ['waste_type_id', 'name', 'status', 'created_at', 'reviewed_at',
+        fields = ['waste_type_id', 'name', 'status', 'rejection_reason', 'created_at', 'reviewed_at',
                   'created_by_name', 'created_by_barangay']
 
     def get_created_by_name(self, obj):

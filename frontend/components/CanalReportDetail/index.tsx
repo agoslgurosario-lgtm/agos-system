@@ -88,12 +88,22 @@ function TextBox({ label, text }: { label: string; text: string | null }) {
 function ReportDocument({ report }: { report: CanalMonitoringReport }) {
   const barangayName = report.barangay_details?.barangay_name ?? "—"
 
+  const hasOldOther = Number(report.waste_other_kg ?? 0) > 0 || !!report.waste_other_label
+
   const wasteRows = [
-    ...WASTE_CATEGORIES.map(c => ({ label: c.label, kg: Number(report[c.key] ?? 0) })),
-    {
-      label: report.waste_other_label ? `Other (${report.waste_other_label})` : "Other",
-      kg: report.waste_other_kg ?? 0,
-    },
+    ...WASTE_CATEGORIES.map(c => ({ key: c.key as string, label: c.label, kg: Number(report[c.key] ?? 0) })),
+    ...(report.custom_waste ?? []).map(w => ({
+      key: `custom-${w.item_id}`,
+      label: w.waste_type_name,
+      kg: Number(w.weight_kg),
+    })),
+    ...(hasOldOther
+      ? [{
+          key: "old-other",
+          label: report.waste_other_label ? `Other (${report.waste_other_label})` : "Other",
+          kg: Number(report.waste_other_kg ?? 0),
+        }]
+      : []),
   ]
 
   return (
@@ -153,7 +163,7 @@ function ReportDocument({ report }: { report: CanalMonitoringReport }) {
       <SectionBar title="Waste Composition (kg)" />
       <div className="grid grid-cols-2 gap-x-10">
         {wasteRows.map(row => (
-          <div key={row.label} className="flex items-center justify-between border-b border-[#DDDDDD] py-1.5 text-sm text-[#122A48]">
+          <div key={row.key} className="flex items-center justify-between border-b border-[#DDDDDD] py-1.5 text-sm text-[#122A48]">
             <span>{row.label}</span>
             <span
               className={`min-w-20 text-center border border-[#122A48]/70 bg-[#F8F9FA] px-2 py-0.5 text-xs ${

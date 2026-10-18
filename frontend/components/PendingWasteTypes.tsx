@@ -15,6 +15,7 @@ type PendingType = {
   created_at: string
   created_by_name: string | null
   created_by_barangay: string | null
+  rejection_reason?: string
 }
 
 type ConfirmState = { kind: "approve" | "rename" | "reject"; item: PendingType; newName?: string } | null
@@ -33,13 +34,19 @@ export function PendingWasteTypes() {
   const [success, setSuccess] = useState<{ title: string; message: ReactNode } | null>(null)
   const [reason, setReason] = useState("")
   const [reasonError, setReasonError] = useState("")
+  const [tab, setTab] = useState<"Pending" | "Rejected">("Pending")
+  const [rejected, setRejected] = useState<PendingType[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
     setLoadError(false)
     try {
-      const data = await api.get("/api/custom-waste-types/?status=Pending")
-      setItems(data.results ?? data)
+      const [pending, rej] = await Promise.all([
+        api.get("/api/custom-waste-types/?status=Pending"),
+        api.get("/api/custom-waste-types/?status=Rejected"),
+      ])
+      setItems(pending.results ?? pending)
+      setRejected(rej.results ?? rej)
     } catch {
       setLoadError(true)
     } finally {
@@ -86,7 +93,10 @@ export function PendingWasteTypes() {
             : { action: "approve" }
       )
       setItems(prev => prev.filter(i => i.waste_type_id !== item.waste_type_id))
-      setItems(prev => prev.filter(i => i.waste_type_id !== item.waste_type_id))
+      setRejected(prev => prev.filter(i => i.waste_type_id !== item.waste_type_id))
+      if (kind === "reject") {
+        setRejected(prev => [{ ...item, rejection_reason: reason.trim() }, ...prev])
+      }
       setEditingId(null)
       setSuccess(
         kind === "reject"
@@ -139,6 +149,8 @@ export function PendingWasteTypes() {
     <>Approve <strong>{confirm.item.name}</strong>? It will be available to every barangay.</>
   )
 
+  const list = tab === "Pending" ? items : rejected
+
   return (
     <>
       <Button
@@ -162,7 +174,7 @@ export function PendingWasteTypes() {
                 <Tag className="w-5 h-5 sm:w-6 sm:h-6" color={DIALOG_COLOR.blue} />
               </div>
               <div className="flex flex-col">
-                <DialogTitle className="font-bold text-base sm:text-lg">Pending Waste Types</DialogTitle>
+                <DialogTitle className="font-bold text-base sm:text-lg">Waste Types</DialogTitle>
                 <p className="text-xs text-[#727272] font-normal">
                   New “Other” waste types added by barangays. Approved types become available to every barangay.
                 </p>
@@ -170,20 +182,35 @@ export function PendingWasteTypes() {
             </div>
           </DialogHeader>
 
+          <div className="px-5 mt-3 flex gap-2">
+            {(["Pending", "Rejected"] as const).map(t => (
+              <button
+                key={t}
+                onClick={() => { setTab(t); setRowError(null); setEditingId(null) }}
+                className={`cursor-pointer rounded-full border px-3 py-1 text-xs font-medium ${
+                  tab === t ? "bg-[#122A48] text-white border-[#122A48]" : "bg-white text-[#727272] border-[#C6C6C8]"
+                }`}
+              >
+                {t} ({t === "Pending" ? items.length : rejected.length})
+              </button>
+            ))}
+          </div>
+
           <div className="px-5 pb-5 overflow-y-auto">
-            {loading && items.length === 0 ? (
+            {loading && list.length === 0? (
               <p className="py-8 text-center text-xs text-[#727272]">Loading…</p>
             ) : loadError ? (
               <div className="py-8 text-center">
                 <p className="text-sm font-semibold text-[#D81010]">Couldn&apos;t load waste types.</p>
                 <button onClick={load} className="mt-1 text-xs text-[#1565BC] hover:underline cursor-pointer">Retry</button>
               </div>
-            ) : items.length === 0 ? (
-              <p className="py-8 text-center text-sm text-[#727272]">No waste types waiting for approval.</p>
+            ) : list.length === 0 ? (
+              <p className="py-8 text-center text-sm text-[#727272]">{tab === "Pending" ? "No waste types waiting for approval." : "No rejected waste types."}</p>
             ) : (
-              items.map(item => {
+              list.map(item => {
                 const busy = busyId === item.waste_type_id
                 const editing = editingId === item.waste_type_id
+
                 return (
                   <div key={item.waste_type_id} className="mt-3 rounded-lg border border-[#C6C6C8] p-3">
                     <p className="text-sm font-bold">{item.name}</p>
@@ -194,7 +221,20 @@ export function PendingWasteTypes() {
                       {new Date(item.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
                     </p>
 
-                    {editing ? (
+                    {tab === "Rejected" ? (
+                      <>
+                        <p className="mt-1 text-[11px] text-[#D81010]">Reason: {item.rejection_reason || "—"}</p>
+                        <div className="mt-2 flex gap-2">
+                          <Button
+                            disabled={busy}
+                            onClick={() => setConfirm({ kind: "approve", item })}
+                            className="h-8 cursor-pointer bg-[#2fd45b] hover:bg-[#28b54e] text-xs"
+                          >
+                            Approve instead
+                          </Button>
+                        </div>
+                      </>
+                    ) : editing ? (
                       <div className="mt-2 flex gap-2">
                         <Input
                           value={editName}

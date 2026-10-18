@@ -18,6 +18,7 @@ const ALERT_TYPE_OPTIONS: { value: AlertTypeFilter; label: string }[] = [
   { value: "Critical_Clog", label: "Critical Clog" },
   { value: "Water_Level_Rising", label: "Water Level Rising" },
   { value: "Waste_Type_Rejected", label: "Waste Type Rejected" },
+  { value: "Waste_Type_Approved", label: "Waste Type Approved" },
 ];
 
 const DATE_OPTIONS: { value: DateFilter; label: string }[] = [
