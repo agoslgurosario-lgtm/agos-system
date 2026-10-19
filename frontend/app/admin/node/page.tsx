@@ -180,6 +180,13 @@ export default function NodeManagement() {
   const [decommissionDialog, setDecommissionDialog] = useState<DialogState>({ open: false, node: null })
   const [decommissionGuardDialog, setDecommissionGuardDialog] = useState<DialogState>({ open: false, node: null })
   const [assignCancelDialog, setAssignCancelDialog] = useState<DialogState>({ open: false })
+  const [assignConfirm, setAssignConfirm] = useState<{
+    open: boolean
+    node: SensorNode | null
+    hotspotName: string
+    isReassign: boolean
+    payload: AssignNodeDialogPayload | null // null = re-assign to previous hotspot
+  }>({ open: false, node: null, hotspotName: '', isReassign: false, payload: null })
 
   // history print/export states
   const [historyExporting, setHistoryExporting] = useState(false)
@@ -644,6 +651,25 @@ export default function NodeManagement() {
       setLoadingDialog({ open: false })
       setErrorDialog({ open: true, message: err?.detail ?? err?.error ?? 'Something went wrong. Please try again.' })
     }
+  }
+
+  // ask first, only run the real assignment after the admin confirms
+  const requestAssignConfirm = (payload: AssignNodeDialogPayload) => {
+    const node = assignDialog.node!
+    const hotspotName = assignHotspots.find(h => String(h.hotspot_id) === payload.hotspot)?.name ?? 'the selected hotspot'
+    setAssignConfirm({ open: true, node, hotspotName, isReassign: !!node.prev_hotspot, payload })
+  }
+
+  const requestReassignPrevConfirm = () => {
+    const node = reassignPrompt.node!
+    setAssignConfirm({ open: true, node, hotspotName: node.prev_hotspot!.name, isReassign: true, payload: null })
+  }
+
+  const handleAssignConfirmYes = () => {
+    const { payload } = assignConfirm
+    setAssignConfirm(prev => ({ ...prev, open: false }))
+    if (payload) handleAssignConfirm(payload)
+    else handleReassignYes()
   }
   
   const handleConfirmationDialog = () => {
@@ -1700,7 +1726,21 @@ export default function NodeManagement() {
         allHotspotMarkers={assignMarkers}
         loadingBarangays={assignLoadingData}
         onCancel={() => setAssignCancelDialog({ open: true })}
-        onConfirm={handleAssignConfirm}
+        onConfirm={requestAssignConfirm}
+      />
+
+      {/* Assign / re-assign confirmation */}
+      <DialogModal
+        open={assignConfirm.open}
+        onClose={() => setAssignConfirm(prev => ({ ...prev, open: false }))}
+        onConfirm={handleAssignConfirmYes}
+        color={DIALOG_COLOR.lightblue}
+        icon={assignConfirm.isReassign ? MapPinPen : MapPinPlus}
+        iconColor={DIALOG_COLOR.blue}
+        title={assignConfirm.isReassign ? 'Confirm Re-assignment' : 'Confirm Assignment'}
+        description={<> Are you sure you want to {assignConfirm.isReassign ? 're-assign' : 'assign'} <strong>{assignConfirm.node?.node_name}</strong> to <strong>{assignConfirm.hotspotName}</strong>? </>}
+        cancelLabel="Go Back"
+        confirmLabel={assignConfirm.isReassign ? 'Yes, Re-assign' : 'Yes, Assign'}
       />
 
       {/* Unassign dialog */}

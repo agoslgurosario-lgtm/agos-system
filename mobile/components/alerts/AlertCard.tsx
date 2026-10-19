@@ -1,6 +1,6 @@
 import { Pressable, Text, View } from "react-native";
-import { Alert, ClogAlertContext, WasteTypeRejectedContext, WasteTypeApprovedContext } from "../../types/alert";
-import { ALERT_META, ALERT_STYLE } from "../../constants/alerts";
+import { Alert, ClogAlertContext, WaterLevelAlertContext, WasteTypeRejectedContext, WasteTypeApprovedContext } from "../../types/alert";
+import { ALERT_META, ALERT_STYLE, WATER_SEVERITY_STYLE, getWaterSeverity } from "../../constants/alerts";
 
 interface Props {
   alert: Alert;
@@ -26,6 +26,10 @@ export default function AlertCard({ alert, onPress }: Props) {
   const isWasteType =
     alert.alert_type === "Waste_Type_Rejected" || alert.alert_type === "Waste_Type_Approved";
   const isApproved = alert.alert_type === "Waste_Type_Approved";
+  const isWaterLevel = alert.alert_type === "Water_Level_Rising";
+  const waterSeverity = isWaterLevel
+    ? getWaterSeverity(alert.alert_context as WaterLevelAlertContext)
+    : null;
 
   return (
     <Pressable
@@ -95,7 +99,13 @@ export default function AlertCard({ alert, onPress }: Props) {
                 SEVERITY
               </Text>
 
-              {context.clog_pct != null ? (
+              {waterSeverity ? (
+                <View className={`mt-1 !rounded-full px-2 py-1 ${WATER_SEVERITY_STYLE[waterSeverity].badgeBg}`}>
+                  <Text className={`text-[10px] font-medium ${WATER_SEVERITY_STYLE[waterSeverity].badgeText}`}>
+                    {waterSeverity}
+                  </Text>
+                </View>
+              ) : context.clog_pct != null ? (
                 <View className={`mt-1 !rounded-full px-2 py-1 ${style.badgeBg}`}>
                   <Text className={`text-[10px] font-medium ${style.badgeText}`}>
                     {context.clog_pct}%

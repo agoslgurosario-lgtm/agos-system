@@ -11,6 +11,7 @@ import MonthSelector from "../../components/analytics/MonthSelector";
 
 import { useAnalytics } from "../../hooks/useAnalytics";
 import { buildWasteVolumes, buildComposition, buildDetections } from "../../lib/analytics";
+import { pickWeightUnit } from "../../lib/formatWeight";
 
 function currentMonthValue() {
   const d = new Date();
@@ -30,8 +31,9 @@ export default function AnalyticsScreen() {
   const [monthPickerVisible, setMonthPickerVisible] = useState(false);
 
   const { classifications, liveClassifications, nodes, loading, refreshing, error, refetch } = useAnalytics(selectedMonth);
-
+  
   const wasteVolumes = useMemo(() => buildWasteVolumes(classifications), [classifications]);
+  const volumeUnit = pickWeightUnit(wasteVolumes.map((v) => v.value));
   const composition = useMemo(() => buildComposition(classifications), [classifications]);
   const detections = useMemo(
     () => buildDetections(liveClassifications, nodes),
@@ -103,17 +105,17 @@ export default function AnalyticsScreen() {
               <Text className="font-semibold text-slate-700 mb-4">Estimated waste volume</Text>
 
               <View className="flex-row">
-                <WasteVolumeCard {...wasteVolumes[0]} />
+                <WasteVolumeCard {...wasteVolumes[0]} unit={volumeUnit} />
                 <View className="w-3" />
-                <WasteVolumeCard {...wasteVolumes[1]} />
+                <WasteVolumeCard {...wasteVolumes[1]} unit={volumeUnit} />
               </View>
 
               <View className="h-3" />
 
               <View className="flex-row">
-                <WasteVolumeCard {...wasteVolumes[2]} />
+                <WasteVolumeCard {...wasteVolumes[2]} unit={volumeUnit} />
                 <View className="w-3" />
-                <WasteVolumeCard {...wasteVolumes[3]} />
+                <WasteVolumeCard {...wasteVolumes[3]} unit={volumeUnit} />
               </View>
             </View>
 

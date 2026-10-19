@@ -72,13 +72,6 @@ const fetchSensorNodesRaw = async () => {
   return data.results ?? data
 }
 
-function formatKg(value: number) {
-  if (!value) return "0"
-  if (value < 0.01) return "<0.01"
-  if (value < 1) return value.toFixed(3)
-  return value.toFixed(1)
-}
-
 
 export default function Analytics() {
   // waste classification state
@@ -153,6 +146,7 @@ export default function Analytics() {
     0
   )
   const cardUnit = pickWeightUnit([totalWaste])
+  const [totalValue, totalUnit] = formatWeightIn(totalWaste, cardUnit).split(" ")
 
   const filtered = wasteClassification
 
@@ -341,8 +335,8 @@ useWebSocket({
                   </Pie>
                 </PieChart>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-2xl font-bold text-[#122A48]">{formatKg(totalWaste)}</span>
-                  <span className="text-xs text-[#122A48]/70">KG</span>
+                  <span className="text-2xl font-bold text-[#122A48]">{totalValue}</span>
+                  <span className="text-xs text-[#122A48]/70">{totalUnit.toUpperCase()}</span>
                 </div>
               </div>
 

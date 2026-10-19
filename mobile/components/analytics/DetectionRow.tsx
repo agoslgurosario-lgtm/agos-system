@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Text, View } from "react-native";
 import { DetectionSeverity, DetectionStatus } from "../../types/analytics";
+import { formatWeight } from "../../lib/formatWeight";
 
 interface Props {
   node: string;
@@ -19,7 +20,7 @@ const SEVERITY_STYLE: Record<DetectionSeverity, { icon: keyof typeof Ionicons.gl
 
 function describeSeverity(severity: DetectionSeverity, volume: number | null) {
   if (severity === "None") return "No detection";
-  return `${severity} volume${volume != null ? ` (${volume.toFixed(2)}kg)` : ""}`;
+  return `${severity} volume${volume != null ? ` (${formatWeight(volume)})` : ""}`;
 }
 
 export default function DetectionRow({ node, location, severity, status, volume }: Props) {

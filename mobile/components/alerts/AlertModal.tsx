@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Modal, Pressable, Text, View } from "react-native";
 import { Alert, ClogAlertContext, WaterLevelAlertContext, WasteTypeRejectedContext, WasteTypeApprovedContext } from "../../types/alert";
-import { ALERT_META, ALERT_STYLE } from "../../constants/alerts";
+import { ALERT_META, ALERT_STYLE, WATER_SEVERITY_STYLE, getWaterSeverity } from "../../constants/alerts";
 
 interface Props {
   alert: Alert | null;
@@ -66,8 +66,15 @@ function ContextDetails({ alert }: { alert: Alert }) {
 
   if (isWaterLevel) {
     if (!hasWaterData) return null;
+    const severity = getWaterSeverity(context);
     return (
       <View className="flex-row flex-wrap gap-x-4 gap-y-1">
+        <Text className="text-slate-500 text-[12px]">
+          Severity:{" "}
+          <Text className="font-semibold" style={{ color: WATER_SEVERITY_STYLE[severity].color }}>
+            {severity}
+          </Text>
+        </Text>
         {context.water_level != null && (
           <Text className="text-slate-500 text-[12px]">
             Water Level: <Text className="font-semibold text-slate-800">{context.water_level} cm</Text>

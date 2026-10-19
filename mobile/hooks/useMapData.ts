@@ -143,7 +143,7 @@ export function useMapData() {
     averageWaterLevelCm: avgWaterLevelCm,
   };
 
-  const totalWasteKg = Math.round(classifications.reduce((sum, w) => sum + (w.estimated_volume || 0), 0) * 10) / 10;
+  const totalWasteKg = classifications.reduce((sum, w) => sum + (w.estimated_volume || 0), 0);
 
   const composition = buildComposition(classifications);
 

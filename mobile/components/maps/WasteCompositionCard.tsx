@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet } from 'react-native'
 import Svg, { Circle } from 'react-native-svg'
+import { weightParts, pickWeightUnit } from '../../lib/formatWeight'
 
 
 export interface WasteSegment {
@@ -17,6 +18,7 @@ interface WasteCompositionCardProps {
 
 // Component 
 export default function WasteCompositionCard({ totalKg, segments, size = 130, strokeWidth = 25, }: WasteCompositionCardProps) {
+  const total = weightParts(totalKg, pickWeightUnit([totalKg]))
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
   const center = size / 2
@@ -80,8 +82,8 @@ export default function WasteCompositionCard({ totalKg, segments, size = 130, st
 
           {/* Center lbl*/}
           <View className="absolute inset-0 items-center justify-center">
-            <Text className="text-[22px] font-extrabold text-[#1A1A1A]">{totalKg}</Text>
-            <Text className="mt-px text-[11px] font-semibold text-[#8A93A0]">KG</Text>
+            <Text className="text-[22px] font-extrabold text-[#1A1A1A]">{total.value}</Text>
+            <Text className="mt-px text-[11px] font-semibold text-[#8A93A0]">{total.unit.toUpperCase()}</Text>
           </View>
         </View>
 

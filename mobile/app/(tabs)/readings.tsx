@@ -34,12 +34,10 @@ function formatDate(iso?: string | null) {
 }
 
 // same thresholds the backend uses for clog events (Low 30 / Medium 60 / High 80)
-function clogSeverity(pct: number | null): { label: string; color: string } {
-  if (pct == null) return { label: '', color: '#CBD5E1' }
-  if (pct >= 80) return { label: 'High', color: '#D81010' }
-  if (pct >= 60) return { label: 'Medium', color: '#FF9705' }
-  if (pct >= 30) return { label: 'Low', color: '#1F9D55' }
-  return { label: '', color: '#94A3B8' }
+const CLOG_STATUS_COLOR: Record<string, string> = {
+  Normal: '#1F9D55',
+  Warning: '#FF9705',
+  Critical: '#D81010',
 }
 
 function SummaryCard({ label, value, color }: { label: string; value: number; color: string }) {
@@ -146,7 +144,7 @@ export default function ReadingsScreen() {
             const nodeName = item.node_details?.node_name ?? '—'
             const barangayName = item.node_details?.barangay_details?.barangay_name
             const clog = item.clog_pct
-            const clogInfo = clogSeverity(clog)
+            const clogColor = CLOG_STATUS_COLOR[item.clog_status ?? ''] ?? '#94A3B8'
             const flow = item.water_flow_rate
 
             return (
@@ -194,16 +192,16 @@ export default function ReadingsScreen() {
                 <View className="mt-2.5 pt-2.5 border-t border-[#F1F5F9]">
                   <View className="flex-row justify-between mb-1.5">
                     <Text className="text-[10px] text-[#94A3B8] font-medium">Clog Percentage</Text>
-                    <Text className="text-[11px] font-bold" style={{ color: clogInfo.color }}>
+                    <Text className="text-[11px] font-bold" style={{ color: clogColor }}>
                       {clog != null
-                        ? `${clog.toFixed(1)}%${clogInfo.label ? ` · ${clogInfo.label}` : ''}`
+                        ? `${clog.toFixed(1)}%${item.clog_status ? ` · ${item.clog_status}` : ''}`
                         : '--'}
                     </Text>
                   </View>
                   <View className="h-1.5 rounded-full bg-[#F1F5F9] overflow-hidden">
                     <View
                       className="h-full rounded-full"
-                      style={{ width: `${Math.min(clog ?? 0, 100)}%`, backgroundColor: clogInfo.color }}
+                      style={{ width: `${Math.min(clog ?? 0, 100)}%`, backgroundColor: clogColor }}
                     />
                   </View>
                 </View>

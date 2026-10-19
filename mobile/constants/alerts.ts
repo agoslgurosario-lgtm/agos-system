@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 
-import { AlertType, ClogTier } from "../types/alert";
+import { AlertType, ClogTier, WaterSeverity, WaterLevelAlertContext } from "../types/alert";
 
 export const ALERT_META: Record<AlertType, { label: string; icon: keyof typeof Ionicons.glyphMap; tier: ClogTier | null }> = {
   Water_Level_Rising: {
@@ -67,3 +67,17 @@ export const ALERT_STYLE: Record<AlertType, { indicator: string; badgeBg: string
     badgeText: "text-[#16A34A]",
   },
 };
+
+export const WATER_SEVERITY_STYLE: Record<WaterSeverity, { badgeBg: string; badgeText: string; color: string }> = {
+  Warning:  { badgeBg: "bg-[#FFF0D6]", badgeText: "text-[#E65100]", color: "#E65100" },
+  Critical: { badgeBg: "bg-[#FFE5E5]", badgeText: "text-[#D81010]", color: "#D81010" },
+};
+
+// Older alerts have no saved severity, so work it out from the water level %
+export function getWaterSeverity(ctx: WaterLevelAlertContext): WaterSeverity {
+  if (ctx.severity === "Warning" || ctx.severity === "Critical") return ctx.severity;
+  if (ctx.water_level_pct != null && ctx.critical_pct != null && ctx.water_level_pct >= ctx.critical_pct) {
+    return "Critical";
+  }
+  return "Warning";
+}

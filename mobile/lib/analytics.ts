@@ -41,7 +41,7 @@ export function buildWasteVolumes(data: WasteClassification[]): WasteVolume[] {
     const dominant = dominantNode(data, key);
     return {
       title,
-      value: Math.round(total * 100) / 100,
+      value: total,
       subtitle: dominant ? `${dominant} dominant` : "No data yet",
       icon,
     };

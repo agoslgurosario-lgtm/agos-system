@@ -245,6 +245,7 @@ export default function ClogEventsScreen() {
             const nodeName = item.node_details?.node_name ?? '—'
             const waterLevel = item.reading_details?.water_level
             const waterFlow = item.reading_details?.water_flow_rate
+            const clogPct = item.reading_details?.clog_pct
 
             return (
               <Pressable
@@ -260,14 +261,21 @@ export default function ClogEventsScreen() {
                 }}
               >
                 <View className="flex-row justify-between items-start">
-                  <View>
+                  <View className="flex-1 pr-2">
                     <Text className="text-base font-extrabold text-[#122A48]">{locationName}</Text>
                     <Text className="text-xs text-[#94A3B8] mt-0.5">{nodeName}</Text>
                   </View>
-                  <View className="px-2.5 py-1 rounded-2xl" style={{ backgroundColor: sevStyle.bg }}>
-                    <Text className="text-[10px] font-extrabold" style={{ color: sevStyle.text }}>
-                      {item.severity}
-                    </Text>
+                  <View className="flex-row items-center gap-1.5">
+                    {clogPct != null && (
+                      <View className="px-2.5 py-1 rounded-2xl bg-[#F1F5F9]">
+                        <Text className="text-[10px] font-extrabold text-[#334155]">{clogPct}%</Text>
+                      </View>
+                    )}
+                    <View className="px-2.5 py-1 rounded-2xl" style={{ backgroundColor: sevStyle.bg }}>
+                      <Text className="text-[10px] font-extrabold" style={{ color: sevStyle.text }}>
+                        {item.severity}
+                      </Text>
+                    </View>
                   </View>
                 </View>
 

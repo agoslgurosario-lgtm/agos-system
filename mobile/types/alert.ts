@@ -22,10 +22,16 @@ export interface ClogAlertContext {
   estimated_volume?: number;
 }
 
+export type WaterSeverity = "Warning" | "Critical";
+
 export interface WaterLevelAlertContext {
+  severity?: WaterSeverity;
   water_level?: number;
   water_flow?: string;
   water_flow_rate?: number | null;
+  water_level_pct?: number | null;
+  warning_pct?: number;
+  critical_pct?: number;
 }
 
 export interface WasteTypeRejectedContext {

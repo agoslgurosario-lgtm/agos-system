@@ -9,6 +9,10 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
+// logo
+import Image from "next/image"
+import AgosLogo from '../../public/agos-logo.png'
+
 // icons
 import { Eye, EyeOff, KeyRound, BadgeCheck, X } from "lucide-react"
 
@@ -106,7 +110,15 @@ export default function ChangePassword() {
 
           <Card className="w-full max-w-[80vw] sm:max-w-100 p-4 py-6 sm:p-10 sm:py-12 bg-[#FFFAFA] shadow-[0_35px_60px_-15px_rgba(0,0,0,0.4)]">
             <CardHeader className="items-center justify-center">
-              <img className='w-12 h-12 sm:w-20 sm:h-20 mx-auto mb-1 bg-[#CDE3DE] rounded-full' />
+              <div className="flex justify-center">
+                <Image
+                  src={AgosLogo}
+                  alt="AGOS Logo"
+                  width={90}
+                  height={90}
+                  className="rounded-full flex-shrink-0 bg-[#CDE3DE]"
+                />
+              </div>
               <CardTitle className='text-black text-xs sm:text-sm text-center'>AGOS</CardTitle>
               <CardTitle className='text-[#1565BC] font-bold text-sm sm:text-lg text-center'>Change Your Password</CardTitle>
               <p className='text-[#122A48] text-[11px] sm:text-xs text-center -mt-1'>

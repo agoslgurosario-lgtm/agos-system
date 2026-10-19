@@ -41,7 +41,7 @@ export default function WasteProgress({ type, percent, color, icon }: Props) {
         />
       </View>
 
-      <Text className="ml-3 w-10 text-right text-[12px] text-slate-600">
+      <Text className="ml-3 w-12 text-right text-[12px] text-slate-600">
         {percent}%
       </Text>
     </View>

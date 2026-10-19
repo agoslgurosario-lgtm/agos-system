@@ -50,8 +50,8 @@ def create_health_alert(sender, instance, created, **kwargs):
     if instance.sensor_continuity is False:
         _fire_if_not_on_cooldown(instance.node, instance, 'Sensor_Failure')
 
-    if instance.status == 'Critical':
-        _fire_if_not_on_cooldown(instance.node, instance, 'Node_Offline')
+    # Node_Offline is NOT created from health logs. A node that is sending
+    # health data is by definition not offline.
 
 
 def _broadcast(group, message):

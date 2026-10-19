@@ -16,6 +16,7 @@ type ClogContext = {
 }
 
 type WaterContext = {
+  severity?: string
   water_level?: number
   water_flow_rate?: number | null
   water_flow?: string
@@ -167,8 +168,21 @@ export function  ContextRow({ alertType, ctx }: { alertType: string; ctx: AlertC
   if (alertType === "Water_Level_Rising") {
     const c = ctx as WaterContext
     if (c.water_level == null) return null
+    // older alerts have no saved severity, so work it out from the water level %
+    const severity =
+      c.severity === "Critical" || c.severity === "Warning"
+        ? c.severity
+        : c.water_level_pct != null && c.critical_pct != null && c.water_level_pct >= c.critical_pct
+          ? "Critical"
+          : "Warning"
     return (
       <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-[#727272]">
+        <span>
+          Severity:{" "}
+          <span className={`font-semibold ${severity === "Critical" ? "text-[#D81010]" : "text-[#E65100]"}`}>
+            {severity}
+          </span>
+        </span>
         <span>
           Water Level:{" "}
           <span className="font-semibold text-[#122A48]">{c.water_level} cm</span>

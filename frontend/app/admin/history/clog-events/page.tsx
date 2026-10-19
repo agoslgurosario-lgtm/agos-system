@@ -528,6 +528,10 @@ export default function ClogEvents() {
                   <p>Waste Classification</p>
                   <p>{selectedClog.classification_details?.dominant_waste_type ?? '—'}</p>
                 </div>
+                <div className="flex justify-between text-xs">
+                  <p>Clog Percentage</p>
+                  <p>{selectedClog.reading_details?.clog_pct != null ? `${selectedClog.reading_details.clog_pct}%` : '—'}</p>
+                </div>
               </div>
 
               <hr />
