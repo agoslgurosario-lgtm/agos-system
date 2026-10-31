@@ -65,10 +65,12 @@ const TOPICS: ManualTopic[] = [
           {
             label: "Enter Email",
             description: "The admin enters their registered email address and submits it. A verification code is then sent to that email.",
+            imageUrl: "/menro/screenshots/login/login-email-forgot-pass.png",
           },
           {
             label: "Enter Verification Code",
             description: "The admin enters the code sent to the email they provided. Once the code is verified, they can proceed to set a new password.",
+            imageUrl: "/menro/screenshots/login/login-code-forgot-pass.png",
           },
         ]
       },
@@ -77,28 +79,41 @@ const TOPICS: ManualTopic[] = [
         label: "Data Privacy Notice",
         description: "For new users, this is shown after logging in with valid credentials, presenting the purpose of personal data collection and the user's rights as a data subject under Section 16 of the Data Privacy Act. The admin must check the consent box confirming they have read and understood the notice before clicking “Proceed”.",
         whyItMatters: "This step informs users how their personal data is collected and used, and records their consent in compliance with the Data Privacy Act.",
+        imageUrl: [
+          "/menro/screenshots/login/login-data-priv.png",
+          "/menro/screenshots/login/login-data-priv2.png",
+
+        ]
       },
       {
         id: "login-change-password",
         label: "Change Password",
         description: "After clicking “Proceed” in the Data Privacy Notice, this modal is shown, requiring the user to set a new password before proceeding into the system. The admin enters their current (temporary) password, then a new password and its confirmation, each with a visibility toggle.",
         whyItMatters: "This step replaces the temporary password issued upon account creation with one chosen by the user, ensuring that each account is secured by a private credential.",
+        imageUrl: "/menro/screenshots/login/login-change-overview.png",
         extraSections: [
           {
             label: "Current Password For New User",
             description: "This is where the user enters their existing (temporary) password issued upon account creation.",
+            imageUrl: "/menro/screenshots/login/login-current-pass.png",
+        
           },
           {
             label: "New | Confirm Password",
             description: "This is where the user enters their desired new password and confirms it. The new password must meet the requirements — at least 8 characters, one special character, matching entries, and being different from the current password — which are validated in real time via checklist indicators. Clicking “Change Password” submits the update.",
+            imageUrl: "/menro/screenshots/login/login-new-confirm-pass.png",
           },
           {
             label: "Updating Password Dialog",
             description: "A loading indicator is shown after clicking “Change Password”, confirming that the system is securely processing and saving the new password.",
+            imageUrl: "/menro/screenshots/login/login-pass-modal.png",
+          
           },
           {
             label: "Changed Password Modal",
             description: "This is a confirmation that the password has been successfully updated and prompts the user to log in again using their new credentials. Clicking “Go to Login” returns the user to the Login page, where they enter their email and new password.",
+            imageUrl: "/menro/screenshots/login/login-pass-changed.png",
+          
           },
         ]
       },
@@ -285,23 +300,36 @@ const TOPICS: ManualTopic[] = [
         whyItMatters: "This step provides tools to edit or remove hotspot records, with confirmation safeguards at each stage, enabling MENRO officers to keep the hotspot database accurate and current while minimizing the risk of unintended data loss.",
         imageUrl: "/menro/screenshots/hotspot/hotspot-three-dots.png",
         extraSections: [
-          {
-            label: "Remove Button",
-            description: "Clicking Remove opens a confirmation dialog warning that the action cannot be undone. Clicking Remove permanently deletes the hotspot, while clicking Cancel closes the dialog without making any changes.",
-            imageUrl: "/menro/screenshots/hotspot/hotspot-remove.png",
-          },
+
           {
             label: "Edit Button",
-            description: "Clicking Edit opens a form pre-filled with the hotspot's existing details. Hotspot Information (barangay, name, description), Canal Properties (width, shape, depth, sensor height), and Geographic Location (map pin with latitude/longitude). Allowing the user to update any field. Changes are saved by clicking Save Changes, or discarded by clicking Cancel.",
+            description: "Click the three-dot menu beside a hotspot’s View on map button, then select Edit. This opens a form pre-filled with the hotspot’s existing details.",
             imageUrl: "/menro/screenshots/hotspot/hotspot-edit.png",
           },
           {
-            label: "Confirmation Modal - Save",
-            description: "After clicking Save Changes, a Confirm Changes dialog appears asking the user to verify the update. Clicking Confirm Changes finalizes and saves the updates, while clicking Keep Editing returns to the edit form without saving.",
+            label: "Edit Modal",
+            description: " The Edit form is divided into three sections. Hotspot Information shows the barangay (locked) and lets you update the hotspot name and description. Canal Properties lets you update the canal width, shape, depth, and sensor height. Geographic Location shows a map preview of the barangay boundary where you can click inside the highlighted area to move the pin, or enter the latitude and longitude directly. Click Save Changes to apply your updates, or Cancel to discard them.",
+            imageUrl: 
+            [
+            "/menro/screenshots/hotspot/edit-1st-part.png",
+            "/menro/screenshots/hotspot/edit-2nd-part.png",
+            "/menro/screenshots/hotspot/edit-save-btn.png",
+              
+            ]
           },
           {
-            label: "Confirmation Modal - Cancel",
-            description: "Clicking Cancel while there are unsaved changes triggers a Cancel Changes confirmation dialog, warning the user that unsaved changes will be lost. Clicking Yes, Cancel discards the changes and closes the form, while clicking Keep Editing returns to the edit form without discarding anything.",
+            label: "Remove Button",
+            description: "Click the three-dot menu beside the hotspot, then select Remove.",
+            imageUrl: "/menro/screenshots/hotspot/hotspot-remove.png",
+          },
+          {
+            label: "Remove Modal",
+            description: " If the hotspot is occupied by an active sensor node, a “Cannot Remove Hotspot” message appears. Unassign the node first, then click Okay or Close to dismiss it. If the hotspot is not occupied, a “Remove Hotspot” dialog asks you to confirm. Click Remove to permanently delete the hotspot (this cannot be undone), or Cancel to keep it.",
+            imageUrl: [
+              "/menro/screenshots/hotspot/hotspot-remove-modal.png",
+              "/menro/screenshots/hotspot/hotspot-remove-modal2.png",
+            ] 
+            
           },
         ]
       },
@@ -309,16 +337,19 @@ const TOPICS: ManualTopic[] = [
         id: "hotspot-manage-add-button",
         label: "Add Button",
         description: "Clicking the “Add Hotspot” button opens the hotspot registration form, where users can enter the hotspot’s name and description, specify the canal properties such as width, shape, depth, and sensor height, and select its geographic location on the map. The hotspot coordinates are automatically recorded when the user clicks within the highlighted barangay boundary.",
-        whyItMatters: "his step provides a structured registration form for hotspot details, canal properties, and geographic location, enabling MENRO officers to expand monitoring coverage in a consistent and verifiable manner as new sites are identified.",
+        whyItMatters: "This step provides a structured registration form for hotspot details, canal properties, and geographic location, enabling MENRO officers to expand monitoring coverage in a consistent and verifiable manner as new sites are identified.",
         imageUrl: "/menro/screenshots/hotspot/hotspot-add.png",
         extraSections: [
           {
-            label: "Confirmation Modal - Save",
+            label: "Add Modal",
             description: "Clicking the “Add Hotspot” button will display a confirmation modal asking the user to confirm the registration of the new hotspot. This ensures that all entered information is reviewed and confirmed before the hotspot is added to the system.",
-          },
-          {
-            label: "Confirmation Modal - Cancel",
-            description: "Clicking the “Cancel” button will display a confirmation modal asking the user to confirm whether they want to cancel the hotspot registration. This ensures that the user does not accidentally discard the information entered for the new hotspot.",
+            imageUrl: [
+              "/menro/screenshots/hotspot/hotspot-add-1st.png",
+              "/menro/screenshots/hotspot/hotspot-add-2nd.png",
+              "/menro/screenshots/hotspot/hotspot-add-save.png",
+
+
+            ] 
           },
         ]
       }
@@ -382,7 +413,7 @@ const TOPICS: ManualTopic[] = [
         imageUrl: "/menro/screenshots/waste/waste-summary-cards.png",
       },{
         id: "waste-collection",
-        label: "Barangay Collection Card",
+        label: "Barangay Detection Card",
         description: "This panel presents a horizontal bar comparison of waste volumes collected, measured in kilograms, across the monitored barangays",
         whyItMatters: "This component enables officers to readily identify which localities are generating or reporting the greatest volume of waste, thereby supporting informed decisions regarding collection routing and the allocation of resources.",
         imageUrl: "/menro/screenshots/waste/waste-collection.png",
@@ -400,7 +431,7 @@ const TOPICS: ManualTopic[] = [
         imageUrl: "/menro/screenshots/waste/waste-details.png",
       },{
         id: "waste-export",
-        label: "Export Button",
+        label: "Export and Print",
         description: "Clicking the Export button opens a print preview of the report for the selected month. From the preview, users may review the report before clicking Print to print it or save it as a PDF, or Cancel to close the preview.",
         whyItMatters: "This step provides MENRO officers with a means of producing a physical or file-based record of waste analytics data for a given period, supporting formal documentation, offline reference, and submission to relevant municipal offices. Presenting a print preview prior to output allows officers to verify that the report reflects the correct data and time period before it is finalized, reducing the likelihood of exporting inaccurate or incomplete records.",
         imageUrl: "/menro/screenshots/waste/waste-export.png",
