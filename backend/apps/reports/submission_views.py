@@ -2,6 +2,7 @@ from collections import Counter
 from datetime import date
 
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import serializers, status
 from rest_framework.response import Response
@@ -10,7 +11,7 @@ from rest_framework.views import APIView
 from apps.alerts.models import Alert
 from apps.audit_logs.utils import log_action
 from apps.barangay.models import Barangay
-from apps.users.permissions import IsBarangay
+from apps.users.permissions import IsBarangay, IsAdminOrMENRO
 
 from .models import CanalMonitoringReport, PeriodSubmission
 from .periods import (
@@ -246,3 +247,52 @@ class SubmissionsView(APIView):
             ip_address=request.META.get('REMOTE_ADDR'),
         )
         return Response(PeriodSubmissionSerializer(sub).data, status=status.HTTP_201_CREATED)
+
+
+class StaffSubmissionSerializer(PeriodSubmissionSerializer):
+    submitted_by_name = serializers.SerializerMethodField()
+    label = serializers.SerializerMethodField()
+
+    def get_submitted_by_name(self, obj):
+        u = obj.submitted_by
+        return f"{u.first_name} {u.last_name}".strip() if u else ''
+
+    def get_label(self, obj):
+        return period_label(obj.period_start, obj.period_end)
+
+
+class StaffSubmissionListView(APIView):
+    """GET /api/canal-reports/period-submissions/  (Admin / MENRO)
+    Optional filters: ?barangay=<id>  ?period_start=YYYY-MM-DD  ?late=true|false"""
+    permission_classes = [IsAdminOrMENRO]
+
+    def get(self, request):
+        qs = PeriodSubmission.objects.select_related('barangay', 'submitted_by')
+        p = request.query_params
+        if p.get('barangay'):
+            qs = qs.filter(barangay_id=p['barangay'])
+        if p.get('period_start'):
+            try:
+                qs = qs.filter(period_start=date.fromisoformat(p['period_start']))
+            except ValueError:
+                return Response({'detail': 'Invalid period_start.'}, status=400)
+        if p.get('late') in ('true', 'false'):
+            qs = qs.filter(is_late=(p['late'] == 'true'))
+        return Response(StaffSubmissionSerializer(qs, many=True).data)
+
+
+class StaffSubmissionDetailView(APIView):
+    """GET /api/canal-reports/period-submissions/<id>/  (Admin / MENRO)
+    The cover page: the submission, its totals, the signatories at the time, and its reports."""
+    permission_classes = [IsAdminOrMENRO]
+
+    def get(self, request, submission_id):
+        sub = get_object_or_404(
+            PeriodSubmission.objects.select_related('barangay', 'submitted_by'),
+            submission_id=submission_id,
+        )
+        reports = CanalMonitoringReport.objects.filter(submission=sub).prefetch_related('node_summaries', 'purok_rows')
+        rows = sorted(reports, key=lambda r: r.date_responded or r.created_at)
+        data = StaffSubmissionSerializer(sub).data
+        data['reports'] = [_report_row(r, sub.period_start) for r in rows]
+        return Response(data)

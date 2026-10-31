@@ -215,16 +215,21 @@ CLOG_TO_REPORT_SEVERITY = {'High': 'Critical', 'Medium': 'Medium', 'Low': 'Low'}
 
 
 def _responded_at(raw, event):
-    """Time of the tap, as sent by the app; falls back to now if it looks wrong."""
+    """The response time sent by the app. The barangay may set it earlier than now (they might have
+    responded days before writing the report). Returns (time, None) or (None, error message)."""
     now = timezone.now()
-    if raw:
-        dt = parse_datetime(str(raw))
-        if dt is not None:
-            if timezone.is_naive(dt):
-                dt = timezone.make_aware(dt, timezone.utc)
-            if event.detected_at <= dt <= now + timedelta(minutes=2) and now - dt <= timedelta(hours=12):
-                return min(dt, now)
-    return now
+    if not raw:
+        return now, None
+    dt = parse_datetime(str(raw))
+    if dt is None:
+        return now, None   # unreadable: fall back to now
+    if timezone.is_naive(dt):
+        dt = timezone.make_aware(dt, timezone.utc)
+    if dt < event.detected_at:
+        return None, 'The response time cannot be before the clog was detected.'
+    if dt > now + timedelta(minutes=2):
+        return None, 'The response time cannot be in the future.'
+    return min(dt, now), None
 
 
 class ClogEventRespondView(APIView):
@@ -265,7 +270,18 @@ class ClogEventRespondView(APIView):
                     status=status.HTTP_409_CONFLICT
                 )
 
-            responded_at = _responded_at(request.data.get('responded_at'), event)
+            earlier = None
+            if event.reopened_at and not request.data.get('responded_at'):
+                # a redo with no time sent: keep the original response time (not "now")
+                earlier = CanalMonitoringReport.objects.filter(
+                    clog_event=event, status='Voided', date_responded__isnull=False
+                ).order_by('-voided_at').first()
+            if earlier:
+                responded_at = earlier.date_responded
+            else:
+                responded_at, time_error = _responded_at(request.data.get('responded_at'), event)
+                if time_error:
+                    return Response({'responded_at': time_error}, status=400)
 
             event.status = 'Responded'
             event.responded_at = responded_at
@@ -276,7 +292,7 @@ class ClogEventRespondView(APIView):
             hotspot = getattr(event.node, 'hotspot', None)
             report = CanalMonitoringReport.objects.filter(
                 clog_event=event, barangay=event.barangay
-            ).first()
+            ).exclude(status='Voided').first()
             if report is None:
                 report = CanalMonitoringReport(clog_event=event, barangay=event.barangay, reported_by=user)
             report.purok = getattr(hotspot, 'purok', None)
@@ -291,14 +307,15 @@ class ClogEventRespondView(APIView):
 
         log_action(
             user=user, action='Responded to Clog Event', affected_table='tbl_clog_events',
-            new_value=f"event {event.event_id}: {personnel}", ip_address=request.META.get('REMOTE_ADDR'),
+            new_value=f"event {event.event_id}: {personnel} (response time {responded_at:%Y-%m-%d %H:%M}, logged {timezone.now():%Y-%m-%d %H:%M})",
+            ip_address=request.META.get('REMOTE_ADDR'),
         )
 
         try:
             channel_layer = get_channel_layer()
             async_to_sync(channel_layer.group_send)(
                 "clog_events",
-                {"type": "clog_message", "event": ClogEventSerializer(event).data},
+                {"type": "clog_event_message", "clog_event": ClogEventSerializer(event).data},
             )
         except Exception:
             pass

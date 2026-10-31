@@ -22,7 +22,7 @@ import { DashboardSkeleton } from "@/components/Skeleton/Admin/DashboardSkeleton
 
 // auth / lib
 import { fetchWithAuth } from "@/lib/auth"
-import { monthOf, formatMonthLabel } from "@/lib/reportOptions"
+import { periodOf, periodLabelOf, currentPeriodStart } from "@/lib/reportOptions"
 import { formatWeight } from "@/lib/formatWeight"
 import type { CanalMonitoringReport } from "@/types/report"
 import { useWebSocket } from "@/lib/hooks/useWebSocket"
@@ -207,9 +207,6 @@ export default function Dashboard() {
 
   const now = new Date()
 
-  const currentMonthValue = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-  const currentMonthLabel = formatMonthLabel(currentMonthValue)
-
   const [selectedNode, setSelectedNode] = useState<SensorNodes | null>(null)
   const [nodeDialog, setNodeDialog] = useState({ open: false })
 
@@ -327,7 +324,10 @@ export default function Dashboard() {
   })
   const resolvedClog = resolvedClogsThisMonth.length
 
-  const reportsThisMonth = barangayReports.data.filter(r => monthOf(r) === currentMonthValue)
+  // "Barangays Reported" = barangays that submitted for the current period (1st-15th or 16th-30th)
+  const currentPeriod = currentPeriodStart()
+  const reportsThisPeriod = barangayReports.data.filter(r => periodOf(r) === currentPeriod)
+  const currentPeriodLabel = periodLabelOf(currentPeriod)
 
   // health helpers
   const latestHealthByNode = new Map<number, NodeHealth>()
@@ -494,9 +494,9 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* barangays reported this month */}
+            {/* barangays reported this period */}
             <div onClick={() => setReportProgressDialog(true)} className="cursor-pointer hover:opacity-80">
-              <ReportProgressBar reports={reportsThisMonth} barangays={activeBarangays} periodLabel={currentMonthLabel} />
+              <ReportProgressBar reports={reportsThisPeriod} barangays={activeBarangays} periodLabel={currentPeriodLabel} />
             </div>
           </div>
           
@@ -1074,9 +1074,9 @@ export default function Dashboard() {
       <NotReportedDialog
         open={reportProgressDialog}
         onOpenChange={setReportProgressDialog}
-        reports={reportsThisMonth}
+        reports={reportsThisPeriod}
         barangays={activeBarangays}
-        periodLabel={currentMonthLabel}
+        periodLabel={currentPeriodLabel}
       />
 
       {/* Battery Voltage Dialog */}

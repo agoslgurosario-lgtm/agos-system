@@ -2,8 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { useRouter } from "expo-router";
 import { Modal, Pressable, Text, View } from "react-native";
-import { Alert, ClogAlertContext, WaterLevelAlertContext, WasteTypeRejectedContext, WasteTypeApprovedContext, HealthAlertContext } from "../../types/alert";
-import { ALERT_META, ALERT_STYLE, WATER_SEVERITY_STYLE, getWaterSeverity, HEALTH_ALERT_TYPES, batteryLevel, signalLevel } from "../../constants/alerts";
+import { Alert, ClogAlertContext, WaterLevelAlertContext, WasteTypeRejectedContext, WasteTypeApprovedContext, HealthAlertContext, ReportReminderContext } from "../../types/alert";
+import { ALERT_META, ALERT_STYLE, WATER_SEVERITY_STYLE, getWaterSeverity, HEALTH_ALERT_TYPES, batteryLevel, signalLevel, REPORT_ALERT_TYPES, reminderText, fmtDueDay } from "../../constants/alerts";
 
 interface Props {
   alert: Alert | null;
@@ -52,6 +52,27 @@ function ContextDetails({ alert }: { alert: Alert }) {
           Device status: <Text className="font-semibold text-slate-800">{c.health_status ?? "—"}</Text>
         </Text>
         <Text className="text-slate-400 text-[11px] mt-1">{advice[alert.alert_type]}</Text>
+      </View>
+    );
+  }
+
+  if (REPORT_ALERT_TYPES.includes(alert.alert_type)) {
+    const c = alert.alert_context as ReportReminderContext;
+    return (
+      <View className="gap-2">
+        <Text className="text-slate-500 text-[12px]">
+          Period: <Text className="font-semibold text-slate-800">{c.period_label ?? "—"}</Text>
+        </Text>
+        <Text className="text-slate-500 text-[12px]">
+          Deadline: <Text className="font-semibold text-slate-800">{fmtDueDay(c.due_date) || "—"}</Text>
+        </Text>
+        <Text className="text-slate-500 text-[12px]">
+          Verified reports ready: <Text className="font-semibold text-slate-800">{c.ready_count ?? 0}</Text>
+        </Text>
+        <Text className="text-slate-500 text-[12px]">
+          Waiting to be verified: <Text className="font-semibold text-slate-800">{c.unverified_count ?? 0}</Text>
+        </Text>
+        <Text className="text-slate-400 text-[11px] mt-1">{reminderText(alert.alert_type, c)}</Text>
       </View>
     );
   }
@@ -200,6 +221,12 @@ export default function AlertModal({ alert, visible, onClose }: Props) {
   const meta = ALERT_META[alert.alert_type];
   const style = ALERT_STYLE[alert.alert_type];
   const canViewHealth = HEALTH_ALERT_TYPES.includes(alert.alert_type) && alert.node_id != null;
+  const isReport = REPORT_ALERT_TYPES.includes(alert.alert_type);
+
+  const openSubmit = () => {
+    onClose();
+    router.push("/submit-reports" as any);
+  };
 
   const openHealth = () => {
     onClose();
@@ -251,7 +278,7 @@ export default function AlertModal({ alert, visible, onClose }: Props) {
           {/* INFORMATION */}
 
           <View className="gap-3">
-            {alert.alert_type !== "Waste_Type_Rejected" && alert.alert_type !== "Waste_Type_Approved" && (
+            {alert.alert_type !== "Waste_Type_Rejected" && alert.alert_type !== "Waste_Type_Approved" && !isReport && (
               <View className="flex-row justify-between">
                 <Text className="text-slate-500">Node</Text>
                 <Text className="font-semibold">{alert.node_name ?? "—"}</Text>
@@ -265,7 +292,7 @@ export default function AlertModal({ alert, visible, onClose }: Props) {
 
             <View className="flex-row justify-between">
               <Text className="text-slate-500">
-                {alert.alert_type === "Waste_Type_Rejected" || alert.alert_type === "Waste_Type_Approved" ? "Reviewed" : "Detected"}
+                {alert.alert_type === "Waste_Type_Rejected" || alert.alert_type === "Waste_Type_Approved" ? "Reviewed" : isReport ? "Sent" : "Detected"}
               </Text>
               <Text className="font-semibold">{formatDetectedAt(alert.timestamp)}</Text>
             </View>
@@ -286,6 +313,16 @@ export default function AlertModal({ alert, visible, onClose }: Props) {
             >
               <Ionicons name="hardware-chip-outline" size={16} color="#fff" />
               <Text className="ml-2 text-white text-[14px] font-semibold">View Device Health</Text>
+            </Pressable>
+          )}
+
+          {isReport && (
+            <Pressable
+              onPress={openSubmit}
+              className="w-full bg-[#122A48] rounded-lg py-3 items-center mt-5 flex-row justify-center"
+            >
+              <Ionicons name="paper-plane-outline" size={16} color="#fff" />
+              <Text className="ml-2 text-white text-[14px] font-semibold">Go to Submit Reports</Text>
             </Pressable>
           )}
         </View>

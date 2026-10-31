@@ -15,6 +15,7 @@ export function BarangayReportsSkeleton() {
   const [filterBarangay, setFilterBarangay] = useState<string>("All")
   const [selectedMonth, setSelectedMonth] = useState<string>("current")
   const [selectedWeek, setSelectedWeek] = useState<string>("All")
+  const [selectedTimeliness, setSelectedTimeliniess] = useState<string>("All")
 
   const { panelRef, tableWrapRef, rows } = useFillRows({
     rowHeight: 56,
@@ -55,7 +56,16 @@ export function BarangayReportsSkeleton() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper">
-              <SelectItem value="All" className="p-2 text-xs">All weeks</SelectItem>
+              <SelectItem value="All" className="p-2 text-xs">All periods</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={selectedTimeliness} onValueChange={setSelectedTimeliniess}>
+            <SelectTrigger className="cursor-pointer text-xs px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper">
+              <SelectItem value="All" className="p-2 text-xs">All Submissions</SelectItem>
             </SelectContent>
           </Select>
         </div>

@@ -60,6 +60,7 @@ class ClogEvent(models.Model):
     )
     auto_cleared = models.BooleanField(default=False)
     settled_at = models.DateTimeField(null=True, blank=True)
+    reopened_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'tbl_clog_events'

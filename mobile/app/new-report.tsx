@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import ChipSelect from "@/components/reports/ChipSelect";
+import { CleanupSummary } from "@/components/reports/CleanupSummary";
 import {
   SEVERITY_OPTIONS, SEVERITY_COLORS,
   WATER_LEVEL_OPTIONS, OBSTRUCTION_COVERAGE_OPTIONS, WATER_FLOW_OPTIONS,
@@ -16,6 +17,7 @@ import { useAuth } from "@/lib/AuthContext";
 import type {
   CanalMonitoringReport, ReportSeverity, WaterLevel, ObstructionCoverage,
   WaterFlowCondition, CustomWasteType,
+  CleanupPreview,
 } from "@/types/reports";
 import { AddOtherWasteModal } from "@/components/reports/AddOtherWasteModal";
 import { SubmitReportModal } from "@/components/reports/SubmitReportModal";
@@ -509,6 +511,12 @@ export default function NewReportScreen() {
   const [isCompleting, setIsCompleting] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
 
+  // cleanup mode = a new report with no clog event, or a loaded report whose scope is Barangay
+  const [isCleanup, setIsCleanup] = useState(!params.report_id && !clogEventId);
+  const [cleanupPreview, setCleanupPreview] = useState<CleanupPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState(false);
+
   const [preview, setPreview] = useState<{ field: PhotoField; index: number } | null>(null);
 
   // Photos need a server-side report to attach to. This ref holds the id once it exists,
@@ -594,6 +602,7 @@ export default function NewReportScreen() {
           report.clog_event != null &&
           ["Awaiting_Post_Report", "Ready_To_Verify"].includes(report.status);
         setIsPost(post);
+        setIsCleanup(report.report_scope === "Barangay");
         setReportStatus(report.status);
         if (post) {
           setSystemLoading(true);
@@ -613,6 +622,29 @@ export default function NewReportScreen() {
   const update = <K extends keyof ReportFormState>(key: K, value: ReportFormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
+
+  // new cleanup report: the cleanup date starts as now
+  useEffect(() => {
+    if (isCleanup && !params.report_id) {
+      setForm((p) => (p.dateResponded ? p : { ...p, dateResponded: new Date() }));
+    }
+  }, []);
+
+  // fetch the sensor data per purok whenever the cleanup date changes
+  useEffect(() => {
+    if (!isCleanup || !form.dateResponded || isLoadingReport) return;
+    const iso = form.dateResponded.toISOString();
+    const t = setTimeout(() => {
+      setPreviewLoading(true);
+      setPreviewError(false);
+      api
+        .get(`/api/canal-reports/cleanup-preview/?date=${encodeURIComponent(iso)}`)
+        .then((d: CleanupPreview) => setCleanupPreview(d))
+        .catch(() => setPreviewError(true))
+        .finally(() => setPreviewLoading(false));
+    }, 500);
+    return () => clearTimeout(t);
+  }, [isCleanup, form.dateResponded, isLoadingReport]);
 
   const addCustomWaste = (t: CustomWasteType) => {
     setWasteTypes((prev) => (prev.some((p) => p.waste_type_id === t.waste_type_id) ? prev : [...prev, t]));
@@ -640,7 +672,10 @@ export default function NewReportScreen() {
 
     if (!creatingRef.current) {
       creatingRef.current = api
-        .post("/api/canal-reports/", clogEventId ? { clog_event: clogEventId } : {})
+        .post(
+          "/api/canal-reports/",
+          clogEventId ? { clog_event: clogEventId } : isCleanup ? { report_scope: "Barangay" } : {}
+        )
         .then((report) => {
           reportIdRef.current = report.report_id;
           setReportId(report.report_id);
@@ -777,6 +812,24 @@ export default function NewReportScreen() {
 
   const getMissingFields = (): string[] => {
     const missing: string[] = [];
+    if (isCleanup) {
+      const hasSensorData = (cleanupPreview?.puroks ?? []).some((p) => p.has_sensor_data);
+      if (!form.dateResponded) missing.push("Date / time of the cleanup");
+      if (!hasSensorData) {
+        if (!form.waterLevel) missing.push("Overall water level");
+        if (!form.obstructionCoverage) missing.push("Overall obstruction");
+        if (!form.waterFlowCondition) missing.push("Overall water flow");
+      }
+      if (!form.assignedPersonnel.trim()) missing.push("Assigned personnel");
+      if (!form.actionTaken.trim()) missing.push("Action taken");
+      if (wasteTotalKg <= 0) missing.push("Waste composition (at least one category)");
+      form.customWaste.forEach((c) => {
+        if (parseAmount(c.kg) <= 0) missing.push(`Weight for ${c.name}`);
+      });
+      if (form.beforePhotos.length === 0) missing.push("Before Cleanup photo");
+      if (form.afterPhotos.length === 0) missing.push("After Cleanup photo");
+      return missing;
+    }
     if (form.purok == null) missing.push("Purok");
     if (!form.dateObserved) missing.push("Date / time observed");
     if (!form.severity) missing.push("Severity");
@@ -800,7 +853,7 @@ export default function NewReportScreen() {
       Alert.alert("Please wait", "Photos are still uploading.");
       return;
     }
-    if (!reportIdRef.current && isFormEmpty(form)) {
+    if (!reportIdRef.current && isFormEmpty(isCleanup ? { ...form, dateResponded: null } : form)) {
       Alert.alert("Nothing to save", "Fill in something first, then save it as a draft.");
       return;
     }
@@ -822,10 +875,13 @@ export default function NewReportScreen() {
     router.replace("/(tabs)/reports" as any);
   };
 
-  // a report filled in by hand: check it, confirm, then go to the preview
   const handleOpenCompleteModal = () => {
     if (hasUploadingPhotos) {
       Alert.alert("Please wait", "Photos are still uploading.");
+      return;
+    }
+    if (isCleanup && (previewLoading || !cleanupPreview)) {
+      Alert.alert("Please wait", "The canal data is still loading.");
       return;
     }
     const missing = getMissingFields();
@@ -834,7 +890,12 @@ export default function NewReportScreen() {
       setIsIncompleteVisible(true);
       return;
     }
-    if (form.dateResponded!.getTime() < form.dateObserved!.getTime()) {
+    if (isCleanup) {
+      if (form.dateResponded!.getTime() > Date.now() + 5 * 60 * 1000) {
+        Alert.alert("Check the date", "The cleanup date can't be in the future.");
+        return;
+      }
+    } else if (form.dateResponded!.getTime() < form.dateObserved!.getTime()) {
       Alert.alert("Check the dates", "The response time can't be earlier than the time the problem was observed.");
       return;
     }
@@ -949,7 +1010,7 @@ export default function NewReportScreen() {
         </TouchableOpacity>
 
         <Text className="text-lg font-bold text-[#122A48]">
-          {isPost ? "Post-Report" : reportId ? "Continue Report" : "New Canal Report"}
+          {isPost ? "Post-Report" : isCleanup ? "Weekly Cleanup Report" : reportId ? "Continue Report" : "New Canal Report"}
         </Text>
 
         <View className="w-7" />
@@ -984,6 +1045,47 @@ export default function NewReportScreen() {
               systemLoading={systemLoading}
               completed={reportStatus === "Ready_To_Verify"}
             />
+          ) : isCleanup ? (
+            <>
+              <SectionHeader icon="broom" title="CLEANUP DETAILS" />
+
+              <View className="mb-3 flex-row gap-2.5">
+                <LockedField label="Barangay" value={barangayName} />
+                <LockedField label="Municipality" value="Rosario, La Union" />
+              </View>
+
+              <DateTimeField
+                label="Date / Time of the Cleanup"
+                required
+                value={form.dateResponded}
+                onChange={(d) => update("dateResponded", d)}
+              />
+              {form.dateResponded && form.dateResponded.getDay() !== 6 && (
+                <Text className="mt-1.5 text-[11px] text-[#b45309]">
+                  This date is not a Saturday. You can still continue.
+                </Text>
+              )}
+
+              <View className="my-3 h-px bg-[#f1f5f9]" />
+
+              <SectionHeader icon="waves" title="OVERALL CANAL CONDITION" />
+              <Text className="mb-3 -mt-1 text-[11px] text-[#94a3b8]">
+                Taken from your sensors for the 7 days before the cleanup. Puroks without sensors are not counted.
+              </Text>
+              {previewError && (
+                <Text className="mb-2 text-[12px] text-[#dc2626]">
+                  Couldn't load the purok data. Check your connection, then change the date to try again.
+                </Text>
+              )}
+              <CleanupSummary
+                puroks={cleanupPreview?.puroks ?? []}
+                loading={previewLoading}
+                manual={{ water: form.waterLevel, obstruction: form.obstructionCoverage, flow: form.waterFlowCondition }}
+                onManualChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+              />
+
+              <View className="mb-3 mt-1.5 h-px bg-[#f1f5f9]" />
+            </>
           ) : (
             <>
               {/* MONITORING SITE INFORMATION */}
@@ -1162,14 +1264,16 @@ export default function NewReportScreen() {
                 />
               </View>
 
-              <View className="mb-3">
-                <DateTimeField
-                  label="Date / Time Responded"
-                  required
-                  value={form.dateResponded}
-                  onChange={(d) => update("dateResponded", d)}
-                />
-              </View>
+              {!isCleanup && (
+                <View className="mb-3">
+                  <DateTimeField
+                    label="Date / Time Responded"
+                    required
+                    value={form.dateResponded}
+                    onChange={(d) => update("dateResponded", d)}
+                  />
+                </View>
+              )}
 
               <Field
                 stacked 
@@ -1188,12 +1292,21 @@ export default function NewReportScreen() {
             <LockedField stacked label="Waste Collected (auto total)" value={`${wasteTotalKg.toFixed(2)} kg`} />
           </View>
 
+          {isCleanup && (
+            <Text className="mb-1.5 text-[11px] leading-4 text-[#94a3b8]">
+              Puroks without sensors aren't part of the summary above. If you want to report on them, describe their canal condition here, along with anything else worth noting.
+            </Text>
+          )}
           <Field
             stacked
             label="Remarks"
             value={form.remarks}
             onChangeText={(t) => update("remarks", t)}
-            placeholder="Anything else worth noting (optional)"
+            placeholder={
+              isCleanup
+                ? "e.g. Purok 5 has no sensor. Canal was mostly clear, only a few leaves."
+                : "Anything else worth noting (optional)"
+            }
             multiline
             numberOfLines={3}
           />

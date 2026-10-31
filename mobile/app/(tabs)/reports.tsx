@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -8,11 +8,16 @@ import { CanalMonitoringReport } from "@/types/reports";
 import { SEVERITY_COLORS, severityLabel } from "@/constants/reports";
 import AlertBellButton from "@/components/alerts/AlertBellButton";
 import SubmitBanner from "@/components/reports/SubmitBanner";
+import PerformanceCard from "@/components/reports/PerformanceCard";
+import Pagination from "@/components/alerts/Pagination";
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Shadow } from "react-native-shadow-2";
 
 import { exportPdf } from "@/lib/exportPdf";
+
+
+const PAGE_SIZE = 5;
 
 function MetricCard({ label, value }: { label: string; value: number }) {
   return (
@@ -86,6 +91,8 @@ export default function ReportsListScreen() {
   const [error, setError] = useState("");
 
   const [exportingId, setExportingId] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
+  const prevCount = useRef(0);
 
   const loadData = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
@@ -111,19 +118,20 @@ export default function ReportsListScreen() {
     }, [loadData])
   );
 
-  const totalReports = reports.length;
-  const submittedCount = reports.filter((r) => r.is_submitted).length;
   const inProgressCount = reports.filter((r) => !r.is_submitted).length;
-
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const thisMonthCount = reports.filter(
-    (r) => r.is_submitted && (r.date_observed ?? "").startsWith(currentMonth)
-  ).length;
 
   const sortedReports = [...reports].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
+
+  const totalPages = Math.max(1, Math.ceil(sortedReports.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageReports = sortedReports.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  useEffect(() => {
+    if (prevCount.current > 0 && reports.length > prevCount.current) setPage(1);
+    prevCount.current = reports.length;
+  }, [reports.length]);
 
   const needsReview = (r: CanalMonitoringReport) =>
     !r.is_submitted && (r.status === "Ready_To_Verify" || r.status === "Verified");
@@ -165,7 +173,7 @@ export default function ReportsListScreen() {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => loadData(true)} tintColor="#122A48" />
         }
-        contentContainerClassName="p-4 pb-8"
+        contentContainerClassName="p-4 pb-28"
       >
         <View className="mb-4 flex-row items-center justify-between gap-3">
           <Text className="flex-1 text-lg font-bold text-[#122A48]" numberOfLines={2}>
@@ -179,16 +187,7 @@ export default function ReportsListScreen() {
 
         <SubmitBanner />
 
-        <View className="mb-5 gap-2.5">
-          <View className="flex-row gap-2.5">
-            <MetricCard label="Total reports" value={totalReports} />
-            <MetricCard label="Submitted" value={submittedCount} />
-          </View>
-          <View className="flex-row gap-2.5">
-            <MetricCard label="In progress" value={inProgressCount} />
-            <MetricCard label="This month" value={thisMonthCount} />
-          </View>
-        </View>
+        <PerformanceCard />
 
         <Text className="mb-3 text-sm font-semibold text-[#122A48]">Recent Reports</Text>
 
@@ -199,7 +198,7 @@ export default function ReportsListScreen() {
             </Text>
           )}
 
-          {sortedReports.map((report) => {
+          {pageReports.map((report) => {
             const isDraft = !report.is_submitted && !needsReview(report);
             const isReview = needsReview(report);
             const filesCount = report.media?.length ?? 0;
@@ -228,7 +227,7 @@ export default function ReportsListScreen() {
                       style={{ marginTop: 2 }}
                     />
                     <Text className="flex-1 shrink text-sm font-semibold leading-5 text-[#122A48]">
-                      {report.purok ? `Purok ${report.purok}` : "Untitled report"}
+                      {report.report_scope === "Barangay" ? "Weekly cleanup" : report.purok ? `Purok ${report.purok}` : "Untitled report"}
                     </Text>
                   </View>
                   {isDraft || isReview ? <InProgressBadge status={report.status} /> : <SeverityBadge severity={report.severity} />}
@@ -300,6 +299,8 @@ export default function ReportsListScreen() {
             );
           })}
         </View>
+
+        <Pagination currentPage={safePage} totalPages={totalPages} onPageChange={setPage} />
       </ScrollView>
 
       <View style={{ position: "absolute", bottom: 20 + insets.bottom, right: 20 }}>

@@ -47,6 +47,19 @@ def auto_clear_stale_clog_events():
             settled += 1
         event.save()
 
+    # events reopened for a redo (their report was voided) that nobody redid within the window
+    abandoned = 0
+    for event in ClogEvent.objects.filter(status='Detected', reopened_at__isnull=False, reopened_at__lte=cutoff):
+        now = timezone.now()
+        event.status = 'Cleared'
+        event.resolved_at = now
+        event.auto_cleared = True
+        event.save()
+        abandoned += 1
+
+    if abandoned:
+        logger.info(f"{abandoned} reopened clog events auto-cleared (the report was not redone).")
+
     if cleared or settled:
         logger.info(
             f"Stale clog events older than {AUTO_CLEAR_AFTER}: "

@@ -3,6 +3,7 @@ from django.db import transaction
 from .models import CanalMonitoringReport, ReportMedia, CustomWasteType, ReportCustomWaste, ReportNodeSummary, ReportPurokRow
 from apps.barangay.serializers import BarangaySerializer
 from apps.users.serializers import UserSerializer
+from .periods import period_label
 
 
 class ReportMediaSerializer(serializers.ModelSerializer):
@@ -49,6 +50,39 @@ class CanalMonitoringReportSerializer(serializers.ModelSerializer):
     node_summaries = ReportNodeSummarySerializer(many=True, read_only=True)
     verified_by_name = serializers.SerializerMethodField()
     purok_rows = ReportPurokRowSerializer(many=True, read_only=True)
+    submission_info = serializers.SerializerMethodField()
+    earlier_voided = serializers.SerializerMethodField()
+
+    def get_earlier_voided(self, obj):
+        """Earlier reports for the same clog event that the barangay voided (this one is a redo)."""
+        if not obj.clog_event_id:
+            return []
+        earlier = CanalMonitoringReport.objects.filter(
+            clog_event_id=obj.clog_event_id, status='Voided'
+        ).exclude(pk=obj.pk).select_related('voided_by').order_by('voided_at')
+        return [
+            {
+                'report_id': r.report_id,
+                'reason': r.void_reason,
+                'voided_at': r.voided_at,
+                'voided_by_name': f"{r.voided_by.first_name} {r.voided_by.last_name}".strip() if r.voided_by else None,
+            }
+            for r in earlier
+        ]
+
+    def get_submission_info(self, obj):
+        s = obj.submission
+        if not s:
+            return None
+        return {
+            'submission_id': s.submission_id,
+            'period_start': s.period_start,
+            'period_end': s.period_end,
+            'label': period_label(s.period_start, s.period_end),
+            'is_late': s.is_late,
+            'days_late': s.days_late,
+            'submitted_at': s.submitted_at,
+        }
 
     def validate_report_scope(self, value):
         if self.instance is not None and value != self.instance.report_scope:
@@ -60,7 +94,8 @@ class CanalMonitoringReportSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['barangay', 'reported_by', 'submitted_at', 'status',
                             'condition_source', 'post_completed_at', 'verified_by', 'verified_at',
-                            'submission', 'carried_over']
+                            'submission', 'carried_over',
+                            'void_reason', 'voided_by', 'voided_at']
 
     SUBMIT_REQUIRED_FIELDS = [
         'purok', 'date_observed', 'severity',

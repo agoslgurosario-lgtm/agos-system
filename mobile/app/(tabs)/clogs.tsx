@@ -10,6 +10,7 @@ import AlertBellButton from '@/components/alerts/AlertBellButton'
 import MonthFilter from '../../components/common/MonthFilter'
 import { clogSeverityLabel } from '../../constants/clogSeverity'
 import { currentMonthValue, monthLabel, monthOfIso } from '../../lib/months'
+import { ReopenedNotice } from "@/components/clogs/ReopenedNotice";
 
 import { useAuth } from '../../lib/AuthContext'
 import { useLiveSocket } from '../../lib/useLiveSocket'
@@ -21,6 +22,12 @@ const SEVERITY_STYLE: Record<string, { bg: string; text: string }> = {
   High:   { bg: '#FEE2E2', text: '#D81010' },
   Medium: { bg: '#FFF3E0', text: '#FF9705' },
   Low:    { bg: '#E7F7EE', text: '#1F9D55' },
+}
+
+const STATUS_STYLE: Record<string, { bg: string; text: string; dot: string }> = {
+  Detected:  { bg: '#FEE2E2', text: '#D81010', dot: '#D81010' },
+  Responded: { bg: '#E0F2FE', text: '#1565BC', dot: '#1565BC' },
+  Cleared:   { bg: '#E7F7EE', text: '#1F9D55', dot: '#1F9D55' },
 }
 
 function formatDate(iso?: string | null) {
@@ -247,6 +254,7 @@ export default function ClogEventsScreen() {
             const waterLevel = item.reading_details?.water_level
             const waterFlow = item.reading_details?.water_flow_rate
             const clogPct = item.reading_details?.clog_pct
+            const stStyle = STATUS_STYLE[item.status] ?? STATUS_STYLE.Detected
 
             return (
               <Pressable
@@ -279,6 +287,25 @@ export default function ClogEventsScreen() {
                     </View>
                   </View>
                 </View>
+
+                {/* status: has the barangay responded yet? */}
+                <View className="flex-row flex-wrap items-center gap-1.5 mt-2.5">
+                  <View className="px-2.5 py-1 rounded-2xl flex-row items-center gap-1.5" style={{ backgroundColor: stStyle.bg }}>
+                    <View className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: stStyle.dot }} />
+                    <Text className="text-[10px] font-bold" style={{ color: stStyle.text }}>{item.status}</Text>
+                  </View>
+                  {item.status === 'Responded' && item.responded_at ? (
+                    <Text className="text-[10px] text-[#64748B]">Responded {formatDate(item.responded_at)}</Text>
+                  ) : null}
+                  {item.status === 'Detected' ? (
+                    <Text className="text-[10px] text-[#94A3B8]">Not responded yet</Text>
+                  ) : null}
+                  {item.status === 'Cleared' && !item.responded_at ? (
+                    <Text className="text-[10px] text-[#94A3B8]">Cleared without a response</Text>
+                  ) : null}
+                </View>
+
+                {item.reopened_at && item.status === 'Detected' ? <ReopenedNotice status="Detected" compact /> : null}
 
                 <View className="flex-row justify-between mt-2.5 pt-2.5 border-t border-[#F1F5F9]">
                   <View className="flex-[1.2]">

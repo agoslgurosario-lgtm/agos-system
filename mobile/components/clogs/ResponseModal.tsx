@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, Modal, Pressable,
-  ActivityIndicator, KeyboardAvoidingView, ScrollView, Alert,
+  ActivityIndicator, KeyboardAvoidingView, ScrollView, Alert, Platform,
 } from "react-native";
+import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
 import type { ClogEvent } from "@/types/clog-events";
+import { ReopenedNotice } from "./ReopenedNotice";
+
 
 interface Props {
   visible: boolean;
@@ -16,8 +19,8 @@ interface Props {
   onContinue: (reportId: number) => void;
 }
 
-function formatDateTime(iso: string) {
-  const d = new Date(iso);
+function formatDateTime(value: string | Date) {
+  const d = value instanceof Date ? value : new Date(value);
   if (isNaN(d.getTime())) return "—";
   return d.toLocaleString("en-US", {
     month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true,
@@ -28,13 +31,17 @@ export function ResponseModal({ visible, event, respondedAt, onClose, onSaved, o
   const [personnel, setPersonnel] = useState("");
   const [action, setAction] = useState("");
   const [saving, setSaving] = useState(false);
-  const [errors, setErrors] = useState<{ personnel?: string; action?: string; general?: string }>({});
+  const [errors, setErrors] = useState<{ personnel?: string; action?: string; general?: string; when?: string }>({});
   const [reportId, setReportId] = useState<number | null>(null);   // set once saved
+  const [when, setWhen] = useState<Date>(new Date(respondedAt));
+  const [pickerMode, setPickerMode] = useState<"date" | "time" | null>(null);
+  const [tempDate, setTempDate] = useState<Date | null>(null);
 
   // fresh form every time it opens
   useEffect(() => {
     if (visible) {
       setPersonnel(""); setAction(""); setErrors({}); setReportId(null); setSaving(false);
+      setWhen(new Date(respondedAt)); setPickerMode(null); setTempDate(null);
     }
   }, [visible]);
 
@@ -50,10 +57,32 @@ export function ResponseModal({ visible, event, respondedAt, onClose, onSaved, o
     ]);
   };
 
+  // date first, then time
+  const handlePick = (e: DateTimePickerEvent, selected?: Date) => {
+    if (Platform.OS === "android") setPickerMode(null);
+    if (e.type !== "set" || !selected) {
+      setTempDate(null);
+      return;
+    }
+    if (pickerMode === "date") {
+      setTempDate(selected);
+      setTimeout(() => setPickerMode("time"), 0);
+    } else {
+      const combined = new Date(tempDate ?? when);
+      combined.setHours(selected.getHours(), selected.getMinutes(), 0, 0);
+      setWhen(combined);
+      setTempDate(null);
+      setErrors((p) => ({ ...p, when: undefined, general: undefined }));
+      if (Platform.OS === "ios") setPickerMode(null);
+    }
+  };
+
   const submit = async () => {
     const e: typeof errors = {};
     if (!personnel.trim()) e.personnel = "List the personnel assigned to the response.";
     if (!action.trim()) e.action = "Describe the action to be taken.";
+    if (when.getTime() < new Date(event.detected_at).getTime()) e.when = "The response time can't be before the clog was detected.";
+    else if (when.getTime() > Date.now() + 2 * 60 * 1000) e.when = "The response time can't be in the future.";
     setErrors(e);
     if (Object.keys(e).length) return;
 
@@ -62,7 +91,7 @@ export function ResponseModal({ visible, event, respondedAt, onClose, onSaved, o
       const res = await api.post(`/api/clog-events/${event.event_id}/respond/`, {
         assigned_personnel: personnel.trim(),
         action_taken: action.trim(),
-        responded_at: respondedAt,
+        responded_at: when.toISOString(),
       });
       onSaved(res.event);
       setReportId(res.report_id);
@@ -70,8 +99,9 @@ export function ResponseModal({ visible, event, respondedAt, onClose, onSaved, o
       setErrors({
         personnel: err?.assigned_personnel,
         action: err?.action_taken,
+        when: err?.responded_at,
         general: err?.error ?? err?.detail ??
-          (err?.assigned_personnel || err?.action_taken ? undefined : "Could not save the response. Please try again."),
+          (err?.assigned_personnel || err?.action_taken || err?.responded_at ? undefined : "Could not save the response. Please try again."),
       });
     } finally {
       setSaving(false);
@@ -107,12 +137,42 @@ export function ResponseModal({ visible, event, respondedAt, onClose, onSaved, o
                 <Text className="mb-4 text-[11px] leading-4 text-[#94A3B8]">
                   Nothing is saved until you submit. Responding also marks this clog event as cleared.
                 </Text>
+                {event.reopened_at ? (
+                  <View className="mb-3 -mt-1">
+                    <ReopenedNotice status="Detected" />
+                  </View>
+                ) : null}
 
-                <Text className="mb-1 text-[11px] font-bold text-[#64748B]">DATE & TIME RESPONDED</Text>
-                <View className="mb-3 flex-row items-center gap-2 rounded-xl border border-[#E2E8F0] bg-[#F1F5F9] px-3 py-2.5">
-                  <MaterialCommunityIcons name="clock-outline" size={16} color="#64748B" />
-                  <Text className="text-[13px] font-semibold text-[#122A48]">{formatDateTime(respondedAt)}</Text>
-                </View>
+                <Text className="mb-1 text-[11px] font-bold text-[#64748B]">DATE & TIME RESPONDED *</Text>
+                <TouchableOpacity
+                  onPress={() => setPickerMode("date")}
+                  disabled={saving}
+                  className={`flex-row items-center gap-2 rounded-xl border bg-[#F8FAFC] px-3 py-2.5 ${errors.when ? "border-[#dc2626]" : "border-[#E2E8F0]"}`}
+                >
+                  <MaterialCommunityIcons name="calendar-clock" size={16} color="#64748B" />
+                  <Text className="flex-1 text-[13px] font-semibold text-[#122A48]">{formatDateTime(when)}</Text>
+                  <MaterialCommunityIcons name="pencil-outline" size={14} color="#94A3B8" />
+                </TouchableOpacity>
+                <Text className="mb-3 mt-1 text-[11px] text-[#94A3B8]">
+                  {errors.when ? (
+                    <Text className="text-[#dc2626]">{errors.when}</Text>
+                  ) : event.reopened_at && event.previous_responded_at ? (
+                    "Starts at your original response time. Change it if that was wrong."
+                  ) : (
+                    "Change this if you responded earlier than now."
+                  )}
+                </Text>
+                {pickerMode && (
+                  <DateTimePicker
+                    value={tempDate ?? when}
+                    mode={pickerMode}
+                    is24Hour={false}
+                    minimumDate={new Date(event.detected_at)}
+                    maximumDate={new Date()}
+                    display={Platform.OS === "ios" ? "spinner" : "default"}
+                    onChange={handlePick}
+                  />
+                )}
 
                 <Text className="mb-1 text-[11px] font-bold text-[#64748B]">ASSIGNED PERSONNEL *</Text>
                 <TextInput

@@ -6,6 +6,7 @@ import { api } from '../lib/api'
 import { useClogEvent } from '../lib/ClogEventContext'
 import { clogSeverityLabel } from '../constants/clogSeverity'
 import { ResponseModal } from '../components/clogs/ResponseModal'
+import { ReopenedNotice } from '../components/clogs/ReopenedNotice'
 
 import { useLiveSocket } from '../lib/useLiveSocket'
 import { ClogEvent } from '../types/clog-events'
@@ -75,7 +76,7 @@ export default function ClogDetails() {
 
   const openResponseForm = () => {
     setError('')
-    setTapTime(new Date().toISOString())
+    setTapTime(selectedEvent.previous_responded_at ?? new Date().toISOString())
     setRespondOpen(true)
   }
 
@@ -154,6 +155,8 @@ export default function ClogDetails() {
               {selectedEvent.node_details?.node_name ?? '—'}
             </Text>
           </View>
+
+          {selectedEvent.reopened_at ? <ReopenedNotice status={status} /> : null}
 
           {/* metric cards */}
           <View className="flex-row flex-wrap justify-between gap-3 mt-4">

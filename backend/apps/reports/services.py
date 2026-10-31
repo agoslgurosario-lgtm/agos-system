@@ -98,6 +98,20 @@ def build_event_summary(event):
     return summary
 
 
+def peak_waste_kg(node, start, end):
+    """The most waste (kg) the AI saw on this node's canal during the window: the highest single
+    estimate, not a sum, because every reading re-estimates the same pile. None if it saw nothing."""
+    from django.db.models import Max
+    from apps.waste_classification.models import WasteClassification
+
+    if node is None or start is None or end is None:
+        return None
+    best = WasteClassification.objects.filter(
+        node=node, timestamp__gte=start, timestamp__lte=end,
+    ).aggregate(m=Max('estimated_volume'))['m']
+    return round(best, 2) if best is not None else None
+
+
 @transaction.atomic
 def apply_event_summary(report, event, summary):
     """Write the fetched condition into the report and keep the node's own numbers."""
@@ -113,7 +127,7 @@ def apply_event_summary(report, event, summary):
         report.purok = hotspot.purok
 
     ReportNodeSummary.objects.filter(report=report).delete()
-    ReportNodeSummary.objects.create(
+    row = ReportNodeSummary.objects.create(
         report=report,
         node=event.node,
         hotspot=hotspot,
@@ -122,6 +136,8 @@ def apply_event_summary(report, event, summary):
         purok=getattr(hotspot, 'purok', None),
         **{k: summary[k] for k in NODE_SUMMARY_FIELDS},
     )
+    row.peak_waste_kg = peak_waste_kg(row.node, row.window_start, row.window_end)
+    row.save(update_fields=['peak_waste_kg'])
 
 
 # whole-barangay reports

@@ -20,13 +20,14 @@ export default function NotReportedDialog({ open, onOpenChange, reports, baranga
   const [tab, setTab] = useState<Tab>("missing")
 
   // per barangay: how many reports and when the latest one was submitted
-  const summary = new Map<number, { count: number; latest: string }>()
+  const summary = new Map<number, { count: number; latest: string; daysLate: number }>()
   reports.forEach(r => {
     const when = reportDate(r)
     const current = summary.get(r.barangay)
     summary.set(r.barangay, {
       count: (current?.count ?? 0) + 1,
       latest: current && current.latest > when ? current.latest : when,
+      daysLate: Math.max(current?.daysLate ?? 0, r.submission_info?.is_late ? r.submission_info.days_late : 0),
     })
   })
 
@@ -93,6 +94,7 @@ export default function NotReportedDialog({ open, onOpenChange, reports, baranga
                   {info && (
                     <p className="text-[11px] text-[#727272] shrink-0">
                       {info.count} report{info.count === 1 ? "" : "s"} · Last {formatDate(info.latest)}
+                      {info.daysLate > 0 && <span className="font-semibold text-[#CC251F]"> · Late {info.daysLate}d</span>}
                     </p>
                   )}
                 </div>

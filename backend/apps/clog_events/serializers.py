@@ -27,6 +27,17 @@ class ClogEventSerializer(serializers.ModelSerializer):
     reading_details = serializers.SerializerMethodField()
     responded_by_details = UserSerializer(source='responded_by', read_only=True)
     clear_reason = serializers.SerializerMethodField()
+    previous_responded_at = serializers.SerializerMethodField()
+
+    def get_previous_responded_at(self, obj):
+        """For a reopened event: when the barangay originally responded (kept from the voided report)."""
+        if not obj.reopened_at:
+            return None
+        from apps.reports.models import CanalMonitoringReport
+        earlier = CanalMonitoringReport.objects.filter(
+            clog_event=obj, status='Voided', date_responded__isnull=False
+        ).order_by('-voided_at').first()
+        return earlier.date_responded if earlier else None
 
     class Meta:
         model = ClogEvent

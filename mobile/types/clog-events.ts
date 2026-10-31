@@ -14,6 +14,8 @@ export interface ClogEvent {
   cleared_by: number | null
   responded_by: number | null
   auto_cleared: boolean
+  reopened_at?: string | null
+  previous_responded_at?: string | null
   barangay_details: {
     barangay_id: number
     barangay_name: string

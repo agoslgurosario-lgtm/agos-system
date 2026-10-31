@@ -2,7 +2,7 @@
 
 import { createPortal } from "react-dom"
 import type { CanalMonitoringReport } from "@/types/report"
-import { reportDate, weekOf } from "@/lib/reportOptions"
+import { reportDate, isCleanupReport, cleanupCoverage, purokRowNote } from "@/lib/reportOptions"
 
 type PrintCanalReportProps = {
   report: CanalMonitoringReport
@@ -38,6 +38,10 @@ function kg(v: number | null) {
 
 export function PrintCanalReport({ report, generatedBy, signatoryNames }: PrintCanalReportProps) {
   if (typeof document === "undefined") return null
+  
+  const cleanup = isCleanupReport(report)
+  const { counted, total } = cleanupCoverage(report)
+  const rowLabel = (v: string | null, opts: [string, string][]) => opts.find(([k]) => k === v)?.[1] ?? '—'
   
   const hasOldOther = Number(report.waste_other_kg ?? 0) > 0 || !!report.waste_other_label
 
@@ -94,7 +98,7 @@ export function PrintCanalReport({ report, generatedBy, signatoryNames }: PrintC
       <p className="print-canal-section-bar">Monitoring Site Information</p>
       <table className="print-canal-fields"><tbody>
         <tr>
-          <td><div className="print-canal-lbl">Purok</div><div className="print-canal-val">{report.purok ?? '—'}</div></td>
+          <td><div className="print-canal-lbl">{cleanup ? 'Coverage' : 'Purok'}</div><div className="print-canal-val">{cleanup ? 'Whole barangay' : (report.purok ?? '—')}</div></td>
           <td><div className="print-canal-lbl">Barangay</div><div className="print-canal-val">{report.barangay_details?.barangay_name ?? '—'}</div></td>
         </tr>
         <tr>
@@ -103,19 +107,25 @@ export function PrintCanalReport({ report, generatedBy, signatoryNames }: PrintC
         </tr>
       </tbody></table>
 
-      <p className="print-canal-section-bar">Detection Summary</p>
+      <p className="print-canal-section-bar">{cleanup ? 'Cleanup Details' : 'Detection Summary'}</p>
       <table className="print-canal-fields"><tbody>
         <tr>
-          <td><div className="print-canal-lbl">Date / Time Observed</div><div className="print-canal-val">{fmtDate(report.date_observed)}</div></td>
-          <td><div className="print-canal-lbl">Severity (choose one)</div><ChoiceRow options={SEVERITY_OPTIONS} selected={report.severity} /></td>
+          <td><div className="print-canal-lbl">{cleanup ? 'Date / Time of Cleanup' : 'Date / Time Observed'}</div><div className="print-canal-val">{fmtDate(report.date_observed)}</div></td>
+          {cleanup
+            ? <td></td>
+            : <td><div className="print-canal-lbl">Severity (choose one)</div><ChoiceRow options={SEVERITY_OPTIONS} selected={report.severity} /></td>}
         </tr>
         <tr>
-          <td><div className="print-canal-lbl">Date / Time Submitted</div><div className="print-canal-val">{fmtDate(reportDate(report))} · Week {weekOf(report)}</div></td>
+          <td><div className="print-canal-lbl">Date / Time Submitted</div><div className="print-canal-val">{fmtDate(reportDate(report))}{report.submission_info ? ` · Period ${report.submission_info.label}` : ''}</div></td>
           <td></td>
         </tr>
       </tbody></table>
 
-      <p className="print-canal-section-bar">Overall Canal Condition (Whole Purok)</p>
+      <p className="print-canal-section-bar">
+        {cleanup
+          ? 'Overall Canal Condition (Whole Barangay)'
+          : report.purok ? `Overall Canal Condition (Purok ${report.purok})` : 'Overall Canal Condition'}
+      </p>
       <table className="print-canal-fields"><tbody>
         <tr>
           <td><div className="print-canal-lbl">Overall Water Level (choose one)</div><ChoiceRow options={WATER_LEVEL_OPTIONS} selected={report.overall_water_level} /></td>
@@ -125,6 +135,80 @@ export function PrintCanalReport({ report, generatedBy, signatoryNames }: PrintC
           <td colSpan={2}><div className="print-canal-lbl">Overall Obstruction (choose one)</div><ChoiceRow options={COVERAGE_OPTIONS} selected={report.overall_obstruction_coverage} /></td>
         </tr>
       </tbody></table>
+
+      {cleanup && (
+        <>
+          <p style={{ fontSize: '9pt', margin: '4px 0' }}>
+            {report.condition_source === 'Manual'
+              ? 'Entered by the barangay, not taken from sensors.'
+              : `Based on ${counted} of ${total} puroks with sensor data.`}
+          </p>
+          {(report.purok_rows ?? []).length > 0 && (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9pt', marginBottom: '6px' }}>
+              <thead>
+                <tr>
+                  {['Purok', 'Water level', 'Obstruction', 'Water flow'].map(h => (
+                    <th key={h} style={{ border: '1px solid #999', padding: '2px 4px', textAlign: 'left' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(report.purok_rows ?? []).map(r => (
+                  <tr key={r.purok}>
+                    <td style={{ border: '1px solid #999', padding: '2px 4px' }}>Purok {r.purok}</td>
+                    {r.included ? (
+                      <>
+                        <td style={{ border: '1px solid #999', padding: '2px 4px' }}>{rowLabel(r.overall_water_level, WATER_LEVEL_OPTIONS)}</td>
+                        <td style={{ border: '1px solid #999', padding: '2px 4px' }}>{rowLabel(r.overall_obstruction_coverage, COVERAGE_OPTIONS)}</td>
+                        <td style={{ border: '1px solid #999', padding: '2px 4px' }}>{rowLabel(r.overall_water_flow_condition, FLOW_OPTIONS)}</td>
+                      </>
+                    ) : (
+                      <td colSpan={3} style={{ border: '1px solid #999', padding: '2px 4px', fontStyle: 'italic' }}>{purokRowNote(r)}</td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </>
+      )}
+
+      {!cleanup && (report.node_summaries ?? []).length > 0 && (
+        <>
+          <p className="print-canal-section-bar">Sensor Data</p>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '8.5pt', marginBottom: '6px' }}>
+            <thead>
+              <tr>
+                {['Node', 'Readings', 'Peak clog', 'Avg clog', 'Peak water level', 'Worst water', 'Worst flow'].map(h => (
+                  <th key={h} style={{ border: '1px solid #999', padding: '2px 4px', textAlign: 'left' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(report.node_summaries ?? []).map(s => {
+                const num = (v: number | null, unit: string) => (v == null ? '—' : `${Math.round(v * 10) / 10}${unit}`)
+                const when = (iso: string) => new Date(iso).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+                const cell = { border: '1px solid #999', padding: '2px 4px', verticalAlign: 'top' as const }
+                return (
+                  <tr key={s.summary_id}>
+                    <td style={cell}>
+                      <strong>{s.node_name}</strong>
+                      <div style={{ fontSize: '7.5pt' }}>{s.hotspot_name}{s.purok ? ` · Purok ${s.purok}` : ''}</div>
+                      <div style={{ fontSize: '7.5pt' }}>{when(s.window_start)} to {when(s.window_end)}</div>
+                    </td>
+                    <td style={cell}>{s.reading_count}</td>
+                    <td style={cell}>{num(s.peak_clog_pct, '%')}</td>
+                    <td style={cell}>{num(s.avg_clog_pct, '%')}</td>
+                    <td style={cell}>{s.peak_water_level_pct != null ? `${num(s.peak_water_level_pct, '%')} of depth` : num(s.peak_water_level_cm, ' cm')}</td>
+                    <td style={cell}>{s.worst_water_status || '—'}</td>
+                    <td style={cell}>{s.worst_flow || '—'}{s.min_flow_rate != null ? ` (${num(s.min_flow_rate, ' m/s')})` : ''}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </>
+      )}
 
       <p className="print-canal-section-bar">Waste Composition (kg)</p>
       <table className="print-canal-items"><tbody>
@@ -149,7 +233,9 @@ export function PrintCanalReport({ report, generatedBy, signatoryNames }: PrintC
       <table className="print-canal-fields"><tbody>
         <tr>
           <td><div className="print-canal-lbl">Assigned Personnel</div><div className="print-canal-val">{report.assigned_personnel || '—'}</div></td>
-          <td><div className="print-canal-lbl">Date / Time Responded</div><div className="print-canal-val">{fmtDate(report.date_responded)}</div></td>
+          {cleanup
+            ? <td></td>
+            : <td><div className="print-canal-lbl">Date / Time Responded</div><div className="print-canal-val">{fmtDate(report.date_responded)}</div></td>}
         </tr>
         <tr>
         <td colSpan={2}><div className="print-canal-lbl">Waste Collected</div><div className="print-canal-val">{report.waste_collected_amount != null ? `${Number(report.waste_collected_amount).toFixed(2)} kg` : '—'}</div></td>

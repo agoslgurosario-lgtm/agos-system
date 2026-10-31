@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 
-import { AlertType, ClogTier, WaterSeverity, WaterLevelAlertContext } from "../types/alert";
+import { AlertType, ClogTier, WaterSeverity, WaterLevelAlertContext, ReportReminderContext } from "../types/alert";
 
 export const ALERT_META: Record<AlertType, { label: string; icon: keyof typeof Ionicons.glyphMap; tier: ClogTier | null }> = {
   Water_Level_Rising: {
@@ -37,6 +37,8 @@ export const ALERT_META: Record<AlertType, { label: string; icon: keyof typeof I
   Low_Battery:    { label: "Low Battery",    icon: "battery-dead-outline",     tier: null },
   Weak_Signal:    { label: "Weak Signal",    icon: "cellular-outline",         tier: null },
   Sensor_Failure: { label: "Sensor Failure", icon: "alert-circle-outline",     tier: null },
+  Report_Due_Soon: { label: "Report Due Soon", icon: "calendar-outline", tier: null },
+  Report_Overdue:  { label: "Report Overdue",  icon: "alarm-outline",    tier: null },
 };
 
 export const ALERT_STYLE: Record<AlertType, { indicator: string; badgeBg: string; badgeText: string}> ={
@@ -74,6 +76,8 @@ export const ALERT_STYLE: Record<AlertType, { indicator: string; badgeBg: string
   Low_Battery:    { indicator: "#582579", badgeBg: "bg-[#F0E6F7]", badgeText: "text-[#582579]" },
   Weak_Signal:    { indicator: "#582579", badgeBg: "bg-[#F0E6F7]", badgeText: "text-[#582579]" },
   Sensor_Failure: { indicator: "#582579", badgeBg: "bg-[#F0E6F7]", badgeText: "text-[#582579]" },
+  Report_Due_Soon: { indicator: "#0E7490", badgeBg: "bg-[#CFFAFE]", badgeText: "text-[#0E7490]" },
+  Report_Overdue:  { indicator: "#E65100", badgeBg: "bg-[#FFF0D6]", badgeText: "text-[#E65100]" },
 };
 
 export const WATER_SEVERITY_STYLE: Record<WaterSeverity, { badgeBg: string; badgeText: string; color: string }> = {
@@ -102,6 +106,8 @@ export const APP_ALERT_TYPES: AlertType[] = [
   "Low_Battery",
   "Weak_Signal",
   "Sensor_Failure",
+  "Report_Due_Soon",
+  "Report_Overdue",
 ];
 
 export const HEALTH_ALERT_TYPES: AlertType[] = ["Node_Offline", "Low_Battery", "Weak_Signal", "Sensor_Failure"];
@@ -120,4 +126,21 @@ export function signalLevel(dbm: number) {
   if (dbm >= -85) return `Fair (${dbm} dBm)`;
   if (dbm >= -95) return `Weak (${dbm} dBm)`;
   return `No Signal (${dbm} dBm)`;
+}
+
+export const REPORT_ALERT_TYPES: AlertType[] = ["Report_Due_Soon", "Report_Overdue"];
+
+export function fmtDueDay(iso?: string) {
+  if (!iso) return "";
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("en-PH", { month: "short", day: "numeric" });
+}
+
+// same wording as the push notification
+export function reminderText(type: AlertType, ctx: ReportReminderContext) {
+  const due = fmtDueDay(ctx.due_date);
+  const when = type === "Report_Due_Soon" ? `is due on ${due}` : `was due on ${due}`;
+  const todo = ctx.ready_count
+    ? type === "Report_Due_Soon" ? "Submit it to MENRO now." : "You can still submit it late."
+    : "You have no verified reports yet. Complete and verify your reports, then submit.";
+  return `Your report for ${ctx.period_label ?? "this period"} ${when}. ${todo}`;
 }

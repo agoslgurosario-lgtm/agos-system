@@ -8,7 +8,10 @@ export type AlertType =
   | "Node_Offline"
   | "Low_Battery"
   | "Weak_Signal"
-  | "Sensor_Failure";
+  | "Sensor_Failure"
+  | "Sensor_Failure"
+  | "Report_Due_Soon"
+  | "Report_Overdue";
 
 export type ClogTier = "Low" | "Moderate" | "Critical";
 
@@ -56,7 +59,16 @@ export interface HealthAlertContext {
   checked_at?: string | null;
 }
 
-export type AlertContext = ClogAlertContext | WaterLevelAlertContext | WasteTypeRejectedContext | WasteTypeApprovedContext | HealthAlertContext | Record<string, never>;
+export interface ReportReminderContext {
+  period_start?: string;
+  period_end?: string;
+  due_date?: string;
+  period_label?: string;
+  ready_count?: number;
+  unverified_count?: number;
+}
+
+export type AlertContext = ClogAlertContext | WaterLevelAlertContext | WasteTypeRejectedContext | WasteTypeApprovedContext | HealthAlertContext | ReportReminderContext | Record<string, never>;
 
 export interface Alert {
   alert_id: number;

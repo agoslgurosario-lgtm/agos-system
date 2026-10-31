@@ -30,7 +30,8 @@ from django.utils import timezone
 
 from .services import (
     build_purok_condition, CLEANUP_WINDOW, worst, WATER_RANK, OBSTRUCTION_RANK, FLOW_CHOICE_RANK,
-    SEVERITY_FROM_OBSTRUCTION, NODE_STAT_FIELDS, build_event_summary, apply_event_summary
+    SEVERITY_FROM_OBSTRUCTION, NODE_STAT_FIELDS, build_event_summary, apply_event_summary,
+    peak_waste_kg,
 )
 
 
@@ -151,10 +152,10 @@ class CanalMonitoringReportListView(generics.ListCreateAPIView):
     def get_queryset(self):
         user = self.request.user
         base = CanalMonitoringReport.objects.select_related(
-            'barangay', 'reported_by'
+            'barangay', 'reported_by', 'submission'
         ).prefetch_related('reportmedia_set', 'custom_waste__waste_type')
         if user.user_role == 'Barangay':
-            return base.filter(barangay=user.barangay).order_by('-date_observed')
+            return base.filter(barangay=user.barangay).exclude(status='Voided').order_by('-date_observed')
         return base.filter(is_submitted=True).order_by('-date_observed')
 
     def perform_create(self, serializer):
@@ -173,7 +174,7 @@ class CanalMonitoringReportListView(generics.ListCreateAPIView):
 
 class CanalMonitoringReportDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = CanalMonitoringReport.objects.select_related(
-        'barangay', 'reported_by'
+        'barangay', 'reported_by', 'submission'
     ).prefetch_related('reportmedia_set', 'custom_waste__waste_type', 'node_summaries', 'purok_rows')
     serializer_class = CanalMonitoringReportSerializer
     lookup_field = 'report_id'
@@ -197,6 +198,24 @@ class CanalMonitoringReportDetailView(generics.RetrieveUpdateDestroyAPIView):
                 new_value=f"barangay: {report.barangay.barangay_name}, observed: {report.date_observed}",
                 ip_address=self.request.META.get('REMOTE_ADDR')
             )
+
+
+def _purok_table(report):
+    """Rows for the per-purok table of a whole-barangay report."""
+    water = dict(CanalMonitoringReport.WATER_LEVEL_CHOICES)
+    cover = dict(CanalMonitoringReport.OBSTRUCTION_COVERAGE_CHOICES)
+    flow = dict(CanalMonitoringReport.WATER_FLOW_CHOICES)
+    rows = []
+    for r in report.purok_rows.all():
+        rows.append({
+            'purok': r.purok,
+            'included': r.included,
+            'water': water.get(r.overall_water_level, '—'),
+            'coverage': cover.get(r.overall_obstruction_coverage, '—'),
+            'flow': flow.get(r.overall_water_flow_condition, '—'),
+            'note': 'No sensors' if r.node_count == 0 else 'No readings this week',
+        })
+    return rows
 
 
 class CanalMonitoringReportExportView(APIView):
@@ -232,7 +251,10 @@ class CanalMonitoringReportExportView(APIView):
             "flow_options": _choice_options(CanalMonitoringReport.WATER_FLOW_CHOICES, report.overall_water_flow_condition),
             "photo_groups": _photo_groups(report),
             "signatory_rows": _signatory_rows(report),
+            "is_cleanup": report.report_scope == 'Barangay',
+            "purok_table": _purok_table(report) if report.report_scope == 'Barangay' else [],
         }
+        context["counted_puroks"] = sum(1 for r in context["purok_table"] if r["included"])
 
         observed = report.date_observed or report.created_at
         filename = f"{report.barangay.barangay_name}-Canal-Report-{observed.strftime('%b-%d-%Y')}.pdf"
@@ -262,7 +284,7 @@ class MyReportsListView(generics.ListAPIView):
             'barangay', 'reported_by'
         ).prefetch_related('reportmedia_set', 'custom_waste__waste_type').filter(
             barangay=self.request.user.barangay
-        ).order_by('-date_observed')
+        ).exclude(status='Voided').order_by('-date_observed')
 
 
 class ReportMediaListView(generics.ListAPIView):
@@ -599,6 +621,77 @@ class CanalReportVerifyView(_CanalReportActionBase):
         return Response(CanalMonitoringReportSerializer(report, context={'request': request}).data)
 
 
+def _reopen_clog_event(report):
+    """Voiding a report made from a clog event puts the event back to Detected so the barangay can
+    respond and report again. The event is 'frozen' (settled_at set) so the sensors and the 7-day
+    auto-clear leave it alone while it waits. Returns True if the event was reopened."""
+    event = report.clog_event
+    if event is None or event.status != 'Responded':
+        return False
+    if CanalMonitoringReport.objects.filter(clog_event=event).exclude(status='Voided').exists():
+        return False   # the event still has another active report
+    now = timezone.now()
+    event.status = 'Detected'
+    event.responded_at = None
+    event.responded_by = None
+    event.resolved_at = None
+    event.settled_at = event.settled_at or now
+    event.reopened_at = now
+    event.save()
+    try:
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+        from apps.clog_events.serializers import ClogEventSerializer
+        async_to_sync(get_channel_layer().group_send)(
+            "clog_events", {"type": "clog_event_message", "clog_event": ClogEventSerializer(event).data},
+        )
+    except Exception:
+        pass
+    return True
+
+
+
+class CanalReportVoidView(generics.GenericAPIView):
+    """A barangay voids one of its own reports that was not submitted (made by mistake, or a test).
+    The report is hidden, never blocks a submission, and is kept with who voided it and why."""
+    permission_classes = [IsBarangay]
+    lookup_field = 'report_id'
+
+    def get_queryset(self):
+        return CanalMonitoringReport.objects.filter(barangay=self.request.user.barangay)
+
+    def post(self, request, report_id):
+        report = self.get_object()
+        _require_active_barangay(report.barangay)
+
+        if report.is_submitted or report.status == 'Submitted':
+            return Response({'detail': 'A submitted report can no longer be voided.'}, status=400)
+        if report.status == 'Voided':
+            return Response({'detail': 'This report is already voided.'}, status=400)
+
+        reason = (request.data.get('reason') or '').strip()
+        if len(reason) < 5:
+            return Response({'detail': 'Please give a reason (at least 5 characters).'}, status=400)
+        if len(reason) > 500:
+            return Response({'detail': 'The reason is too long (max 500 characters).'}, status=400)
+
+        with transaction.atomic():
+            report.status = 'Voided'
+            report.void_reason = reason
+            report.voided_by = request.user
+            report.voided_at = timezone.now()
+            report.save()
+            event_reopened = _reopen_clog_event(report)
+
+        log_action(
+            user=request.user, action='Voided Report', affected_table='tbl_canal_monitoring_reports',
+            new_value=f"report {report.report_id}: {reason}", ip_address=request.META.get('REMOTE_ADDR'),
+        )
+        data = CanalMonitoringReportSerializer(report, context={'request': request}).data
+        data['event_reopened'] = event_reopened
+        return Response(data)
+
+
 class CanalReportCompleteView(_CanalReportActionBase):
     """Finishes a report that was filled in by hand (no clog event, or an older draft).
     A response report completes through its post-report instead, using the sensors."""
@@ -661,10 +754,6 @@ def _complete_cleanup(request, report):
     if report.date_responded > now + timedelta(minutes=5):
         return Response({'detail': "The cleanup date can't be in the future."}, status=400)
 
-    rows = list(report.purok_rows.filter(included=True))
-    if not rows:
-        return Response({'detail': 'Choose at least one purok.'}, status=400)
-
     day = timezone.localtime(report.date_responded).date()
     others = (CanalMonitoringReport.objects
               .filter(barangay=report.barangay, report_scope='Barangay')
@@ -674,10 +763,11 @@ def _complete_cleanup(request, report):
 
     end = min(report.date_responded, now)
     start = end - CLEANUP_WINDOW
-    built, no_data = [], []
-    for row in rows:
-        cond = build_purok_condition(report.barangay, row.purok, start, end)
+    built = []
+    for p in range(1, report.barangay.purok_count + 1):
+        cond = build_purok_condition(report.barangay, p, start, end)
         agg = cond['aggregate']
+        row = ReportPurokRow(report=report, purok=p, node_count=len(cond['nodes']), included=agg is not None)
         if agg:
             row.source = 'Sensor'
             row.overall_water_level = agg['overall_water_level']
@@ -685,23 +775,18 @@ def _complete_cleanup(request, report):
             row.overall_water_flow_condition = agg['overall_water_flow_condition']
             row.peak_clog_pct = agg['peak_clog_pct']
             row.reading_count = agg['reading_count']
-        else:
-            row.source = 'Manual'
-            row.peak_clog_pct, row.reading_count = None, 0
-            if not (row.overall_water_level and row.overall_obstruction_coverage
-                    and row.overall_water_flow_condition):
-                no_data.append(row.purok)
-        row.node_count = len(cond['nodes'])
         built.append((row, cond))
-    if no_data:
-        names = ', '.join(f'Purok {p}' for p in no_data)
+    counted = [r for r, _ in built if r.included]
+    if not counted and not (report.overall_water_level and report.overall_obstruction_coverage
+                            and report.overall_water_flow_condition):
         return Response({
-            'detail': f'No sensor data for {names}. Enter the canal condition for it, or leave it out.',
-            'missing_puroks': no_data,
+            'detail': 'There is no sensor data for this week. Enter the canal condition for the whole barangay.',
+            'needs_manual_condition': True,
         }, status=400)
 
     with transaction.atomic():
         ReportNodeSummary.objects.filter(report=report).delete()
+        report.purok_rows.all().delete()
         for row, cond in built:
             row.save()
             for node, s in cond['per_node']:
@@ -712,14 +797,17 @@ def _complete_cleanup(request, report):
                     hotspot_name=getattr(hotspot, 'name', '') or '',
                     purok=getattr(hotspot, 'purok', None),
                     window_start=start, window_end=end,
+                    peak_waste_kg=peak_waste_kg(node, start, end),
                     **{k: s[k] for k in NODE_STAT_FIELDS},
                 )
 
-        sources = {row.source for row, _ in built}
-        report.condition_source = 'Sensor' if sources == {'Sensor'} else ('Manual' if sources == {'Manual'} else 'Mixed')
-        report.overall_water_level = worst([r.overall_water_level for r, _ in built], WATER_RANK)
-        report.overall_obstruction_coverage = worst([r.overall_obstruction_coverage for r, _ in built], OBSTRUCTION_RANK)
-        report.overall_water_flow_condition = worst([r.overall_water_flow_condition for r, _ in built], FLOW_CHOICE_RANK)
+        if counted:
+            report.condition_source = 'Sensor'
+            report.overall_water_level = worst([r.overall_water_level for r in counted], WATER_RANK)
+            report.overall_obstruction_coverage = worst([r.overall_obstruction_coverage for r in counted], OBSTRUCTION_RANK)
+            report.overall_water_flow_condition = worst([r.overall_water_flow_condition for r in counted], FLOW_CHOICE_RANK)
+        else:
+            report.condition_source = 'Manual'   # no sensors measured anything: the barangay's own three values stay
         report.severity = SEVERITY_FROM_OBSTRUCTION.get(report.overall_obstruction_coverage, 'Low')
         report.date_observed = report.date_responded
         report.purok = None

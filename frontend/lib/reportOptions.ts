@@ -1,6 +1,6 @@
 import type {
   CanalMonitoringReport, ReportSeverity, WaterLevel, ObstructionCoverage,
-  WaterFlowCondition,
+  WaterFlowCondition, ReportPurokRow,
 } from "@/types/report"
 
 type BadgeStyle = { badge: string; dot: string }
@@ -70,58 +70,66 @@ export const formatDate = (iso: string | null): string => {
 export const reportDate = (report: CanalMonitoringReport): string =>
   report.submitted_at ?? report.created_at
 
-// 'YYYY-MM' of the submission. The API sends Manila-local timestamps, so the string
-// prefix is the right month (no timezone conversion needed).
-export const monthOf = (report: CanalMonitoringReport): string =>
-  reportDate(report).slice(0, 7)
-
-// Cleanups are held every Saturday, and any 7-day block contains exactly one Saturday,
-// so Week N is days 7(N-1)+1 to 7N of the month (Week 5 is the 29th to the end).
-export const weekOf = (report: CanalMonitoringReport): number =>
-  Math.ceil(Number(reportDate(report).slice(8, 10)) / 7)
+const pad = (n: number) => String(n).padStart(2, "0")
 
 const daysIn = (month: string): number => {
   const [y, m] = month.split("-").map(Number)
   return new Date(y, m, 0).getDate()
 }
 
-export const weekRange = (month: string, week: number): { start: number; end: number } => ({
-  start: 7 * (week - 1) + 1,
-  end: Math.min(7 * week, daysIn(month)),
-})
+// The period a date falls in, as its start date: 1st-15th and 16th-30th (last day in
+// February). The 31st rolls into the next period. Same rule as the backend.
+export const periodStartOf = (isoDate: string): string => {
+  const [y, m, d] = isoDate.slice(0, 10).split("-").map(Number)
+  if (d <= 15) return `${y}-${pad(m)}-01`
+  if (d <= 30) return `${y}-${pad(m)}-16`
+  return m === 12 ? `${y + 1}-01-01` : `${y}-${pad(m + 1)}-01`
+}
 
-// "All" plus the weeks that exist in that month; weeks only make sense inside one month
-export const buildWeekOptions = (month: string): { value: string; label: string }[] => {
-  const options = [{ value: "All", label: "All weeks" }]
+// A submitted report belongs to the period it was submitted FOR (people file late).
+// Reports from before the period system have no submission, so they use their submitted date.
+export const periodOf = (report: CanalMonitoringReport): string =>
+  report.submission_info?.period_start ?? periodStartOf(reportDate(report))
+
+// 'YYYY-MM' of the period
+export const monthOf = (report: CanalMonitoringReport): string => periodOf(report).slice(0, 7)
+
+// "Oct 16-30"
+export const periodLabelOf = (start: string): string => {
+  const [y, m, d] = start.split("-").map(Number)
+  const mon = new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "short" })
+  return d === 1 ? `${mon} 1-15` : `${mon} 16-${Math.min(30, daysIn(start.slice(0, 7)))}`
+}
+
+export const currentPeriodStart = (): string => periodStartOf(new Date().toLocaleDateString("en-CA"))
+
+// "All" plus the two periods of that month; periods only make sense inside one month
+export const buildPeriodOptions = (month: string): { value: string; label: string }[] => {
+  const options = [{ value: "All", label: "All periods" }]
   if (month === "All") return options
-
-  const monthName = new Date(`${month}-01T00:00:00`).toLocaleDateString("en-US", { month: "short" })
-  const weeks = Math.ceil(daysIn(month) / 7)
-  for (let w = 1; w <= weeks; w++) {
-    const { start, end } = weekRange(month, w)
-    options.push({ value: String(w), label: `Week ${w} (${monthName} ${start}–${end})` })
-  }
+  ;[`${month}-01`, `${month}-16`].forEach(v => options.push({ value: v, label: periodLabelOf(v) }))
   return options
 }
 
-export const weekMatches = (report: CanalMonitoringReport, week: string): boolean =>
-  week === "All" || String(weekOf(report)) === week
+export const periodMatches = (report: CanalMonitoringReport, period: string): boolean =>
+  period === "All" || periodOf(report) === period
 
-// e.g. "October 1 - 7, 2026" for the Reporting Period card
-export const periodRangeLabel = (month: string, week: string): string => {
+// e.g. "October 16 - 30, 2026" for the Reporting Period card
+export const periodRangeLabel = (month: string, period: string): string => {
   if (month === "All") return "All months"
   const [y, m] = month.split("-").map(Number)
   const monthName = new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "long" })
-  if (week === "All") return `${monthName} 1 - ${daysIn(month)}, ${y}`
-  const { start, end } = weekRange(month, Number(week))
-  return `${monthName} ${start} - ${end}, ${y}`
+  const last = Math.min(30, daysIn(month))
+  if (period === "All") return `${monthName} 1 - ${last}, ${y}`
+  return `${monthName} ${period.endsWith("-01") ? "1 - 15" : `16 - ${last}`}, ${y}`
 }
 
-// e.g. "October 2026 · Week 1" for titles
-export const periodTitle = (month: string, week: string): string => {
+// e.g. "October 2026 · Oct 16-30" for titles
+export const periodTitle = (month: string, period: string): string => {
   if (month === "All") return "Overall"
-  return week === "All" ? formatMonthLabel(month) : `${formatMonthLabel(month)} · Week ${week}`
+  return period === "All" ? formatMonthLabel(month) : `${formatMonthLabel(month)} · ${periodLabelOf(period)}`
 }
+
 export const filedByName = (report: CanalMonitoringReport): string =>
   report.reported_by_details
     ? `${report.reported_by_details.first_name} ${report.reported_by_details.last_name}`
@@ -174,3 +182,24 @@ export const formatDuration = (minutes: number | null): string => {
   if (days > 0) return `${days}d ${hours}h`
   return `${hours}h ${total % 60}m`
 }
+
+// weekly cleanup report = covers the whole barangay (report_scope "Barangay")
+export const isCleanupReport = (r: CanalMonitoringReport): boolean => r.report_scope === "Barangay"
+
+export const purokLabel = (r: CanalMonitoringReport): string =>
+  isCleanupReport(r) ? "Whole barangay" : r.purok ? `Purok ${r.purok}` : "—"
+
+export const cleanupCoverage = (r: CanalMonitoringReport): { counted: number; total: number } => {
+  const rows = r.purok_rows ?? []
+  return { counted: rows.filter(x => x.included).length, total: rows.length }
+}
+
+export const purokRowNote = (row: ReportPurokRow): string =>
+  row.node_count === 0 ? "No sensors" : "No readings this week"
+
+export const ON_TIME_STYLE: BadgeStyle = { badge: "bg-[#DCFCE7] text-[#15803D]", dot: "bg-[#15803D]" }
+export const LATE_STYLE: BadgeStyle = { badge: "bg-[#FDD1D2] text-[#CC251F]", dot: "bg-[#CC251F]" }
+
+// null for reports submitted before the period system existed
+export const submissionStatus = (r: CanalMonitoringReport): "On time" | "Late" | null =>
+  r.submission_info ? (r.submission_info.is_late ? "Late" : "On time") : null

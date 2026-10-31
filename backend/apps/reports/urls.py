@@ -4,9 +4,16 @@ from .views import (
     MyReportsListView,
     ReportMediaListView, ReportMediaUploadView, ReportMediaDetailView, ReportMediaByClogEventView, SignatoryStatusView,
     CustomWasteTypeListCreateView, CustomWasteTypeReviewView, CanalReportSystemDataView, CanalReportCompletePostView, 
-    CanalReportVerifyView, CanalReportCompleteView, CleanupPreviewView, CanalReportPurokRowsView
+    CanalReportVerifyView, CanalReportCompleteView, CleanupPreviewView, CanalReportPurokRowsView,
+    CanalReportVoidView,
 )
-from .submission_views import PeriodListView, SubmissionPreviewView, SubmissionsView
+from .submission_views import (
+    PeriodListView, SubmissionPreviewView, SubmissionsView,
+    StaffSubmissionListView, StaffSubmissionDetailView,
+)
+
+from .analytics_views import ReportAnalyticsView, ReportAnalyticsReportsView, BarangaySummaryView
+
 
 urlpatterns = [
     path('canal-reports/', CanalMonitoringReportListView.as_view()),
@@ -23,10 +30,17 @@ urlpatterns = [
     path('canal-reports/<int:report_id>/system-data/', CanalReportSystemDataView.as_view()),
     path('canal-reports/<int:report_id>/complete-post/', CanalReportCompletePostView.as_view()),
     path('canal-reports/<int:report_id>/verify/', CanalReportVerifyView.as_view()),
+    path('canal-reports/<int:report_id>/void/', CanalReportVoidView.as_view()),
     path('canal-reports/periods/', PeriodListView.as_view()),
     path('canal-reports/submission-preview/', SubmissionPreviewView.as_view()),
     path('canal-reports/submissions/', SubmissionsView.as_view()),
+    path('canal-reports/period-submissions/', StaffSubmissionListView.as_view()),
+    path('canal-reports/period-submissions/<int:submission_id>/', StaffSubmissionDetailView.as_view()),
     path('canal-reports/<int:report_id>/complete/', CanalReportCompleteView.as_view()),
     path('canal-reports/cleanup-preview/', CleanupPreviewView.as_view()),
     path('canal-reports/<int:report_id>/purok-rows/', CanalReportPurokRowsView.as_view()),
+
+    path('report-analytics/', ReportAnalyticsView.as_view()),
+    path('report-analytics/reports/', ReportAnalyticsReportsView.as_view()),
+    path('canal-reports/summary/', BarangaySummaryView.as_view()),
 ]

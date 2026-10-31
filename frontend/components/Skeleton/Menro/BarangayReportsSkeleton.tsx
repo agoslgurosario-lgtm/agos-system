@@ -39,7 +39,7 @@ export function BarangayReportsSkeleton() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper">
-              <SelectItem value="All" className="p-2 py-1 text-[#122A48]">All weeks</SelectItem>
+              <SelectItem value="All" className="p-2 py-1 text-[#122A48]">All periods</SelectItem>
             </SelectContent>
           </Select>
 

@@ -1,5 +1,19 @@
 from django.apps import AppConfig
 
+
 class ReportsConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'apps.reports'
+
+    def ready(self):
+        import os
+        import sys
+
+        argv0 = os.path.basename(sys.argv[0]) if sys.argv else ''
+        is_dev_server = 'runserver' in sys.argv
+        is_daphne = 'daphne' in argv0
+        is_reloader_child = os.environ.get('RUN_MAIN') == 'true' or '--noreload' in sys.argv
+
+        if (is_dev_server and is_reloader_child) or is_daphne:
+            from .scheduler import start
+            start()

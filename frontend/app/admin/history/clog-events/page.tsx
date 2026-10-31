@@ -576,19 +576,21 @@ export default function ClogEvents() {
                   </p>
                 </div>
 
-                {selectedClog.clear_reason && (
-                  <div className="flex justify-between text-xs">
-                    <p>Reason</p>
-                    <p>
-                      {clearReasonLabel(selectedClog.clear_reason)}
-                      {selectedClog.clear_reason === 'Responded' && selectedClog.responded_by_details
-                        ? ` by ${selectedClog.responded_by_details.first_name} ${selectedClog.responded_by_details.last_name}`
-                        : selectedClog.clear_reason === 'Manual Clear' && selectedClog.cleared_by_details
-                          ? ` by ${selectedClog.cleared_by_details.first_name} ${selectedClog.cleared_by_details.last_name}`
-                          : ''}
-                    </p>
-                  </div>
-                )}
+                {selectedClog.clear_reason && (() => {
+                  const by =
+                    selectedClog.clear_reason === 'Responded' ? selectedClog.responded_by_details
+                    : selectedClog.clear_reason === 'Manual Clear' ? selectedClog.cleared_by_details
+                    : null
+                  return (
+                    <div className="flex justify-between items-start gap-4 text-xs">
+                      <p className="shrink-0">Reason</p>
+                      <div className="text-right">
+                        <p>{clearReasonLabel(selectedClog.clear_reason)}</p>
+                        {by && <p className="text-[#727272]">by {by.first_name} {by.last_name}</p>}
+                      </div>
+                    </div>
+                  )
+                })()}
 
               </div>
               

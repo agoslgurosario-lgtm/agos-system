@@ -13,6 +13,8 @@ import {
 import { PhotoPreviewModal } from "@/components/reports/PhotoPreviewModal";
 import { SensorDataCard } from "@/components/reports/SensorDataCard";
 import { ConfirmActionModal } from "@/components/reports/ConfirmActionModal";
+import { PurokBreakdown } from "@/components/reports/PurokBreakdown";
+import { VoidReportModal } from "@/components/reports/VoidReportModal";
 
 
 const WASTE_ROWS: { key: keyof CanalMonitoringReport; label: string }[] = [
@@ -89,6 +91,8 @@ export default function ViewReportScreen() {
 
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [voidOpen, setVoidOpen] = useState(false);
+  const [isVoiding, setIsVoiding] = useState(false);
 
   const [preview, setPreview] = useState<{ photos: { uri: string }[]; index: number } | null>(null);
 
@@ -150,6 +154,29 @@ export default function ViewReportScreen() {
     }
   };
 
+  const handleVoid = async (reason: string) => {
+    if (!report) return;
+    setIsVoiding(true);
+    try {
+      const res: CanalMonitoringReport & { event_reopened?: boolean } =
+        await api.post(`/api/canal-reports/${report.report_id}/void/`, { reason });
+      setVoidOpen(false);
+      const message = !report.clog_event
+        ? "The report was voided and removed from your list."
+        : res.event_reopened
+          ? "The report was voided. The clog event is back in your Clog Events as Detected, so you can respond to it again and make a new report."
+          : "The report was voided. The clog event could not be reopened because it already has another active report.";
+      Alert.alert("Report voided", message, [
+        { text: "OK", onPress: () => router.replace("/(tabs)/reports" as any) },
+      ]);
+    } catch (err: any) {
+      setVoidOpen(false);
+      Alert.alert("Can't void this report", err?.detail ?? "Please try again.");
+    } finally {
+      setIsVoiding(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-[#f8fafc]">
@@ -170,6 +197,8 @@ export default function ViewReportScreen() {
       </SafeAreaView>
     );
   }
+
+  const isCleanup = report.report_scope === "Barangay";
 
   const bannerColors = report.severity
     ? SEVERITY_COLORS[report.severity]
@@ -216,7 +245,9 @@ export default function ViewReportScreen() {
         <View className="flex-row items-center gap-1.5">
           <MaterialCommunityIcons name="alert-circle-outline" size={18} color={bannerColors.text} />
           <Text className="text-[13px] font-bold" style={{ color: bannerColors.text }}>
-            {report.severity ? `${severityLabel(report.severity)} severity` : "Submitted"}
+            {isCleanup
+              ? "Weekly cleanup"
+              : report.severity ? `${severityLabel(report.severity)} severity` : "Submitted"}
           </Text>
         </View>
         <Text className="text-xs font-semibold" style={{ color: bannerColors.text }}>
@@ -225,6 +256,22 @@ export default function ViewReportScreen() {
       </View>
 
       <ScrollView className="flex-1" contentContainerClassName="px-3.5 pt-3 pb-6">
+        {(report.earlier_voided ?? []).length > 0 && (
+          <View className="mb-3 flex-row gap-2 rounded-xl border border-[#FDE68A] bg-[#FFFBEB] p-3">
+            <MaterialCommunityIcons name="history" size={16} color="#B45309" />
+            <View className="flex-1">
+              <Text className="text-[11px] font-bold text-[#92400E]">
+                This report replaces {(report.earlier_voided ?? []).length === 1 ? "an earlier report" : "earlier reports"} you voided
+              </Text>
+              {(report.earlier_voided ?? []).map((v) => (
+                <Text key={v.report_id} className="mt-0.5 text-[11px] leading-4 text-[#92400E]">
+                  • Reason: {v.reason || "—"}
+                </Text>
+              ))}
+            </View>
+          </View>
+        )}
+
         <View
           className="rounded-2xl border border-[#f1f5f9] bg-white p-4"
           style={{
@@ -237,7 +284,10 @@ export default function ViewReportScreen() {
         >
           {/* SITE */}
           <SectionHeader icon="map-marker-radius-outline" title="MONITORING SITE" />
-          <DetailLabelValue label="PUROK" value={report.purok ? `Purok ${report.purok}` : ""} />
+          <DetailLabelValue
+            label={isCleanup ? "COVERAGE" : "PUROK"}
+            value={isCleanup ? "Whole barangay" : report.purok ? `Purok ${report.purok}` : ""}
+          />
           <View className="flex-row">
             <DetailLabelValue label="BARANGAY" value={report.barangay_details?.barangay_name ?? ""} />
             <DetailLabelValue label="MUNICIPALITY" value="Rosario, La Union" />
@@ -246,15 +296,22 @@ export default function ViewReportScreen() {
           <View className="my-3 h-px bg-[#f1f5f9]" />
 
           {/* DETECTION SUMMARY */}
-          <SectionHeader icon="clipboard-alert-outline" title="DETECTION SUMMARY" />
-          <View className="flex-row">
-            <DetailLabelValue label={report.clog_event ? "DETECTED BY SYSTEM" : "DATE / TIME OBSERVED"} value={formatDateTime(report.date_observed)} flex={2} />
-            <DetailLabelValue
-              label="SEVERITY"
-              value={severityLabel(report.severity)}
-              valueColor={bannerColors.text}
-            />
-          </View>
+          <SectionHeader
+            icon={isCleanup ? "broom" : "clipboard-alert-outline"}
+            title={isCleanup ? "CLEANUP DETAILS" : "DETECTION SUMMARY"}
+          />
+          {isCleanup ? (
+            <DetailLabelValue label="DATE / TIME OF THE CLEANUP" value={formatDateTime(report.date_observed)} flex={2} />
+          ) : (
+            <View className="flex-row">
+              <DetailLabelValue label={report.clog_event ? "DETECTED BY SYSTEM" : "DATE / TIME OBSERVED"} value={formatDateTime(report.date_observed)} flex={2} />
+              <DetailLabelValue
+                label="SEVERITY"
+                value={severityLabel(report.severity)}
+                valueColor={bannerColors.text}
+              />
+            </View>
+          )}
 
           <View className="my-3 h-px bg-[#f1f5f9]" />
 
@@ -275,7 +332,15 @@ export default function ViewReportScreen() {
             </Text>
           )}
 
-          {report.node_summaries && report.node_summaries.length > 0 && (
+          {isCleanup && report.condition_source === "Sensor" && (
+            <Text className="mb-2 text-[11px] text-[#64748b]">
+              Based on {(report.purok_rows ?? []).filter((r) => r.included).length} of {(report.purok_rows ?? []).length} puroks with sensor data.
+            </Text>
+          )}
+
+          {isCleanup && <PurokBreakdown rows={report.purok_rows ?? []} />}
+
+          {!isCleanup && report.node_summaries && report.node_summaries.length > 0 && (
             <>
               <View className="my-3 h-px bg-[#f1f5f9]" />
               <SensorDataCard summaries={report.node_summaries} />
@@ -365,10 +430,18 @@ export default function ViewReportScreen() {
                   <MaterialCommunityIcons name="pencil-outline" size={18} color="#475569" />
                   <Text className="text-sm font-semibold text-[#475569]">Edit</Text>
                 </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setVoidOpen(true)}
+                  className="flex-row items-center justify-center gap-2 rounded-xl border border-[#fecaca] bg-white py-3"
+                >
+                  <MaterialCommunityIcons name="file-cancel-outline" size={18} color="#dc2626" />
+                  <Text className="text-sm font-semibold text-[#dc2626]">Void report</Text>
+                </TouchableOpacity>
               </>
             )}
 
             {!report.is_submitted && report.status === "Verified" && (
+              <>
               <View className="rounded-xl bg-[#ede9fe] px-3 py-3">
                 <Text className="text-[12px] font-semibold text-[#6d28d9]">
                   Verified{report.verified_by_name ? ` by ${report.verified_by_name}` : ""}
@@ -378,6 +451,14 @@ export default function ViewReportScreen() {
                   This report is locked and will be included in your next submission to MENRO.
                 </Text>
               </View>
+              <TouchableOpacity
+                onPress={() => setVoidOpen(true)}
+                className="flex-row items-center justify-center gap-2 rounded-xl border border-[#fecaca] bg-white py-3"
+              >
+                <MaterialCommunityIcons name="file-cancel-outline" size={18} color="#dc2626" />
+                <Text className="text-sm font-semibold text-[#dc2626]">Void report</Text>
+              </TouchableOpacity>
+              </>
             )}
 
             {report.is_submitted && (
@@ -416,6 +497,14 @@ export default function ViewReportScreen() {
         confirmLabel="Verify"
         onClose={() => setVerifyOpen(false)}
         onConfirm={handleVerify}
+      />
+
+      <VoidReportModal
+        visible={voidOpen}
+        loading={isVoiding}
+        fromClogEvent={!!report.clog_event}
+        onClose={() => setVoidOpen(false)}
+        onConfirm={handleVoid}
       />
     </SafeAreaView>
   );

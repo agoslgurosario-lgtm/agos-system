@@ -1,7 +1,7 @@
 import { Pressable, Text, View } from "react-native";
 import { Alert, ClogAlertContext, WaterLevelAlertContext, WasteTypeRejectedContext, WasteTypeApprovedContext } from "../../types/alert";
-import { ALERT_META, ALERT_STYLE, WATER_SEVERITY_STYLE, getWaterSeverity, HEALTH_ALERT_TYPES, batteryLevel, signalLevel } from "../../constants/alerts";
-import { HealthAlertContext } from "../../types/alert";
+import { ALERT_META, ALERT_STYLE, WATER_SEVERITY_STYLE, getWaterSeverity, HEALTH_ALERT_TYPES, batteryLevel, signalLevel, REPORT_ALERT_TYPES, reminderText } from "../../constants/alerts";
+import { HealthAlertContext, ReportReminderContext } from "../../types/alert";
 
 interface Props {
   alert: Alert;
@@ -33,6 +33,8 @@ export default function AlertCard({ alert, onPress }: Props) {
     : null;
 
   const isHealth = HEALTH_ALERT_TYPES.includes(alert.alert_type);
+  const isReportReminder = REPORT_ALERT_TYPES.includes(alert.alert_type);
+  const reminderCtx = alert.alert_context as ReportReminderContext;
   const healthCtx = alert.alert_context as HealthAlertContext;
   const healthDetail = (() => {
     switch (alert.alert_type) {
@@ -100,6 +102,15 @@ export default function AlertCard({ alert, onPress }: Props) {
             <View>
               <Text className="text-[9px] text-slate-400 uppercase">{alert.node_name ?? "NODE"} · {healthLabel}</Text>
               <Text className="text-[12px] font-semibold mt-1">{healthDetail}</Text>
+              <Text className="text-[10px] text-slate-400 mt-1">{formatRelativeTime(alert.timestamp)}</Text>
+            </View>
+          ) : isReportReminder ? (
+            <View>
+              <Text className="text-[9px] text-slate-400 uppercase">REPORT PERIOD</Text>
+              <Text className="text-[12px] font-semibold mt-1">{reminderCtx.period_label ?? "—"}</Text>
+              <Text className="text-[11px] text-slate-500 mt-1" numberOfLines={2}>
+                {reminderText(alert.alert_type, reminderCtx)}
+              </Text>
               <Text className="text-[10px] text-slate-400 mt-1">{formatRelativeTime(alert.timestamp)}</Text>
             </View>
           ) : isWasteType ? (

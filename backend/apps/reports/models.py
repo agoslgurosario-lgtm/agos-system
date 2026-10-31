@@ -54,6 +54,12 @@ class CanalMonitoringReport(models.Model):
         on_delete=models.SET_NULL, related_name='verified_canal_reports',
     )
     verified_at = models.DateTimeField(null=True, blank=True)
+    void_reason = models.TextField(blank=True, default='')
+    voided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='voided_canal_reports',
+    )
+    voided_at = models.DateTimeField(null=True, blank=True)
     submission = models.ForeignKey(
         'reports.PeriodSubmission', null=True, blank=True,
         on_delete=models.SET_NULL, related_name='reports',
@@ -260,6 +266,7 @@ class ReportNodeSummary(models.Model):
     avg_clog_pct = models.FloatField(null=True, blank=True)
     peak_water_level_cm = models.FloatField(null=True, blank=True)
     peak_water_level_pct = models.FloatField(null=True, blank=True)
+    peak_waste_kg = models.FloatField(null=True, blank=True)
     min_flow_rate = models.FloatField(null=True, blank=True)
     worst_water_status = models.CharField(max_length=10, blank=True, default='')   # Normal/Warning/Critical
     worst_flow = models.CharField(max_length=10, blank=True, default='')           # Normal/Slow/Stagnant
