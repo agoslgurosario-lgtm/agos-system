@@ -10,6 +10,7 @@ export type ReportBarangay = {
   latitude: number
   longitude: number
   is_registered: boolean
+  is_active?: boolean
 }
 
 export type ReportUser = {
@@ -31,12 +32,46 @@ export type ReportMedia = {
   uploaded_by: number | null
 }
 
+export type ReportNodeSummary = {
+  summary_id: number
+  node: number | null
+  hotspot: number | null
+  node_name: string
+  hotspot_name: string
+  purok: number | null
+  window_start: string
+  window_end: string
+  reading_count: number
+  peak_clog_pct: number | null
+  avg_clog_pct: number | null
+  peak_water_level_cm: number | null
+  peak_water_level_pct: number | null
+  min_flow_rate: number | null
+  worst_water_status: string
+  worst_flow: string
+}
+
+export type ReportSubmissionInfo = {
+  submission_id: number
+  period_start: string
+  period_end: string
+  label: string
+  is_late: boolean
+  days_late: number
+  submitted_at: string
+}
+
 export type CanalMonitoringReport = {
   report_id: number
   is_submitted: boolean
 
   barangay: number
   purok: number | null
+  report_scope: 'Purok' | 'Barangay'
+  condition_source: 'Sensor' | 'Manual' | 'Mixed'
+  purok_rows?: ReportPurokRow[]
+  node_summaries?: ReportNodeSummary[]
+  submission_info?: ReportSubmissionInfo | null
 
   date_observed: string | null
   severity: ReportSeverity | null
@@ -78,6 +113,19 @@ export type CanalMonitoringReport = {
   media: ReportMedia[]
 
   signatory_snapshot: Record<string, string> | null
+}
+
+export type ReportPurokRow = {
+  row_id: number
+  purok: number
+  included: boolean
+  source: 'Sensor' | 'Manual'
+  overall_water_level: WaterLevel | null
+  overall_obstruction_coverage: ObstructionCoverage | null
+  overall_water_flow_condition: WaterFlowCondition | null
+  node_count: number
+  reading_count: number
+  peak_clog_pct: number | null
 }
 
 export type ReportCustomWaste = {

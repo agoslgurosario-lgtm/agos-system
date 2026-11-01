@@ -25,7 +25,7 @@ import { usePolling } from "@/components/hooks/usePolling"
 import { usePageCache } from "@/components/hooks/usePageCache";
 import { SpinnerIcon } from "@/components/SpinnerIcon";
 import { formatWeight } from "@/lib/formatWeight";
-
+import { clogLevel, CLOG_LEGEND, type ClogLevel } from "@/lib/clogSeverity"
 
 type SensorNode = {
   node_id: number
@@ -116,30 +116,38 @@ type Clogs = {
   } | null
 }
 
+const CLOG_LEVEL_STYLE: Record<ClogLevel, { barColor: string; textClass: string }> = {
+  Critical: { barColor: "bg-[#D81010]", textClass: "text-[#D81010] font-semibold" },
+  Moderate: { barColor: "bg-[#E65100]", textClass: "text-[#E65100] font-semibold" },
+  Low:      { barColor: "bg-[#E4B600]", textClass: "text-[#B58F00] font-semibold" },
+  Normal:   { barColor: "bg-[#2C7B3C]", textClass: "text-[#2C7B3C] font-semibold" },
+  Unknown:  { barColor: "bg-[#9CA3AF]", textClass: "text-[#727272] font-semibold" },
+}
+
 const getClogSeverity = (clogPct: number | null) => {
-  if (clogPct === null) {
-    return { label: "Unknown", barColor: "bg-[#9CA3AF]", textClass: "text-[#727272] font-semibold" }
-  }
-  if (clogPct >= 80) {
-    return { label: "Critical", barColor: "bg-[#D81010]", textClass: "text-[#D81010] font-semibold" }
-  }
-  if (clogPct >= 30) {
-    return { label: "Warning", barColor: "bg-[#FF9705]", textClass: "text-[#FF9705] font-semibold" }
-  }
-  return { label: "Normal", barColor: "bg-[#1565BC]", textClass: "text-[#1565BC] font-semibold" }
+  const label = clogLevel(clogPct)
+  return { label, ...CLOG_LEVEL_STYLE[label] }
+}
+
+const RANK_ACTION: Record<ClogLevel, string> = {
+  Critical: "IMMEDIATE ACTION",
+  Moderate: "WITHIN 24 HOURS",
+  Low: "MONITOR CLOSELY",
+  Normal: "NO ACTION NEEDED",
+  Unknown: "AWAITING CANAL DATA",
+}
+
+const RANK_STYLE: Record<string, { chip: string; text: string }> = {
+  CRITICAL: { chip: "bg-[#FFE5E5] text-[#D81010]", text: "text-[#D81010]" },
+  MODERATE: { chip: "bg-[#FFF0D6] text-[#E65100]", text: "text-[#E65100]" },
+  LOW:      { chip: "bg-[#FEF9C3] text-[#A16207]", text: "text-[#A16207]" },
+  NORMAL:   { chip: "bg-[#DCFCE7] text-[#166534]", text: "text-[#16A34A]" },
+  UNKNOWN:  { chip: "bg-[#E5E7EB] text-[#6B7280]", text: "text-[#6B7280]" },
 }
 
 const getClogRankLevel = (clogPct: number | null) => {
-  if (clogPct === null) {
-    return { label: "UNKNOWN", color: "bg-[#9CA3AF]", action: "AWAITING CANAL DATA" }
-  }
-  if (clogPct >= 80) {
-    return { label: "CRITICAL", color: "bg-[#E85656]", action: "IMMEDIATE ACTION" }
-  }
-  if (clogPct >= 30) {
-    return { label: "MEDIUM", color: "bg-[#FFCC00]", action: "WITHIN 24 HOURS" }
-  }
-  return { label: "LOW", color: "bg-[#2C7B3C]", action: "MONITOR CLOSELY" }
+  const level = clogLevel(clogPct)
+  return { label: level.toUpperCase(), action: RANK_ACTION[level] }
 }
 
 // fetch raw data
@@ -292,7 +300,7 @@ export default function Resources() {
     0
   )
 
-  const clearedAreas = allClogs.filter(c => c.status === 'Cleared' || c.status === 'Verified').length
+  const clearedAreas = allClogs.filter(c => c.status === 'Cleared').length
 
   const fetchAllResourceData = useCallback(async () => {
     await Promise.allSettled([
@@ -506,32 +514,11 @@ export default function Resources() {
                   </div>
 
                   <div className="flex flex-col items-end gap-1">
-                    
-                    <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${
-                      item.label === "CRITICAL"
-                        ? "bg-[#FFE5E5] text-[#D81010]"
-                        : item.label === "HIGH"
-                        ? "bg-[#FFF3D6] text-[#F59E0B]"
-                        : item.label === "MEDIUM"
-                        ? "bg-[#FEF9C3] text-[#A16207]"
-                        : item.label === "UNKNOWN"
-                        ? "bg-[#E5E7EB] text-[#6B7280]"
-                        : "bg-[#DCFCE7] text-[#166534]"
-                    }`}>
+                    <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${(RANK_STYLE[item.label] ?? RANK_STYLE.UNKNOWN).chip}`}>
                       {item.label}
                     </span>
 
-                    <p className={`text-[10px] font-semibold ${
-                      item.label === "CRITICAL"
-                        ? "text-[#D81010]"
-                        : item.label === "HIGH"
-                        ? "text-[#F59E0B]"
-                        : item.label === "MEDIUM"
-                        ? "text-[#A16207]"
-                        : item.label === "UNKNOWN"
-                        ? "text-[#6B7280]"
-                        : "text-[#16A34A]"
-                    }`}>
+                    <p className={`text-[10px] font-semibold ${(RANK_STYLE[item.label] ?? RANK_STYLE.UNKNOWN).text}`}>
                       {item.action}
                     </p>
                   </div>
@@ -540,37 +527,17 @@ export default function Resources() {
               ))}
             </div>
 
-                          <div className="border-t px-4 py-2 mt-auto">
+              <div className="border-t px-4 py-2 mt-auto">
                 <div className="flex flex-wrap justify-center gap-3 text-[10px] text-[#122A48]">
-                  <div className="flex flex-col items-center">
-                    <div className="flex gap-2">
-                      <div className="w-3 h-3 rounded-full bg-[#E85656]" />
-                      <span>80% - 100%</span>
+                  {CLOG_LEGEND.map(l => (
+                    <div key={l.label} className="flex flex-col items-center">
+                      <div className="flex gap-2">
+                        <div className={`w-3 h-3 rounded-full ${l.dot}`} />
+                        <span>{l.range}</span>
+                      </div>
+                      <div><p>{l.label}</p></div>
                     </div>
-                    <div>
-                      <p>Critical</p>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col items-center">
-                    <div className="flex gap-2">
-                      <div className="w-3 h-3 rounded-full bg-[#FFCC00]" />
-                      <span>30% - 79%</span>
-                    </div>
-                    <div>
-                      <p>Medium</p>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col items-center">
-                    <div className="flex gap-2">
-                      <div className="w-3 h-3 rounded-full bg-[#2C7B3C]" />
-                      <span>0% - 29%</span>
-                    </div>
-                    <div>
-                      <p>Low</p>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </div>
 

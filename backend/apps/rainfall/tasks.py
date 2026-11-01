@@ -94,7 +94,7 @@ def fetch_all_barangays():
     malformed or missing entry for one barangay doesn't stop the rest
     from updating.
     """
-    barangays = list(Barangay.objects.all())
+    barangays = list(Barangay.objects.filter(is_active=True))
     if not barangays:
         return
 

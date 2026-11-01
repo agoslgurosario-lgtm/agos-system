@@ -6,7 +6,9 @@ import { FaWater, FaExclamationTriangle, FaPlug, FaBatteryQuarter, FaSignal, FaE
 import { api } from "@/lib/api"
 import { ALERT_STYLE } from "@/lib/constant"
 import { formatWeight } from "@/lib/formatWeight"
+import { getBatteryLevel, getSignalLevel } from "@/lib/utils"
 import { AlertDetailDialog } from "@/components/Alerts/AlertDetailDialog"
+import { reportSeverityLabel } from "@/lib/reportOptions"
 
 
 type ClogContext = {
@@ -63,22 +65,6 @@ export type Alert = {
   alert_context: AlertContext
 }
 
-function getBatteryLevel(voltage: number): string {
-  if (voltage >= 4.1) return `Full (${voltage}V)`
-  if (voltage >= 3.9) return `Good (${voltage}V)`
-  if (voltage >= 3.7) return `Medium (${voltage}V)`
-  if (voltage >= 3.5) return `Low (${voltage}V)`
-  return `Critical (${voltage}V)`
-}
-
-function getSignalLevel(dbm: number): string {
-  if (dbm >= -65) return `Excellent (${dbm}DBM)`
-  if (dbm >= -75) return `Good (${dbm}DBM)`
-  if (dbm >= -85) return `Fair (${dbm}DBM)`
-  if (dbm >= -95) return `Weak (${dbm}DBM)`
-  return `No Signal`
-}
-
 
 export const ALERT_META: Record<string, { label: string; Icon: React.ElementType }> = {
   Water_Level_Rising: { label: "Water Level Rising",    Icon: FaWater              },
@@ -116,7 +102,7 @@ export function  ContextRow({ alertType, ctx }: { alertType: string; ctx: AlertC
     return (
       <>
         {c.purok && <p>Purok: <span className="font-semibold">{c.purok}</span></p>}
-        {c.severity && <p>Severity: <span className="font-semibold">{c.severity}</span></p>}
+        {c.severity && <p>Severity: <span className="font-semibold">{reportSeverityLabel(c.severity)}</span></p>}
       </>
     )
   }

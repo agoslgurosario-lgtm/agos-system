@@ -14,7 +14,7 @@ def get_open_assignment(node):
     ).order_by('-started_at').first()
 
 
-def close_open_assignment(node, reason, user=None, when=None):
+def close_open_assignment(node, reason, user=None, when=None, remarks=''):
     """
     Closes whatever open row the node has. Safe to call when there
     isn't one (a node assigned before this feature existed, or one
@@ -28,8 +28,9 @@ def close_open_assignment(node, reason, user=None, when=None):
         end_time = row.started_at
     row.ended_at = end_time
     row.end_reason = reason
+    row.end_remarks = remarks
     row.ended_by = user
-    row.save(update_fields=['ended_at', 'end_reason', 'ended_by'])
+    row.save(update_fields=['ended_at', 'end_reason', 'end_remarks', 'ended_by'])
     return row
 
 
@@ -68,7 +69,7 @@ def _align_previous_row(row):
         previous.save(update_fields=['ended_at', 'end_reason'])
 
 
-def open_assignment(node, hotspot, started_at=None, user=None):
+def open_assignment(node, hotspot, started_at=None, user=None, remarks=''):
     """
     Opens a new row from the given hotspot, snapshotting the names so
     the history survives the hotspot or barangay being deleted later.
@@ -82,6 +83,7 @@ def open_assignment(node, hotspot, started_at=None, user=None):
         barangay_name=barangay.barangay_name if barangay else '',
         started_at=started_at or timezone.now(),
         assigned_by=user,
+        start_remarks=remarks,
     )
 
 
@@ -109,11 +111,11 @@ def _boundary_start(node, requested=None):
 
 
 @transaction.atomic
-def assign_node(node, hotspot, installed_at=None, user=None):
+def assign_node(node, hotspot, installed_at=None, user=None, remarks=''):
     requested = _to_datetime(installed_at) or timezone.now()
     started_at = _boundary_start(node, requested)   # must run BEFORE closing the open row
 
-    close_open_assignment(node, reason='Reassigned', user=user, when=started_at)
+    close_open_assignment(node, reason='Reassigned', user=user, when=started_at, remarks=remarks)
 
     node.hotspot = hotspot
     node.barangay = hotspot.barangay
@@ -123,17 +125,17 @@ def assign_node(node, hotspot, installed_at=None, user=None):
         'hotspot', 'barangay', 'availability_status', 'installed_at'
     ])
 
-    return open_assignment(node, hotspot, started_at=started_at, user=user)
+    return open_assignment(node, hotspot, started_at=started_at, user=user, remarks=remarks)
 
 
 @transaction.atomic
-def release_node(node, reason, user=None, availability_status='Available'):
+def release_node(node, reason, user=None, availability_status='Available', remarks=''):
     """
     Detaches the node's hotspot and barangay, closing its open row with
     `reason` (Unassigned | Maintenance | Retired). Pass
     availability_status='Retired' for the retire path.
     """
-    closed = close_open_assignment(node, reason=reason, user=user)
+    closed = close_open_assignment(node, reason=reason, user=user, remarks=remarks)
 
     node.hotspot = None
     node.barangay = None
@@ -144,7 +146,7 @@ def release_node(node, reason, user=None, availability_status='Available'):
 
 
 @transaction.atomic
-def sync_assignment_change(node, previous_hotspot_id, user=None, installed_at=None):
+def sync_assignment_change(node, previous_hotspot_id, user=None, installed_at=None, remarks=''):
     """
     History-only reconciliation for the PATCH path, where the serializer
     has already written the node's fields. Compares what the node has
@@ -171,12 +173,12 @@ def sync_assignment_change(node, previous_hotspot_id, user=None, installed_at=No
     started_at = _boundary_start(node, requested)
 
     if now_id is None:
-        close_open_assignment(node, reason='Unassigned', user=user)
+        close_open_assignment(node, reason='Unassigned', user=user, remarks=remarks)
         return
 
     # End the old row exactly where the new one begins so they never overlap.
-    close_open_assignment(node, reason='Reassigned', user=user, when=started_at)
-    open_assignment(node, node.hotspot, started_at=started_at, user=user)
+    close_open_assignment(node, reason='Reassigned', user=user, when=started_at, remarks=remarks)   
+    open_assignment(node, node.hotspot, started_at=started_at, user=user, remarks=remarks)
 
 
 def hotspot_at(node, timestamp):
@@ -202,3 +204,11 @@ def hotspot_at(node, timestamp):
         node.barangay,
         node.barangay.barangay_name if node.barangay else '',
     )
+
+
+def previous_unassigned_hotspot_id(node):
+    """The hotspot this node was last unassigned from, or None if it never was."""
+    row = NodeAssignmentHistory.objects.filter(
+        node=node, ended_at__isnull=False, end_reason='Unassigned'
+    ).order_by('-ended_at').first()
+    return row.hotspot_id if row else None

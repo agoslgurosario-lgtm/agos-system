@@ -4,7 +4,16 @@ export type AlertType =
   | "Moderate_Clog_Alert"
   | "Critical_Clog"
   | "Waste_Type_Rejected"
-  | "Waste_Type_Approved";
+  | "Waste_Type_Approved"
+  | "Node_Offline"
+  | "Low_Battery"
+  | "Weak_Signal"
+  | "Sensor_Failure"
+  | "Sensor_Failure"
+  | "Report_Due_Soon"
+  | "Report_Overdue"
+  | "Node_Inspection_Request";
+
 
 export type ClogTier = "Low" | "Moderate" | "Critical";
 
@@ -44,11 +53,35 @@ export interface WasteTypeApprovedContext {
   original_name?: string; // only present if MENRO renamed it
 }
 
-export type AlertContext = ClogAlertContext | WaterLevelAlertContext | WasteTypeRejectedContext | WasteTypeApprovedContext | Record<string, never>;
+export interface HealthAlertContext {
+  battery_voltage?: number | null;
+  signal_strength?: number | null;
+  sensor_continuity?: boolean | null;
+  health_status?: string | null;
+  checked_at?: string | null;
+}
+
+export interface ReportReminderContext {
+  period_start?: string;
+  period_end?: string;
+  due_date?: string;
+  period_label?: string;
+  ready_count?: number;
+  unverified_count?: number;
+}
+
+export interface NodeInspectionContext {
+  reason?: string;
+  note?: string;
+  requested_by?: string;
+}
+
+export type AlertContext = ClogAlertContext | WaterLevelAlertContext | WasteTypeRejectedContext | WasteTypeApprovedContext | HealthAlertContext | ReportReminderContext | NodeInspectionContext | Record<string, never>;
 
 export interface Alert {
   alert_id: number;
   alert_type: AlertType;
+  node_id?: number | null;
   node_name: string | null;
   barangay_name: string | null;
   barangay_id?: number | null;

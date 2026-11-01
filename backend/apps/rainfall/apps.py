@@ -15,6 +15,8 @@ class RainfallConfig(AppConfig):
         is_dev_server = 'runserver' in sys.argv
         is_daphne = 'daphne' in argv0
 
-        if is_dev_server or is_daphne:
+        is_reloader_child = os.environ.get('RUN_MAIN') == 'true' or '--noreload' in sys.argv
+
+        if (is_dev_server and is_reloader_child) or is_daphne:
             from .scheduler import start
             start()

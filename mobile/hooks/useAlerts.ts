@@ -4,26 +4,20 @@ import { Alert, AlertType } from "../types/alert";
 
 import { useLiveSocket } from "../lib/useLiveSocket";
 import { useAuth } from "../lib/AuthContext";
+import { useAlertsContext } from "../lib/AlertsContext";
+import { APP_ALERT_TYPES } from "../constants/alerts";
+import { inRange, rangeQuery } from "../lib/dateRange";
 
 export type AlertTypeFilter = "All" | AlertType;
-export type DateFilter = "Today" | "7Days" | "30Days";
 
-const ALL_ALERT_TYPES: AlertType[] = [
-  "Water_Level_Rising",
-  "Low_Clog_Alert",
-  "Moderate_Clog_Alert",
-  "Critical_Clog",
-  "Waste_Type_Rejected",
-  "Waste_Type_Approved",
-];
-
-export function useAlerts(alertType: AlertTypeFilter, dateFilter: DateFilter) {
+export function useAlerts(alertType: AlertTypeFilter, from: string, to: string) {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
 
   const { user } = useAuth();
+  const { refreshUnreadCount } = useAlertsContext();
 
   const fetchAlerts = useCallback(async (isRefresh = false) => {
     isRefresh ? setRefreshing(true) : setLoading(true);
@@ -32,18 +26,17 @@ export function useAlerts(alertType: AlertTypeFilter, dateFilter: DateFilter) {
       const params = new URLSearchParams();
       params.append(
         "alert_type",
-        alertType === "All" ? ALL_ALERT_TYPES.join(",") : alertType
+        alertType === "All" ? APP_ALERT_TYPES.join(",") : alertType
       );
-      if (dateFilter) params.append("date", dateFilter);
 
-      const data = await api.get(`/api/alerts/?${params.toString()}`);
+      const data = await api.get(`/api/alerts/?${params.toString()}&${rangeQuery(from, to)}`);
       setAlerts(data.results ?? data);
     } catch {
       setError(true);
     } finally {
       isRefresh ? setRefreshing(false) : setLoading(false);
     }
-  }, [alertType, dateFilter]);
+  }, [alertType, from, to]);
 
   useEffect(() => {
     fetchAlerts();
@@ -57,6 +50,7 @@ export function useAlerts(alertType: AlertTypeFilter, dateFilter: DateFilter) {
       }
       const matchesType = alertType === 'All' || incoming.alert_type === alertType;
       if (!matchesType) return;
+      if (!inRange(incoming.timestamp, from, to)) return;
 
       setAlerts((prev) => {
         const exists = prev.some((a) => a.alert_id === incoming.alert_id);
@@ -74,10 +68,19 @@ export function useAlerts(alertType: AlertTypeFilter, dateFilter: DateFilter) {
           a.alert_id === alertId ? { ...a, is_read: true } : a
         )
       );
+      refreshUnreadCount();
     } catch {
       
     }
-  }, []);
+  }, [refreshUnreadCount]);
 
-  return { alerts, loading, refreshing, error, refetch: fetchAlerts, markAsRead };
+  const markAllAsRead = useCallback(async () => {
+    try {
+      await api.post(`/api/alerts/mark-all-read/?alert_type=${APP_ALERT_TYPES.join(",")}`);
+      setAlerts((prev) => prev.map((a) => ({ ...a, is_read: true })));
+      refreshUnreadCount();
+    } catch {}
+  }, [refreshUnreadCount]);
+
+  return { alerts, loading, refreshing, error, refetch: fetchAlerts, markAsRead, markAllAsRead };
 }

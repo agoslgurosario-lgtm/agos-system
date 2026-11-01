@@ -1,17 +1,23 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
 import { api } from "@/lib/api";
 import { CanalMonitoringReport } from "@/types/reports";
-import { SEVERITY_COLORS } from "@/constants/reports";
+import { SEVERITY_COLORS, severityLabel } from "@/constants/reports";
 import AlertBellButton from "@/components/alerts/AlertBellButton";
+import SubmitBanner from "@/components/reports/SubmitBanner";
+import PerformanceCard from "@/components/reports/PerformanceCard";
+import Pagination from "@/components/alerts/Pagination";
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Shadow } from "react-native-shadow-2";
 
 import { exportPdf } from "@/lib/exportPdf";
+
+
+const PAGE_SIZE = 5;
 
 function MetricCard({ label, value }: { label: string; value: number }) {
   return (
@@ -45,20 +51,28 @@ function SeverityBadge({ severity }: { severity: CanalMonitoringReport["severity
       style={{ backgroundColor: colors.bg }}
     >
       <Text className="text-[11px] font-semibold" style={{ color: colors.text }}>
-        {severity}
+        {severityLabel(severity)}
       </Text>
     </View>
   );
 }
 
-function InProgressBadge() {
+const STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> = {
+  Draft:                { label: "In progress",          bg: "#fef3c7", text: "#b45309" },  // amber
+  Awaiting_Post_Report: { label: "Awaiting post-report", bg: "#e0f2fe", text: "#0369a1" },  // blue
+  Ready_To_Verify:      { label: "Ready to verify",      bg: "#dcfce7", text: "#166534" },  // green
+  Verified:             { label: "Verified",             bg: "#ede9fe", text: "#6d28d9" },  // violet
+  Voided:               { label: "Voided",               bg: "#f1f5f9", text: "#64748b" },  // grey
+}
+
+function InProgressBadge({ status }: { status?: string }) {
+  const s = STATUS_BADGE[status ?? "Draft"] ?? STATUS_BADGE.Draft;
   return (
-    <View className="shrink-0 self-start rounded-xl bg-[#fef3c7] px-2.5 py-1">
-      <Text className="text-[11px] font-semibold text-[#b45309]">In progress</Text>
+    <View className="shrink-0 self-start rounded-xl px-2.5 py-1" style={{ backgroundColor: s.bg }}>
+      <Text className="text-[11px] font-semibold" style={{ color: s.text }}>{s.label}</Text>
     </View>
   );
 }
-
 function formatObserved(report: CanalMonitoringReport) {
   if (!report.date_observed) return "No date yet";
   const d = new Date(report.date_observed);
@@ -77,6 +91,8 @@ export default function ReportsListScreen() {
   const [error, setError] = useState("");
 
   const [exportingId, setExportingId] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
+  const prevCount = useRef(0);
 
   const loadData = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
@@ -102,31 +118,29 @@ export default function ReportsListScreen() {
     }, [loadData])
   );
 
-  const totalReports = reports.length;
-  const submittedCount = reports.filter((r) => r.is_submitted).length;
   const inProgressCount = reports.filter((r) => !r.is_submitted).length;
-
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const thisMonthCount = reports.filter(
-    (r) => r.is_submitted && (r.date_observed ?? "").startsWith(currentMonth)
-  ).length;
 
   const sortedReports = [...reports].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
 
+  const totalPages = Math.max(1, Math.ceil(sortedReports.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageReports = sortedReports.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  useEffect(() => {
+    if (prevCount.current > 0 && reports.length > prevCount.current) setPage(1);
+    prevCount.current = reports.length;
+  }, [reports.length]);
+
+  const needsReview = (r: CanalMonitoringReport) =>
+    !r.is_submitted && (r.status === "Ready_To_Verify" || r.status === "Verified");
+
   const goToReport = (report: CanalMonitoringReport) => {
-    if (!report.is_submitted) {
-      router.push({
-        pathname: "/new-report",
-        params: { report_id: String(report.report_id) },
-      } as any);
+    if (report.is_submitted || needsReview(report)) {
+      router.push({ pathname: "/view-report", params: { id: String(report.report_id) } } as any);
     } else {
-      router.push({
-        pathname: "/view-report",
-        params: { id: String(report.report_id) },
-      } as any);
+      router.push({ pathname: "/new-report", params: { report_id: String(report.report_id) } } as any);
     }
   };
 
@@ -159,7 +173,7 @@ export default function ReportsListScreen() {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => loadData(true)} tintColor="#122A48" />
         }
-        contentContainerClassName="p-4 pb-8"
+        contentContainerClassName="p-4 pb-28"
       >
         <View className="mb-4 flex-row items-center justify-between gap-3">
           <Text className="flex-1 text-lg font-bold text-[#122A48]" numberOfLines={2}>
@@ -171,16 +185,9 @@ export default function ReportsListScreen() {
 
         {error ? <Text className="mb-3 text-xs text-[#dc2626]">{error}</Text> : null}
 
-        <View className="mb-5 gap-2.5">
-          <View className="flex-row gap-2.5">
-            <MetricCard label="Total reports" value={totalReports} />
-            <MetricCard label="Submitted" value={submittedCount} />
-          </View>
-          <View className="flex-row gap-2.5">
-            <MetricCard label="In progress" value={inProgressCount} />
-            <MetricCard label="This month" value={thisMonthCount} />
-          </View>
-        </View>
+        <SubmitBanner />
+
+        <PerformanceCard />
 
         <Text className="mb-3 text-sm font-semibold text-[#122A48]">Recent Reports</Text>
 
@@ -191,8 +198,9 @@ export default function ReportsListScreen() {
             </Text>
           )}
 
-          {sortedReports.map((report) => {
-            const isDraft = !report.is_submitted;
+          {pageReports.map((report) => {
+            const isDraft = !report.is_submitted && !needsReview(report);
+            const isReview = needsReview(report);
             const filesCount = report.media?.length ?? 0;
             const collected = report.waste_collected_amount;
 
@@ -213,16 +221,16 @@ export default function ReportsListScreen() {
                 <View className="mb-2.5 flex-row items-start justify-between gap-2">
                   <View className="flex-1 flex-row items-center gap-2">
                     <MaterialCommunityIcons
-                      name={isDraft ? "clipboard-text-outline" : "checkbox-marked-circle-outline"}
+                      name={isDraft || isReview ? "clipboard-text-outline" : "checkbox-marked-circle-outline"}
                       size={20}
-                      color={isDraft ? "#d97706" : "#16a34a"}
+                      color={isDraft || isReview ? "#d97706" : "#16a34a"}
                       style={{ marginTop: 2 }}
                     />
                     <Text className="flex-1 shrink text-sm font-semibold leading-5 text-[#122A48]">
-                      {report.purok ? `Purok ${report.purok}` : "Untitled report"}
+                      {report.report_scope === "Barangay" ? "Weekly cleanup" : report.purok ? `Purok ${report.purok}` : "Untitled report"}
                     </Text>
                   </View>
-                  {isDraft ? <InProgressBadge /> : <SeverityBadge severity={report.severity} />}
+                  {isDraft || isReview ? <InProgressBadge status={report.status} /> : <SeverityBadge severity={report.severity} />}
                 </View>
 
                 <View className="mb-2 flex-row flex-wrap items-center gap-3">
@@ -250,21 +258,18 @@ export default function ReportsListScreen() {
 
                 <View className="flex-row gap-2">
                   <TouchableOpacity
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      goToReport(report);
-                    }}
+                    onPress={(e) => { e.stopPropagation(); goToReport(report); }}
                     className={`flex-1 flex-row items-center justify-center gap-1 rounded-md py-1.5 ${
-                      isDraft ? "bg-[#15803d]" : "border border-[#cbd5e1]"
+                      isDraft || report.status === "Ready_To_Verify" ? "bg-[#15803d]" : "border border-[#cbd5e1]"
                     }`}
                   >
                     <MaterialCommunityIcons
-                      name={isDraft ? "pencil-outline" : "eye-outline"}
+                      name={isDraft ? "pencil-outline" : report.status === "Ready_To_Verify" ? "shield-check-outline" : "eye-outline"}
                       size={14}
-                      color={isDraft ? "white" : "#475569"}
+                      color={isDraft || report.status === "Ready_To_Verify" ? "white" : "#475569"}
                     />
-                    <Text className={`text-xs font-semibold ${isDraft ? "text-white" : "text-[#475569] font-medium"}`}>
-                      {isDraft ? "Continue report" : "View"}
+                    <Text className={`text-xs font-semibold ${isDraft || report.status === "Ready_To_Verify" ? "text-white" : "text-[#475569] font-medium"}`}>
+                      {isDraft ? "Continue report" : report.status === "Ready_To_Verify" ? "Review & verify" : "View"}
                     </Text>
                   </TouchableOpacity>
 
@@ -294,6 +299,8 @@ export default function ReportsListScreen() {
             );
           })}
         </View>
+
+        <Pagination currentPage={safePage} totalPages={totalPages} onPageChange={setPage} />
       </ScrollView>
 
       <View style={{ position: "absolute", bottom: 20 + insets.bottom, right: 20 }}>

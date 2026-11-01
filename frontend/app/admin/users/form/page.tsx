@@ -36,6 +36,7 @@ type DialogState = {
 type Barangay = { 
   barangay_id: number; 
   barangay_name: string 
+  is_active?: boolean
 }
 
 const MENRO_OFFICE = "MENRO Office"
@@ -142,6 +143,7 @@ function FormInner() {
   }, [id])
 
   const selectedBarangay = barangays.find(b => b.barangay_id === barangayId)
+  const selectableBarangays = barangays.filter(b => b.is_active !== false || b.barangay_id === barangayId)
   const officeDisplay = (role === 'MENRO' || role === 'MENRO_Staff')
     ? MENRO_OFFICE
     : selectedBarangay?.barangay_name ?? 'Office/Barangay'
@@ -507,7 +509,7 @@ function FormInner() {
                             <SelectValue placeholder="Select..." />
                           </SelectTrigger>
                           <SelectContent position="popper" side="bottom" avoidCollisions={false}>
-                            {barangays.map(b => (
+                            {selectableBarangays.map(b => (
                               <SelectItem className="text-xs cursor-pointer p-2" key={b.barangay_id} value={String(b.barangay_id)}>
                                 {b.barangay_name}
                               </SelectItem>
@@ -811,7 +813,7 @@ function FormInner() {
                           <SelectValue placeholder="Select..." />
                         </SelectTrigger>
                         <SelectContent position="popper">
-                          {barangays.map(b => (
+                          {selectableBarangays.map(b => (
                             <SelectItem key={b.barangay_id} value={String(b.barangay_id)}>
                               {b.barangay_name}
                             </SelectItem>

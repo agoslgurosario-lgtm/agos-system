@@ -2,10 +2,12 @@
 
 // icons
 import { FaPlus } from "react-icons/fa"
-import { Target, Map, SquarePen, Trash2, X, Check, Navigation, MapPin, MapPinPlus, MapPinPen, CircleOff, MapPinCheck, ChevronDown, ChevronUp, MoreVertical, BadgeCheck } from "lucide-react"
+import { Target, Map, SquarePen, Trash2, X, Check, Navigation, MapPin, MapPinPlus, MapPinPen, CircleOff, MapPinCheck, ChevronDown, ChevronUp, MoreVertical, BadgeCheck, History, FileDown } from "lucide-react"
 
 // react
 import { useState, useEffect, useCallback, useRef, Fragment } from "react"
+import { DateRangeFilter } from "@/components/DateRangeFilter"
+import { rangeQuery } from "@/lib/dateRange"
 
 // shadcn
 import { Input } from "@/components/ui/input"
@@ -23,13 +25,20 @@ import AgosMapWrapper from "@/components/Map/AgosMapWrapper"
 import { DialogModal } from "@/components/DialogModal"
 import { SpinnerIcon } from "@/components/SpinnerIcon"
 import { HotspotsSkeleton } from "@/components/Skeleton/Menro/HotspotsSkeleton"
+import { AddHotspotsDialog } from "@/components/AddHotspotsDialog"
+import { PurokSelect } from "@/components/PurokSelect"
 
 // lib
 import { DIALOG_COLOR } from "@/lib/constant"
 import { api } from "@/lib/api"
-import { fetchWithAuth } from "@/lib/auth"
+import { fetchWithAuth, getUser } from "@/lib/auth"
+import { PrintReport } from "@/components/PrintReport/PrintReport"
+import { exportOrPrint } from "@/lib/exportOrPrint"
+import { remarksText } from "@/lib/historyRemarks"
 import { usePageCache } from "@/components/hooks/usePageCache"
 import { sameText, sameNum } from "@/lib/formDiff"
+import { fetchBarangayBoundaryById } from "@/lib/barangayBoundary"
+import { purokOptions } from "@/lib/purok"
 
 // turf for point-in-polygon check
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon"
@@ -46,6 +55,7 @@ type Barangay = {
   barangay_name: string
   latitude: number
   longitude: number
+  purok_count?: number
 }
 
 type Hotspot = {
@@ -62,6 +72,7 @@ type Hotspot = {
   canal_depth: number | null
   is_occupied: boolean
   created_at: string
+  purok: number | null
 }
 
 type SensorNode = {
@@ -170,6 +181,7 @@ export default function HotspotManagement() {
 
   // form state
   const [barangay, setBarangay] = useState("")
+  const [purok, setPurok] = useState("")
   const [description, setDescription] = useState("")
   const [latitude, setLatitude] = useState("")
   const [longitude, setLongitude] = useState("")
@@ -186,17 +198,33 @@ export default function HotspotManagement() {
 
   // dialogs
   const [formDialog, setFormDialog] = useState<DialogState>({ open: false, hotspot: null })
+  const [viewBoundary, setViewBoundary] = useState<any>(null)
   const [viewMapDialog, setViewMapDialog] = useState<DialogState>({ open: false, hotspot: null })
+  const [historyDialog, setHistoryDialog] = useState<DialogState>({ open: false, hotspot: null })
+  const [historyRows, setHistoryRows] = useState<any[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState(false)
+  const [historyFrom, setHistoryFrom] = useState('')
+  const [historyTo, setHistoryTo] = useState('')
+
+  useEffect(() => {
+    const b = viewMapDialog.hotspot?.barangay_details
+    if (!viewMapDialog.open || !b) { setViewBoundary(null); return }
+    let cancelled = false
+    fetchBarangayBoundaryById(b.barangay_id, b.barangay_name).then(g => { if (!cancelled) setViewBoundary(g) })
+    return () => { cancelled = true }
+  }, [viewMapDialog.open, viewMapDialog.hotspot?.barangay_details?.barangay_id])
+
   const [confirmDialog, setConfirmDialog] = useState<DialogState>({ open: false })
   const [cancelDialog, setCancelDialog] = useState<{ open: boolean }>({ open: false })
   const [loadingDialog, setLoadingDialog] = useState<{ open: boolean }>({ open: false })
   const [deleteDialog, setDeleteDialog] = useState<DialogState>({ open: false, hotspot: null })
   const [blockedDialog, setBlockedDialog] = useState<{ open: boolean }>({ open: false })
-  const [dialogBarangay, setDialogBarangay] = useState<Barangay | null>(null)
+  const [bulkBarangay, setBulkBarangay] = useState<Barangay | null>(null)
 
   const [successDialog, setSuccessDialog] = useState<{ open: boolean }>({ open: false })
   const [errorDialog, setErrorDialog] = useState<{ open: boolean; message: string }>({ open: false, message: '' })
-  const [actionResult, setActionResult] = useState<{ name: string; action: 'Updated' | 'Added' | 'Removed' } | null>(null)
+  const [actionResult, setActionResult] = useState<{ name: string; action: 'Updated' | 'Added' | 'Removed'; plural?: boolean } | null>(null)
   const [loadingMessage, setLoadingMessage] = useState<{ title: string; description: string }>({
     title: "Saving Changes",
     description: "Processing hotspot details. Please wait.",
@@ -209,6 +237,7 @@ export default function HotspotManagement() {
   const h = formDialog.hotspot
   const isUnchanged = isEdit && !!h &&
     sameText(barangay, h.barangay_details?.barangay_id) &&
+    sameText(purok, h.purok ?? "") &&
     sameText(hotspotCode, h.code) &&
     sameText(description, h.description) &&
     sameNum(latitude, h.latitude) &&
@@ -290,6 +319,7 @@ export default function HotspotManagement() {
         // edit
         setBarangay(String(formDialog.hotspot.barangay_details?.barangay_id ?? ""))
         setHotspotCode(formDialog.hotspot.code ?? "")
+        setPurok(String(formDialog.hotspot.purok ?? ""))
         setDescription(formDialog.hotspot.description ?? "")
         setLatitude(String(formDialog.hotspot.latitude))
         setLongitude(String(formDialog.hotspot.longitude))
@@ -298,25 +328,13 @@ export default function HotspotManagement() {
         setSensorHeight(String(formDialog.hotspot.sensor_height ?? ""))
         setCanalDepth(String(formDialog.hotspot.canal_depth ?? ""))
         if (formDialog.hotspot.barangay_details?.barangay_name) {
-          loadBoundary(formDialog.hotspot.barangay_details.barangay_name)
+          loadBoundary(formDialog.hotspot.barangay_details.barangay_id, formDialog.hotspot.barangay_details.barangay_name)
         }
-      } else if (dialogBarangay) {
-        // add — prefilled from the barangay row that triggered this
-        setBarangay(String(dialogBarangay.barangay_id))
-        setDescription("")
-        setLatitude("")
-        setLongitude("")
-        setCanalWidth("")
-        setCanalShape("rectangular")
-        setSensorHeight("")
-        setCanalDepth("")
-        setFieldErrors({})
-        loadBoundary(dialogBarangay.barangay_name)
-        fetchNextHotspotCode(dialogBarangay.barangay_id)
-      }
+      } 
     } else {
       setBarangay("")
       setHotspotCode("")
+      setPurok("")
       setDescription("")
       setLatitude("")
       setLongitude("")
@@ -327,7 +345,6 @@ export default function HotspotManagement() {
       setFieldErrors({})
       setBoundaryGeoJson(null)
       setBoundaryFallback(false)
-      setDialogBarangay(null)
     }
   }, [formDialog.open])
   
@@ -343,11 +360,11 @@ export default function HotspotManagement() {
 
 
   // Boundary fetch on barangay select
-  const loadBoundary = useCallback(async (barangayName: string) => {
+  const loadBoundary = useCallback(async (barangayId: number, barangayName: string) => {
     setBoundaryLoading(true)
     setBoundaryGeoJson(null)
     setBoundaryFallback(false)
-    const geoJson = await fetchBarangayBoundary(barangayName)
+    const geoJson = await fetchBarangayBoundaryById(barangayId, barangayName)
     if (geoJson) {
       setBoundaryGeoJson(geoJson)
       setBoundaryFallback(false)
@@ -417,6 +434,7 @@ export default function HotspotManagement() {
   const handleConfirmationDialog = () => {
     const errors: Record<string, string> = {}
     if (!hotspotCode.trim()) errors.hotspotCode = "This field is required."
+    if (!purok) errors.purok = "Please select a purok."
     if (!description.trim()) errors.description = "This field is required."
     if (!latitude) errors.latitude = "Please click on the map to set the location."
     if (!longitude) errors.longitude = "Please click on the map to set the location."
@@ -464,6 +482,7 @@ export default function HotspotManagement() {
 
     const payload = {
       barangay: parseInt(barangay),
+      purok: parseInt(purok),
       code: hotspotCode.trim(),
       description: description.trim(),
       latitude: parseFloat(latitude),
@@ -475,15 +494,9 @@ export default function HotspotManagement() {
     }
 
     try {
-      if (isEdit) {
-        const updated = await api.patch(`/api/hotspots/${formDialog.hotspot!.hotspot_id}/`, payload)
-        hotspotsCache.setData(prev => prev.map(h => h.hotspot_id === formDialog.hotspot!.hotspot_id ? { ...h, ...updated } : h))
-        setActionResult({ name: updated.name, action: 'Updated' })
-      } else {
-        const created = await api.post("/api/hotspots/", payload)
-        hotspotsCache.setData(prev => [created, ...prev])
-        setActionResult({ name: created.name, action: 'Added' })
-      }
+      const updated = await api.patch(`/api/hotspots/${formDialog.hotspot!.hotspot_id}/`, payload)
+      hotspotsCache.setData(prev => prev.map(h => h.hotspot_id === formDialog.hotspot!.hotspot_id ? { ...h, ...updated } : h))
+      setActionResult({ name: updated.name, action: 'Updated' })
       setFormDialog({ open: false, hotspot: null })
       setLoadingDialog({ open: false })
       setSuccessDialog({ open: true })
@@ -534,6 +547,46 @@ export default function HotspotManagement() {
     setSuccessDialog({ open: false })
     setActionResult(null)
   }
+
+  useEffect(() => {
+    if (!historyDialog.open || !historyDialog.hotspot) {
+      setHistoryRows([])
+      setHistoryError(false)
+      setHistoryFrom('')
+      setHistoryTo('')
+      return
+    }
+    let cancelled = false
+    const hotspotId = historyDialog.hotspot.hotspot_id
+
+    const loadHistory = async () => {
+      setHistoryLoading(true)
+      setHistoryError(false)
+      try {
+        const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/hotspots/${hotspotId}/assignment-history/${historyFrom || historyTo ? `?${rangeQuery(historyFrom, historyTo)}` : ''}`)
+        if (!res.ok) throw new Error()
+        const data = await res.json()
+        if (!cancelled) setHistoryRows(data.results ?? data)
+      } catch {
+        if (!cancelled) setHistoryError(true)
+      } finally {
+        if (!cancelled) setHistoryLoading(false)
+      }
+    }
+    loadHistory()
+    return () => { cancelled = true }
+  }, [historyDialog.open, historyDialog.hotspot, historyFrom, historyTo])
+
+  const currentUser = getUser()
+  const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'MENRO'
+
+  const historyPrintRows = historyRows.map(h => [
+    h.node_name || '—',
+    new Date(h.started_at).toLocaleDateString(),
+    h.ended_at ? new Date(h.ended_at).toLocaleDateString() : 'Current',
+    h.end_reason || '—',
+    remarksText(h),
+  ])
 
   // selected barangay object for map center fallback
   const selectedBarangay = allBarangays.find(b => String(b.barangay_id) === barangay)
@@ -625,7 +678,7 @@ export default function HotspotManagement() {
                                 View ({barangayHotspots.length})
                               </Button>
                               <Button
-                                onClick={() => { setDialogBarangay(barangay); setFormDialog({ open: true, hotspot: null }) }}
+                                onClick={() => setBulkBarangay(barangay)}
                                 className="p-3 py-3 rounded-lg cursor-pointer bg-[#1565BC] hover:bg-[#135499] text-white text-xs"
                               >
                                 <FaPlus color="white" size={12} /> Add Hotspot
@@ -647,7 +700,13 @@ export default function HotspotManagement() {
                                       >
                                         <div className="min-w-0">
                                           <p className="font-bold text-xs text-[#122A48] truncate">{hotspot.name}</p>
-                                          <p className="text-[#727272] text-xs capitalize truncate">{hotspot.canal_shape}</p>
+                                          <p className="text-[#727272] text-xs truncate">
+                                            <span className="capitalize">{hotspot.canal_shape}</span>
+                                            {" · "}
+                                            {hotspot.purok
+                                              ? `Purok ${hotspot.purok}`
+                                              : <span className="text-[#E65100] font-semibold">Needs purok</span>}
+                                          </p>
                                         </div>
                                         <div className="min-w-0 text-[#727272] text-xs truncate">
                                           {hotspot.description || "—"}
@@ -689,6 +748,12 @@ export default function HotspotManagement() {
                                                     right: window.innerWidth - (document.getElementById(`menu-btn-${hotspot.hotspot_id}`)?.getBoundingClientRect().right ?? 0),
                                                   }}
                                                 >
+                                                  <button
+                                                    onClick={() => { setOpenMenuId(null); setHistoryDialog({ open: true, hotspot }) }}
+                                                    className="flex items-center gap-2 w-full px-3 py-2.5 text-left text-xs text-[#1565BC] hover:bg-[#DBEAFE] cursor-pointer"
+                                                  >
+                                                    <History size={14} /> View History
+                                                  </button>
                                                   <button
                                                     onClick={() => { setOpenMenuId(null); setFormDialog({ open: true, hotspot }) }}
                                                     className="flex items-center gap-2 w-full px-3 py-2.5 text-left text-xs text-[#1565BC] hover:bg-[#DBEAFE] cursor-pointer"
@@ -838,27 +903,47 @@ export default function HotspotManagement() {
                   </div>
                 </div>
 
-                {/* Description */}
+                {/* Purok + Description */}
                 <div className="p-2.5 md:p-4 -mt-3">
-                  <div ref={descriptionRef}>
-                    <Field className="flex gap-1.5 flex-col">
-                      <FieldLabel className="text-[#122A48] text-xs md:text-sm">DESCRIPTION <span className="text-[#FF0000]">*</span></FieldLabel>
-                      <textarea
-                        value={description}
-                        onChange={e => {
-                          setDescription(e.target.value)
-                          if (fieldErrors.description) setFieldErrors(prev => ({ ...prev, description: "" }))
-                        }}
-                        rows={1}
-                        placeholder="Brief description or landmark of this hotspot location e.g. (Near Tsongsan)..."
-                        className={`w-full text-[#122A48] rounded-lg text-sm border bg-[#1565BC05] px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-[#1565BC40] ${
-                          fieldErrors.description ? "border-[#FF0000]" : "border-[#727272]"
-                        }`}
-                      />
-                      <FieldError className="text-xs">{fieldErrors.description}</FieldError>
-                    </Field>
+                  <div className="flex gap-3 items-start">
+                    <div className="w-32 md:w-44 shrink-0">
+                      <Field className="flex gap-1.5 flex-col">
+                        <FieldLabel className="text-[#122A48] text-xs md:text-sm">PUROK <span className="text-[#FF0000]">*</span></FieldLabel>
+                        <PurokSelect
+                          size="md"
+                          value={purok}
+                          onChange={value => {
+                            setPurok(value)
+                            if (fieldErrors.purok) setFieldErrors(prev => ({ ...prev, purok: "" }))
+                          }}
+                          count={selectedBarangay?.purok_count}
+                          error={!!fieldErrors.purok}
+                        />
+                        <FieldError className="text-xs">{fieldErrors.purok}</FieldError>
+                      </Field>
+                    </div>
+
+                    <div ref={descriptionRef} className="flex-1 min-w-0">
+                      <Field className="flex gap-1.5 flex-col">
+                        <FieldLabel className="text-[#122A48] text-xs md:text-sm">DESCRIPTION <span className="text-[#FF0000]">*</span></FieldLabel>
+                        <textarea
+                          value={description}
+                          onChange={e => {
+                            setDescription(e.target.value)
+                            if (fieldErrors.description) setFieldErrors(prev => ({ ...prev, description: "" }))
+                          }}
+                          rows={1}
+                          placeholder="Brief description or landmark, e.g. (Near Tsongsan)..."
+                          className={`w-full h-10 md:h-10.5 py-2.5 text-[#122A48] rounded-lg text-sm border bg-[#1565BC05] px-3 resize-none focus:outline-none focus:ring-2 focus:ring-[#1565BC40] ${
+                            fieldErrors.description ? "border-[#FF0000]" : "border-[#727272]"
+                          }`}
+                        />
+                        <FieldError className="text-xs">{fieldErrors.description}</FieldError>
+                      </Field>
+                    </div>
                   </div>
                 </div>
+
               </div>
             </div>
 
@@ -1102,7 +1187,8 @@ export default function HotspotManagement() {
               latitude={viewMapDialog.hotspot?.latitude}
               longitude={viewMapDialog.hotspot?.longitude}
               label={viewMapDialog.hotspot?.name}
-              zoom={16}
+              zoom={viewBoundary ? 15 : 16}
+              boundaryGeoJson={viewBoundary}
               showLegend={true}
               colorMode="availability"
               markers={allHotspotMarkers}
@@ -1206,10 +1292,28 @@ export default function HotspotManagement() {
         title="Success!"
         description={
           <>
-            <strong>{actionResult?.name}</strong> has been {actionResult?.action.toLowerCase()} successfully.
+            <strong>{actionResult?.name}</strong> {actionResult?.plural ? 'have' : 'has'} been {actionResult?.action.toLowerCase()} successfully.
           </>
         }
         confirmLabel="Done"
+      />
+
+      {/* Add one or several hotspots (all or nothing) */}
+      <AddHotspotsDialog
+        open={!!bulkBarangay}
+        barangay={bulkBarangay}
+        existingMarkers={allHotspotMarkers}
+        onClose={() => setBulkBarangay(null)}
+        onCreated={(created) => {
+          hotspotsCache.setData(prev => [...created, ...prev])
+          setActionResult({
+            name: created.length === 1 ? created[0].name : `${created.length} hotspots`,
+            action: 'Added',
+            plural: created.length > 1,
+          })
+          setBulkBarangay(null)
+          setSuccessDialog({ open: true })
+        }}
       />
 
       {/* Error dialog */}
@@ -1225,6 +1329,93 @@ export default function HotspotManagement() {
       />
 
       <Toast toasts={toasts} onRemove={removeToast} />
+
+      <Dialog open={historyDialog.open}>
+        <DialogContent className="[&>button]:hidden p-0 text-[#122A48] rounded-lg border border-[#C6C6C8] min-w-80 md:min-w-[700px] max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <div className="flex justify-between items-center p-2 md:p-3 -mb-4">
+              <div className="flex flex-col">
+                <p className="font-bold text-sm md:text-base">{historyDialog.hotspot?.name}</p>
+                <p className="text-[11px] text-[#727272]">Node Assignment History</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={() => exportOrPrint({
+                    table: {
+                      title: `${historyDialog.hotspot?.name ?? 'Hotspot'} — Assignment History`,
+                      columns: ["Node", "From", "To", "Reason", "Remarks"],
+                      rows: historyPrintRows,
+                    },
+                    onError: () => addToast("Failed to export history. Please try again.", "error"),
+                  })}
+                  disabled={historyLoading || historyError || historyRows.length === 0}
+                  className="cursor-pointer bg-[#2fd45b] hover:bg-[#28b54e] text-white text-xs"
+                >
+                  <FileDown size={14} className="mr-1" />
+                  Export
+                </Button>
+                <button className="cursor-pointer" onClick={() => setHistoryDialog({ open: false, hotspot: null })}>
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          </DialogHeader>
+          <DialogTitle className="sr-only">Node Assignment History</DialogTitle>
+
+          <div className="flex items-center p-2 md:p-3 border-b border-[#C6C6C8]">
+            <DateRangeFilter from={historyFrom} to={historyTo} onChange={(f, t) => { setHistoryFrom(f); setHistoryTo(t) }} width="w-[210px]" />
+          </div>
+
+          <Table>
+            <TableHeader className="bg-[#e8eef1b4] border border-[#CFD8DC]">
+              <TableRow>
+                <TableHead className="font-semibold text-center text-xs text-[#727272]">NODE</TableHead>
+                <TableHead className="font-semibold text-center text-xs text-[#727272]">FROM</TableHead>
+                <TableHead className="font-semibold text-center text-xs text-[#727272]">TO</TableHead>
+                <TableHead className="font-semibold text-center text-xs text-[#727272]">REASON</TableHead>
+                <TableHead className="font-semibold text-center text-xs text-[#727272]">REMARKS</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {historyError ? (
+                <TableRow><TableCell colSpan={5} className="text-center py-10"><p className="text-[#D81010] font-semibold text-sm">Failed to load assignment history.</p></TableCell></TableRow>
+              ) : historyLoading ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-10">
+                    <div className="flex flex-col items-center gap-2">
+                      <SpinnerIcon size={24} />
+                      <p className="text-[#727272] text-sm">Loading assignment history...</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : historyRows.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center py-10"><p className="text-[#727272] text-sm">No nodes have been assigned to this hotspot yet.</p></TableCell></TableRow>
+              ) : (
+                historyRows.map(h => (
+                  <TableRow key={h.history_id} className="border-b border-[#C6C6C8] text-xs">
+                    <TableCell className="text-center h-11">{h.node_name || '—'}</TableCell>
+                    <TableCell className="text-center h-11">{new Date(h.started_at).toLocaleDateString()}</TableCell>
+                    <TableCell className="text-center h-11">
+                      {h.ended_at ? new Date(h.ended_at).toLocaleDateString() : (
+                        <span className="inline-block px-2 py-0.5 rounded-full bg-[#B2FBC173] text-[#2C7B3C] text-[11px] font-medium">Current</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center h-11">{h.end_reason || '—'}</TableCell>
+                    <TableCell className="text-left h-11 max-w-[220px] whitespace-normal break-words">{remarksText(h)}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </DialogContent>
+      </Dialog>
+
+      <PrintReport
+        reportTitle={`${historyDialog.hotspot?.name ?? 'Hotspot'} — Assignment History`}
+        columns={["Node", "From", "To", "Reason", "Remarks"]}
+        rows={historyPrintRows}
+        generatedBy={generatedBy}
+      />
     </>
   )
 }

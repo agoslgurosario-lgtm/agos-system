@@ -1,7 +1,7 @@
 import React from "react";
 import { Modal, View, Text, TouchableOpacity, Pressable, ActivityIndicator } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { SEVERITY_COLORS } from "@/constants/reports";
+import { SEVERITY_COLORS, severityLabel } from "@/constants/reports";
 import type { ReportSeverity } from "@/types/reports";
 
 interface SubmitReportModalProps {
@@ -74,7 +74,7 @@ export function SubmitReportModal({ visible, onClose, onConfirm, isSubmitting = 
               {severityColors && summary.severity ? (
                 <View className="rounded-lg px-2 py-0.5" style={{ backgroundColor: severityColors.bg }}>
                   <Text className="text-[11px] font-bold" style={{ color: severityColors.text }}>
-                    {summary.severity}
+                    {severityLabel(summary.severity)}
                   </Text>
                 </View>
               ) : (

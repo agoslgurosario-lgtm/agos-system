@@ -7,11 +7,14 @@ import { ClogEvent } from '../../types/clog-events'
 import Pagination from '../../components/alerts/Pagination'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import AlertBellButton from '@/components/alerts/AlertBellButton'
-import MonthFilter from '../../components/common/MonthFilter'
-import { currentMonthValue, monthLabel, monthOfIso } from '../../lib/months'
+import DateRangeFilter from '../../components/common/DateRangeFilter'
+import { clogSeverityLabel } from '../../constants/clogSeverity'
+import { currentMonthRange, rangeLabel, rangeQuery, inRange } from '../../lib/dateRange'
+import { ReopenedNotice } from "@/components/clogs/ReopenedNotice";
 
 import { useAuth } from '../../lib/AuthContext'
 import { useLiveSocket } from '../../lib/useLiveSocket'
+import { formatWeight } from '../../lib/formatWeight'
 
 const PAGE_SIZE = 5
 const SEVERITY_TABS = ['All', 'High', 'Medium', 'Low'] as const
@@ -20,6 +23,12 @@ const SEVERITY_STYLE: Record<string, { bg: string; text: string }> = {
   High:   { bg: '#FEE2E2', text: '#D81010' },
   Medium: { bg: '#FFF3E0', text: '#FF9705' },
   Low:    { bg: '#E7F7EE', text: '#1F9D55' },
+}
+
+const STATUS_STYLE: Record<string, { bg: string; text: string; dot: string }> = {
+  Detected:  { bg: '#FEE2E2', text: '#D81010', dot: '#D81010' },
+  Responded: { bg: '#E0F2FE', text: '#1565BC', dot: '#1565BC' },
+  Cleared:   { bg: '#E7F7EE', text: '#1F9D55', dot: '#1F9D55' },
 }
 
 function formatDate(iso?: string | null) {
@@ -44,9 +53,9 @@ export default function ClogEventsScreen() {
   const [selectedTab, setSelectedTab] = useState<(typeof SEVERITY_TABS)[number]>('All')
   const [page, setPage] = useState(1)
 
-  const [month, setMonth] = useState(currentMonthValue())
+  const [range, setRange] = useState(currentMonthRange())
   const [fetching, setFetching] = useState(false)
-  const monthRef = useRef(currentMonthValue())
+  const rangeRef = useRef(currentMonthRange())
   const requestId = useRef(0)
 
   const fetchEvents = async (isRefresh = false) => {
@@ -59,7 +68,7 @@ export default function ClogEventsScreen() {
     setFetching(true)
     setError(false)
     try {
-      const data = await api.get(`/api/clog-events/?month=${monthRef.current}`)
+      const data = await api.get(`/api/clog-events/?${rangeQuery(rangeRef.current.from, rangeRef.current.to)}`)
       if (myRequest !== requestId.current) return
       setEvents(Array.isArray(data) ? data : [])
       hasLoadedOnce.current = true
@@ -74,9 +83,9 @@ export default function ClogEventsScreen() {
     }
   }
 
-  const selectMonth = (value: string) => {
-    monthRef.current = value
-    setMonth(value)
+  const selectRange = (from: string, to: string) => {
+    rangeRef.current = { from, to }
+    setRange({ from, to })
     setPage(1)
     fetchEvents()
   }
@@ -96,7 +105,7 @@ export default function ClogEventsScreen() {
       setEvents((prev) => {
         const exists = prev.some((e) => e.event_id === incoming.event_id)
         if (exists) return prev.map((e) => (e.event_id === incoming.event_id ? incoming : e))
-        const inView = monthRef.current === 'All' || monthOfIso(incoming.detected_at) === monthRef.current
+        const inView = inRange(incoming.detected_at, rangeRef.current.from, rangeRef.current.to)
         return inView ? [incoming, ...prev] : prev
       })
     },
@@ -116,7 +125,7 @@ export default function ClogEventsScreen() {
   const totalCount = events.length
   const detectedCount = events.filter(e => e.status === 'Detected').length
   const respondedCount = events.filter(e => e.status === 'Responded').length
-  const resolvedCount = events.filter(e => e.status === 'Cleared' || e.status === 'Verified').length
+  const resolvedCount = events.filter(e => e.status === 'Cleared').length
 
   const handlePress = (event: ClogEvent) => {
     setSelectedEvent(event)
@@ -155,7 +164,7 @@ export default function ClogEventsScreen() {
                 }`}
               >
                 <Text className={`text-[13px] font-semibold ${isActive ? 'text-white' : 'text-[#64748B]'}`}>
-                  {tab} ({count})
+                  {tab === 'All' ? 'All' : clogSeverityLabel(tab)} ({count})
                 </Text>
               </Pressable>
             )
@@ -170,7 +179,7 @@ export default function ClogEventsScreen() {
         }
       >
         <View className='flex justify-center items-center'>
-          <MonthFilter value={month} onChange={selectMonth}/>
+          <DateRangeFilter from={range.from} to={range.to} onChange={selectRange} loading={fetching}/>
         </View>
         
         {error && (
@@ -236,7 +245,7 @@ export default function ClogEventsScreen() {
         {/* list */}
         {filteredEvents.length === 0 ? (
           <Text className="text-[#94A3B8] text-sm text-center mt-8">
-            No events found for {selectedTab} severity in {monthLabel(month)}.
+            No events found for {selectedTab === 'All' ? 'any' : clogSeverityLabel(selectedTab)} severity in {rangeLabel(range.from, range.to)}.
           </Text>
         ) : (
           paginatedEvents.map(item => {
@@ -246,6 +255,8 @@ export default function ClogEventsScreen() {
             const waterLevel = item.reading_details?.water_level
             const waterFlow = item.reading_details?.water_flow_rate
             const clogPct = item.reading_details?.clog_pct
+            const estWeight = item.classification_details?.estimated_volume
+            const stStyle = STATUS_STYLE[item.status] ?? STATUS_STYLE.Detected
 
             return (
               <Pressable
@@ -273,11 +284,30 @@ export default function ClogEventsScreen() {
                     )}
                     <View className="px-2.5 py-1 rounded-2xl" style={{ backgroundColor: sevStyle.bg }}>
                       <Text className="text-[10px] font-extrabold" style={{ color: sevStyle.text }}>
-                        {item.severity}
+                        {clogSeverityLabel(item.severity)}
                       </Text>
                     </View>
                   </View>
                 </View>
+
+                {/* status: has the barangay responded yet? */}
+                <View className="flex-row flex-wrap items-center gap-1.5 mt-2.5">
+                  <View className="px-2.5 py-1 rounded-2xl flex-row items-center gap-1.5" style={{ backgroundColor: stStyle.bg }}>
+                    <View className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: stStyle.dot }} />
+                    <Text className="text-[10px] font-bold" style={{ color: stStyle.text }}>{item.status}</Text>
+                  </View>
+                  {item.status === 'Responded' && item.responded_at ? (
+                    <Text className="text-[10px] text-[#64748B]">Responded {formatDate(item.responded_at)}</Text>
+                  ) : null}
+                  {item.status === 'Detected' ? (
+                    <Text className="text-[10px] text-[#94A3B8]">Not responded yet</Text>
+                  ) : null}
+                  {item.status === 'Cleared' && !item.responded_at ? (
+                    <Text className="text-[10px] text-[#94A3B8]">Cleared without a response</Text>
+                  ) : null}
+                </View>
+
+                {item.reopened_at && item.status === 'Detected' ? <ReopenedNotice status="Detected" compact /> : null}
 
                 <View className="flex-row justify-between mt-2.5 pt-2.5 border-t border-[#F1F5F9]">
                   <View className="flex-[1.2]">
@@ -298,6 +328,13 @@ export default function ClogEventsScreen() {
                       {waterFlow != null ? `${Number(waterFlow).toFixed(4)} m/s` : '--'}
                     </Text>
                   </View>
+                </View>
+
+                <View className="flex-row gap-1 mt-2.5 pt-2.5 border-t border-[#F1F5F9]">
+                  <Text className="text-[10px] text-[#94A3B8] font-medium">Estimated Weight (AI):</Text>
+                  <Text className="text-[11px] font-bold text-[#334155]">
+                    {(estWeight ?? 0) > 0 ? `~ ${formatWeight(estWeight)}` : '0 g'}
+                  </Text>
                 </View>
               </Pressable>
             )

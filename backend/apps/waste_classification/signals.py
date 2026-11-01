@@ -18,6 +18,7 @@ def link_classification_to_clog_event(sender, instance, created, **kwargs):
     open_event = ClogEvent.objects.filter(
         node=instance.node,
         status__in=['Detected', 'Responded'],
+        settled_at__isnull=True,
         classification__isnull=True
     ).order_by('-detected_at').first()
 

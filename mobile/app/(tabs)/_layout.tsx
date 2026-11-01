@@ -56,10 +56,10 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="readings"
+          name="nodes"
           options={{
-            title: 'Readings',
-            tabBarIcon: ({ color }) => <IconSymbol size={24} name="waveform.path.ecg" color={color} />,
+            title: 'Nodes',
+            tabBarIcon: ({ color }) => <IconSymbol size={24} name="antenna.radiowaves.left.and.right" color={color} />,
           }}
         />
         <Tabs.Screen

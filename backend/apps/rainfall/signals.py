@@ -7,5 +7,5 @@ from .models import RainfallCondition
 
 @receiver(post_save, sender=Barangay)
 def create_rainfall_condition_on_registration(sender, instance, created, **kwargs):
-    if instance.is_registered:
+    if instance.is_registered and instance.is_active:
         RainfallCondition.objects.get_or_create(barangay=instance)

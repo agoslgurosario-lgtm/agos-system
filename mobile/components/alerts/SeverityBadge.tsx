@@ -1,5 +1,6 @@
 import { Text, View } from "react-native";
 import { Severity } from "../../types/alert";
+import { severityLabel } from "@/constants/reports";
 
 interface Props {
   severity: Severity;
@@ -31,7 +32,7 @@ export default function SeverityBadge({ severity }: Props) {
   return (
     <View className={`px-3 py-1 rounded-full ${colors[severity].bg}`}>
       <Text className={`text-xs font-semibold ${colors[severity].text}`}>
-        {severity}
+        {severityLabel(severity)}
       </Text>
     </View>
   );

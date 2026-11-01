@@ -15,6 +15,8 @@ from apps.users.authentication import CookieJWTAuthentication
 from rest_framework.pagination import PageNumberPagination
 from .services import overall_status_q
 
+from agos_backend.date_range import has_date_range, filter_by_date_range
+
 
 class ReadingsPagination(PageNumberPagination):
     page_size = 20
@@ -52,15 +54,21 @@ class SensorReadingListView(generics.ListCreateAPIView):
         )
 
     def get_queryset(self):
-        qs = SensorReading.objects.select_related('node').order_by('-timestamp')
+        qs = SensorReading.objects.select_related('node', 'wasteclassification').order_by('-timestamp')
         user = self.request.user
 
         if getattr(user, 'user_role', None) == 'Barangay':
             qs = self._scope_to_barangay(qs, user.barangay)
 
+        node_id = self.request.query_params.get('node')
+        if node_id:
+            qs = qs.filter(node_id=node_id)
+
         # month filter is opt-in, so existing web calls with no params behave as before
         month = self.request.query_params.get('month')
-        if month and month != 'All':
+        if has_date_range(self.request):
+            qs = filter_by_date_range(qs, 'timestamp', self.request)
+        elif month and month != 'All':
             try:
                 target = datetime.strptime(month, '%Y-%m')
                 qs = qs.filter(timestamp__year=target.year, timestamp__month=target.month)
@@ -84,7 +92,7 @@ class SensorReadingListView(generics.ListCreateAPIView):
 
         # Card totals for the whole month (ignoring the severity tab), only computed
         # when a month is requested so unfiltered web calls aren't slowed down.
-        if request.query_params.get('month'):
+        if request.query_params.get('month') or has_date_range(request):
             response.data['summary'] = base.aggregate(
                 total=Count('pk'),
                 normal=Count('pk', filter=overall_status_q('Normal')),
@@ -112,7 +120,7 @@ class SensorReadingByNodeView(generics.ListAPIView):
         if status_param:
             qs = qs.filter(overall_status_q(status_param))
 
-        return qs
+        return filter_by_date_range(qs, 'timestamp', self.request)
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
@@ -461,6 +469,7 @@ class SensorReadingWithFlowView(APIView):
         open_event = ClogEvent.objects.filter(
             node=node,
             status__in=['Detected', 'Responded'],
+            settled_at__isnull=True,
         ).order_by('-detected_at').first()
 
         if open_event and open_event.classification is None:

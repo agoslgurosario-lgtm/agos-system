@@ -26,6 +26,7 @@ import { DIALOG_COLOR } from "@/lib/constant"
 type Barangay = {
   barangay_id: number
   barangay_name: string
+  is_active?: boolean
 }
 
 type SignatoryRecord = {
@@ -71,7 +72,7 @@ const POSITION_META: Record<string, { icon: typeof UserRound; color: string; des
 // fetch raw data - list of barangays for the top selector
 const fetchBarangaysRaw = async (): Promise<Barangay[]> => {
   const all = await api.get('/api/barangays/all/')
-  return (all.results ?? all).filter((b: Barangay) => b.barangay_name !== 'Admin')
+    return (all.results ?? all).filter((b: Barangay) => b.barangay_name !== 'Admin' && b.is_active !== false)
 }
 
 

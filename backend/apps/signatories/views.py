@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from .models import Signatory, POSITION_CHOICES
 from .serializers import SignatorySerializer
 from apps.barangay.models import Barangay
-from apps.users.permissions import IsAdmin
+from apps.users.permissions import IsAdmin, IsAdminOrMENRO
 from apps.audit_logs.utils import log_action
 
 HISTORY_LIMIT = 3
@@ -22,7 +22,12 @@ class SignatoryListView(APIView):
         Creates a new active signatory for that slot and archives whichever
         one was active there before (single-active-signatory rule).
     """
-    permission_classes = [IsAdmin]
+    def get_permissions(self):
+        # anyone who can view or print a report may read the signatories;
+        # only admins can add or change them
+        if self.request.method == 'GET':
+            return [IsAdminOrMENRO()]
+        return [IsAdmin()]
 
     def get(self, request):
       barangay_id = request.query_params.get('barangay')

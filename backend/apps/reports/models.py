@@ -7,7 +7,7 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 class CanalMonitoringReport(models.Model):
     SEVERITY_CHOICES = [
         ('Critical', 'Critical'),
-        ('Medium', 'Medium'),
+        ('Medium', 'Moderate'),
         ('Low', 'Low'),
     ]
     WATER_LEVEL_CHOICES = [
@@ -31,9 +31,40 @@ class CanalMonitoringReport(models.Model):
         ('L', 'L'),
         ('Other', 'Other'),
     ]
+    STATUS_CHOICES = [
+        ('Draft', 'Draft'),
+        ('Awaiting_Post_Report', 'Awaiting Post-Report'),
+        ('Ready_To_Verify', 'Ready to Verify'),
+        ('Verified', 'Verified'),
+        ('Submitted', 'Submitted'),
+        ('Voided', 'Voided'),
+    ]
+    CONDITION_SOURCE_CHOICES = [('Sensor', 'Sensor'), ('Manual', 'Manual'), ('Mixed', 'Mixed')]
+    SCOPE_CHOICES = [('Purok', 'Single purok'), ('Barangay', 'Whole barangay')]
 
     report_id = models.AutoField(primary_key=True)
     is_submitted = models.BooleanField(default=False)
+    status = models.CharField(max_length=24, choices=STATUS_CHOICES, default='Draft')
+    condition_source = models.CharField(max_length=10, choices=CONDITION_SOURCE_CHOICES, default='Manual')
+    post_completed_at = models.DateTimeField(null=True, blank=True)
+    report_scope = models.CharField(max_length=10, choices=SCOPE_CHOICES, default='Purok')
+
+    verified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='verified_canal_reports',
+    )
+    verified_at = models.DateTimeField(null=True, blank=True)
+    void_reason = models.TextField(blank=True, default='')
+    voided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='voided_canal_reports',
+    )
+    voided_at = models.DateTimeField(null=True, blank=True)
+    submission = models.ForeignKey(
+        'reports.PeriodSubmission', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='reports',
+    )
+    carried_over = models.BooleanField(default=False)   # submitted in a later period than its own
 
     # Monitoring Site Information
     barangay = models.ForeignKey(
@@ -44,7 +75,7 @@ class CanalMonitoringReport(models.Model):
     purok = models.PositiveSmallIntegerField(
         null=True,
         blank=True,
-        validators=[MinValueValidator(1), MaxValueValidator(7)],
+        validators=[MinValueValidator(1), MaxValueValidator(30)],
     )
 
     # Detection Summary
@@ -73,7 +104,7 @@ class CanalMonitoringReport(models.Model):
     waste_other_label = models.CharField(max_length=100, blank=True)
 
     # Barangay Response
-    assigned_personnel = models.CharField(max_length=150, null=True, blank=True)
+    assigned_personnel = models.CharField(max_length=500, null=True, blank=True)
     date_responded = models.DateTimeField(null=True, blank=True)
     action_taken = models.TextField(null=True, blank=True)
     waste_collected_amount = models.FloatField(null=True, blank=True)
@@ -105,6 +136,15 @@ class CanalMonitoringReport(models.Model):
     def __str__(self):
         when = self.date_observed.date() if self.date_observed else "draft"
         return f"Report {self.report_id} — {self.barangay.barangay_name} ({when})"
+
+
+def save(self, *args, **kwargs):
+    if self.is_submitted and self.status != 'Submitted':
+        self.status = 'Submitted'
+        fields = kwargs.get('update_fields')
+        if fields is not None:
+            kwargs['update_fields'] = set(fields) | {'status'}
+    super().save(*args, **kwargs)
 
 
 def report_media_upload_path(instance, filename):
@@ -200,3 +240,83 @@ class ReportCustomWaste(models.Model):
 
     def __str__(self):
         return f"{self.report_id}: {self.waste_type.name} {self.weight_kg} kg"
+
+
+class ReportNodeSummary(models.Model):
+    """What one node's sensors recorded for a report. Names are copied in so later
+    renames or re-assignments don't change old reports."""
+    summary_id = models.AutoField(primary_key=True)
+    report = models.ForeignKey(
+        CanalMonitoringReport, on_delete=models.CASCADE,
+        related_name='node_summaries', db_column='report_id'
+    )
+    node = models.ForeignKey('sensor_nodes.SensorNode', null=True, blank=True,
+                             on_delete=models.SET_NULL, db_column='node_id')
+    hotspot = models.ForeignKey('hotspots.Hotspot', null=True, blank=True,
+                                on_delete=models.SET_NULL, db_column='hotspot_id')
+    node_name = models.CharField(max_length=100, blank=True, default='')
+    hotspot_name = models.CharField(max_length=100, blank=True, default='')
+    purok = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    window_start = models.DateTimeField()
+    window_end = models.DateTimeField()
+    reading_count = models.PositiveIntegerField(default=0)
+
+    peak_clog_pct = models.FloatField(null=True, blank=True)
+    avg_clog_pct = models.FloatField(null=True, blank=True)
+    peak_water_level_cm = models.FloatField(null=True, blank=True)
+    peak_water_level_pct = models.FloatField(null=True, blank=True)
+    peak_waste_kg = models.FloatField(null=True, blank=True)
+    min_flow_rate = models.FloatField(null=True, blank=True)
+    worst_water_status = models.CharField(max_length=10, blank=True, default='')   # Normal/Warning/Critical
+    worst_flow = models.CharField(max_length=10, blank=True, default='')           # Normal/Slow/Stagnant
+
+    class Meta:
+        db_table = 'tbl_report_node_summaries'
+        ordering = ['summary_id']
+
+
+class PeriodSubmission(models.Model):
+    """What a barangay sends to MENRO for one half-month period."""
+    submission_id = models.AutoField(primary_key=True)
+    barangay = models.ForeignKey(Barangay, on_delete=models.PROTECT, related_name='period_submissions')
+    period_start = models.DateField()
+    period_end = models.DateField()
+    due_date = models.DateField()
+    submitted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='period_submissions',
+    )
+    submitted_at = models.DateTimeField()
+    is_late = models.BooleanField(default=False)
+    days_late = models.PositiveSmallIntegerField(default=0)
+    report_count = models.PositiveIntegerField(default=0)
+    totals = models.JSONField(default=dict, blank=True)
+    signatory_snapshot = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = 'tbl_period_submissions'
+        ordering = ['-period_start']
+        constraints = [
+            models.UniqueConstraint(fields=['barangay', 'period_start'], name='uniq_submission_per_period'),
+        ]
+
+
+class ReportPurokRow(models.Model):
+    """One purok's canal condition inside a whole-barangay report."""
+    row_id = models.AutoField(primary_key=True)
+    report = models.ForeignKey(CanalMonitoringReport, on_delete=models.CASCADE, related_name='purok_rows')
+    purok = models.PositiveSmallIntegerField()
+    included = models.BooleanField(default=True)
+    source = models.CharField(max_length=10, default='Manual')
+    overall_water_level = models.CharField(max_length=12, null=True, blank=True)
+    overall_obstruction_coverage = models.CharField(max_length=12, null=True, blank=True)
+    overall_water_flow_condition = models.CharField(max_length=12, null=True, blank=True)
+    node_count = models.PositiveSmallIntegerField(default=0)
+    reading_count = models.PositiveIntegerField(default=0)
+    peak_clog_pct = models.FloatField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'tbl_report_purok_rows'
+        ordering = ['purok']
+        unique_together = ('report', 'purok')

@@ -27,6 +27,7 @@ const MAPPING = {
   'person.crop.circle': 'account-circle',
   'water-outline': 'opacity',
   'waveform.path.ecg': 'show-chart',
+  'antenna.radiowaves.left.and.right': 'sensors',
 } as IconMapping;
 
 /**

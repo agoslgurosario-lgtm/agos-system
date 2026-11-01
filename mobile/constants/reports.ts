@@ -15,9 +15,14 @@ export const PUROK_OPTIONS: Option<string>[] = Array.from({ length: 7 }, (_, i) 
 
 export const SEVERITY_OPTIONS: Option<ReportSeverity>[] = [
   { value: 'Critical', label: 'Critical' },
-  { value: 'Medium', label: 'Medium' },
+  { value: 'Medium', label: 'Moderate' },
   { value: 'Low', label: 'Low' },
 ]
+
+export const SEVERITY_LABEL: Record<string, string> = {
+  Critical: 'Critical', High: 'High', Medium: 'Moderate', Low: 'Low',
+}
+export const severityLabel = (s?: string | null) => (s && SEVERITY_LABEL[s]) || s || ''
 
 // used for badges in the list and view screens (swap colors if your web uses different ones)
 export const SEVERITY_COLORS: Record<ReportSeverity, { bg: string; text: string }> = {

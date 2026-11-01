@@ -29,6 +29,6 @@ export interface SensorNodeApi {
 export interface ClogEventApi {
   event_id: number;
   node: number;
-  status: "Detected" | "Responded" | "Cleared" | "Verified";
+  status: "Detected" | "Responded" | "Cleared"
   severity: "Low" | "Medium" | "High";
 }

@@ -8,8 +8,12 @@ import { Button } from "@/components/ui/button"
 import { FileDown, Trash, Recycle, Leaf, Trash2, Biohazard } from "lucide-react"
 import { useState } from "react"
 
+import { DateRangeFilter } from "@/components/DateRangeFilter"
+import { currentMonthRange } from "@/lib/dateRange"
+
+
 export function AnalyticsSkeleton() {
-  const [selectedMonth, setSelectedMonth] = useState<string>("current")
+  const [range] = useState(() => currentMonthRange())
 
   return (
     <div className="hidden md:flex md:flex-col md:h-full text-[#122A48]">
@@ -19,14 +23,7 @@ export function AnalyticsSkeleton() {
           <p className="font-bold text-base">Overview</p>
         </div>
         <div className="flex gap-2">
-          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="cursor-pointer px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectItem className="p-2 py-1 text-[#122A48]" value="current">This Month</SelectItem>
-            </SelectContent>
-          </Select>
+          <DateRangeFilter from={range.from} to={range.to} onChange={() => {}} disabled align="right" />
 
           <Button disabled className="bg-[#2fd45b] opacity-60">
             <FileDown size={16} className="mr-1" /> Export PDF
@@ -57,11 +54,11 @@ export function AnalyticsSkeleton() {
         {/* collected by barangay */}
         <div className="bg-[#FAFCFD] rounded-lg border border-[#C6C6C8] flex-1 min-w-0">
           <div className="w-full p-2">
-            <p className="font-bold text-sm">Collection by Barangay</p>
+            <p className="font-bold text-sm">Detection by Barangay</p>
           </div>
           <hr />
-          <div className="flex flex-col gap-4 px-3 py-4">
-            {[...Array(7)].map((_, i) => (
+          <div className="flex flex-col gap-3 min-h-[160px] px-3 py-4">
+            {[...Array(5)].map((_, i) => (
               <div key={i} className="flex items-center gap-8">
                 <Skeleton className="h-3 w-24 shrink-0" />
                 <Skeleton className="h-2 flex-1 rounded-full" />

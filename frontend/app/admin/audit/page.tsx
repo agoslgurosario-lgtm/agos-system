@@ -17,7 +17,7 @@ import { usePageCache } from "@/components/hooks/usePageCache"
 import { useFillRows } from "@/components/hooks/useFillRows"
 import { SpinnerIcon } from "@/components/SpinnerIcon"
 import { PrintReport } from "@/components/PrintReport/PrintReport"
-import { printReport } from "@/lib/printReport"
+import { exportOrPrint } from "@/lib/exportOrPrint"
 import { getUser } from "@/lib/auth"
 
 
@@ -182,8 +182,14 @@ export default function Audit() {
   const currentUser = getUser()
   const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Admin'
 
+  const printTitle = "Audit Logs"
+  const printColumns = ["ID", "User", "Action", "Table", "Old Value", "New Value", "IP Address", "Timestamp"]
+
   const handlePrint = () => {
-    printReport()
+    exportOrPrint({
+      table: { title: printTitle, columns: printColumns, rows: printRows },
+      onError: () => addToast("Failed to export. Please try again.", "error"),
+    })
   }
 
 
@@ -338,8 +344,8 @@ export default function Audit() {
     <Toast toasts={toasts} onRemove={removeToast} />
 
     <PrintReport
-      reportTitle="Audit Logs"
-      columns={["ID", "User", "Action", "Table", "Old Value", "New Value", "IP Address", "Timestamp"]}
+      reportTitle={printTitle}
+      columns={printColumns}
       rows={printRows}
       generatedBy={generatedBy}
     />

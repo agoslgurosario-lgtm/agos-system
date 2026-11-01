@@ -6,12 +6,16 @@ import { useRouter } from "next/navigation"
 // lib
 import { fetchWithAuth } from "@/lib/auth"
 import {
-  SEVERITY_STYLE,
+  SEVERITY_STYLE, SEVERITY_LABEL,
   formatDate, filedByName, buildMonthOptions,
-  reportDate, monthOf, weekOf, weekMatches, buildWeekOptions,
+  reportDate, monthOf, periodMatches, buildPeriodOptions, purokLabel,
+  ON_TIME_STYLE, LATE_STYLE, submissionStatus, inDateRange
 } from "@/lib/reportOptions"
 import { printReport } from "@/lib/printReport"
 import { getUser } from "@/lib/auth"
+import { barangayLabel } from "@/lib/barangayFilters"
+import { openPdf } from "@/lib/openPdf"
+import { isIOSDevice } from "@/lib/device"
 
 // shadcn
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, } from "@/components/ui/table"
@@ -33,6 +37,7 @@ import { SpinnerIcon } from "@/components/SpinnerIcon"
 import StyledBadge from "@/components/StyledBadge"
 import { PrintCanalReport } from "@/components/PrintReport/PrintCanalReport"
 import { PendingWasteTypes } from "@/components/PendingWasteTypes"
+import { DateRangeFilter } from "@/components/DateRangeFilter"
 
 // types
 import type { CanalMonitoringReport, ReportBarangay, ReportSeverity } from "@/types/report"
@@ -71,28 +76,38 @@ export default function BarangayReports() {
   const fetchError = barangaysCache.error || reportsCache.error
 
   // filter state
-  const [selectedMonth, setSelectedMonth] = useState<string>("All")
+  const now = new Date()
+  const currentMonthValue = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthValue)
   const [filterBarangay, setFilterBarangay] = useState("All")
   const [filterSeverity, setFilterSeverity] = useState("All")
+  const [filterTimeliness, setFilterTimeliness] = useState("All")
 
   const [printingReport, setPrintingReport] = useState<CanalMonitoringReport | null>(null)
   const [signatoryNames, setSignatoryNames] = useState<Record<string, string>>({})
 
-  const [selectedWeek, setSelectedWeek] = useState<string>("All")
+  const [selectedPeriod, setSelectedPeriod] = useState<string>("All")
+
+  // date range: when set, it replaces the month and period filters
+  const [startDate, setStartDate] = useState<string>('')
+  const [endDate, setEndDate] = useState<string>('')
+  const rangeActive = startDate !== '' || endDate !== ''
 
   const monthOptions = buildMonthOptions(reports)
-  const weekOptions = buildWeekOptions(selectedMonth)
+  const periodOptions = buildPeriodOptions(selectedMonth)
   
   const handleMonthChange = (value: string) => {
     setSelectedMonth(value)
-    setSelectedWeek("All")
+    setSelectedPeriod("All")
   }
 
   const filteredReports = reports
-    .filter(r => selectedMonth === "All" || monthOf(r) === selectedMonth)
-    .filter(r => weekMatches(r, selectedWeek))
+    // a date range replaces the month and period filters
+    .filter(r => rangeActive ? inDateRange(r, startDate, endDate) : (selectedMonth === "All" || monthOf(r) === selectedMonth))
+    .filter(r => rangeActive || periodMatches(r, selectedPeriod))
     .filter(r => filterBarangay === "All" || String(r.barangay_details?.barangay_id) === filterBarangay)
     .filter(r => filterSeverity === "All" || r.severity === filterSeverity)
+    .filter(r => filterTimeliness === "All" || submissionStatus(r) === filterTimeliness)
     .sort((a, b) => sortKey(b) - sortKey(a) || b.report_id - a.report_id)
 
   const { panelRef, tableWrapRef, rows } = useFillRows({
@@ -168,8 +183,15 @@ export default function BarangayReports() {
   const currentUser = getUser()
   const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Admin'
 
-  if (loading) return <BarangayReportsSkeleton/>
+  const handleExportReport = async (report: CanalMonitoringReport) => {
+    try {
+      await openPdf(`/api/canal-reports/${report.report_id}/export/`)
+    } catch {
+      addToast("Failed to export the report. Please try again.", "error")
+    }
+  }
 
+  if (loading) return <BarangayReportsSkeleton/>
 
   return (
     <>
@@ -180,7 +202,7 @@ export default function BarangayReports() {
           <div className="flex gap-3">
 
             {/* month filter */}
-            <Select value={selectedMonth} onValueChange={handleMonthChange}>
+            <Select value={selectedMonth} onValueChange={handleMonthChange} disabled={rangeActive}>
               <SelectTrigger className="cursor-pointer px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                 <SelectValue />
               </SelectTrigger>
@@ -194,19 +216,27 @@ export default function BarangayReports() {
               </SelectContent>
             </Select>
 
-            {/* week filter (only inside a single month) */}
-            <Select value={selectedWeek} onValueChange={setSelectedWeek} disabled={selectedMonth === "All"}>
+            {/* period filter (only inside a single month) */}
+            <Select value={selectedPeriod} onValueChange={setSelectedPeriod} disabled={rangeActive || selectedMonth === "All"}>
               <SelectTrigger className="cursor-pointer px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent position="popper" className="min-w-0 !max-h-70 overflow-y-auto">
-                {weekOptions.map(w => (
+                {periodOptions.map(w => (
                   <SelectItem key={w.value} className="p-2 py-1 cursor-pointer text-[#122A48]" value={w.value}>
                     {w.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+
+            {/* date range (overrides month and period) */}
+            <DateRangeFilter
+              from={startDate}
+              to={endDate}
+              onChange={(from, to) => { setStartDate(from); setEndDate(to) }}
+              width="w-[210px]"
+            />
 
             {/* barangay filter (all barangay regardless if they are registered or not) */}
             <Select value={filterBarangay} onValueChange={setFilterBarangay}>
@@ -219,7 +249,7 @@ export default function BarangayReports() {
                   .sort((a, b) => a.barangay_name.localeCompare(b.barangay_name))
                   .map((barangay) => (
                     <SelectItem className="cursor-pointer" key={barangay.barangay_id} value={String(barangay.barangay_id)}>
-                      {barangay.barangay_name}
+                      {barangayLabel(barangay)}
                     </SelectItem>
                   ))}
               </SelectContent>
@@ -238,6 +268,18 @@ export default function BarangayReports() {
               </SelectContent>
             </Select>
 
+            {/* submission filter (on time / late) */}
+            <Select value={filterTimeliness} onValueChange={setFilterTimeliness}>
+              <SelectTrigger className="cursor-pointer px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper" className="min-w-0">
+                <SelectItem value="All" className="p-2 py-1 cursor-pointer text-[#122A48]">All Submissions</SelectItem>
+                <SelectItem value="On time" className="p-2 py-1 cursor-pointer text-[#122A48]">On time</SelectItem>
+                <SelectItem value="Late" className="p-2 py-1 cursor-pointer text-[#122A48]">Late</SelectItem>
+              </SelectContent>
+            </Select>
+
           </div>
 
           {["MENRO", "MENRO_Staff"].includes(currentUser?.user_role ?? "") && <PendingWasteTypes />}
@@ -253,6 +295,7 @@ export default function BarangayReports() {
                 <TableHeader className="bg-[#e8eef1b4] border border-[#CFD8DC]">
                   <TableRow>
                     <TableHead className="font-semibold text-left text-xs text-[#727272]">DATE SUBMITTED</TableHead>
+                    <TableHead className="font-semibold text-left text-xs text-[#727272]">PERIOD</TableHead>
                     <TableHead className="font-semibold text-left text-xs text-[#727272]">BARANGAY</TableHead>
                     <TableHead className="font-semibold text-left text-xs text-[#727272]">PUROK</TableHead>
                     <TableHead className="font-semibold text-left text-xs text-[#727272]">SEVERITY</TableHead>
@@ -267,14 +310,24 @@ export default function BarangayReports() {
                       <TableRow key={report.report_id} className="border-b border-[#C6C6C8] text-xs">
                         <TableCell className="text-[#122A48] text-left h-14">
                           <p>{formatDate(reportDate(report))}</p>
-                          <p className="text-[10px] text-[#727272]">Week {weekOf(report)}</p>
+                        </TableCell>
+                        <TableCell className="text-[#122A48] text-left h-14">
+                          {report.submission_info ? (
+                            <>
+                              <p>{report.submission_info.label}</p>
+                              <StyledBadge
+                                text={submissionStatus(report) === "Late" ? `Late · ${report.submission_info.days_late}d` : "On time"}
+                                style={submissionStatus(report) === "Late" ? LATE_STYLE : ON_TIME_STYLE}
+                              />
+                            </>
+                          ) : "—"}
                         </TableCell>
                         <TableCell className="text-[#122A48] text-left h-14">{report.barangay_details?.barangay_name}</TableCell>
                         <TableCell className="text-[#122A48] text-left h-14 max-w-40 truncate">
-                          {report.purok ? `Purok ${report.purok}` : "—"}
+                          {purokLabel(report)}
                         </TableCell>
                         <TableCell className="text-[#122A48] text-left h-14">
-                          {report.severity && <StyledBadge text={report.severity} style={SEVERITY_STYLE[report.severity]} size="md" />}
+                          {report.severity && <StyledBadge text={SEVERITY_LABEL[report.severity]} style={SEVERITY_STYLE[report.severity]} size="md" />}
                         </TableCell>
                         <TableCell className="text-[#122A48] text-left h-14">{filedByName(report)}</TableCell>
                         <TableCell className="flex gap-3">
@@ -287,7 +340,7 @@ export default function BarangayReports() {
                           </Button>
 
                           <Button
-                            onClick={() => setPrintingReport(report)}
+                            onClick={() => (isIOSDevice() ? handleExportReport(report) : setPrintingReport(report))}
                             className="text-xs bg-[#2fd45b] hover:bg-[#28b54e] cursor-pointer"
                           >
                             <FileDown size={16} className="mr-1" />

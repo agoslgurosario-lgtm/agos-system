@@ -5,6 +5,7 @@ from apps.sensor_nodes.models import NodeAssignmentHistory
 
 
 class AlertSerializer(serializers.ModelSerializer):
+    node_id = serializers.IntegerField(read_only=True)
     node_name = serializers.SerializerMethodField()
     barangay_name = serializers.SerializerMethodField()
     is_read  = serializers.SerializerMethodField()
@@ -13,7 +14,7 @@ class AlertSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Alert
         fields = [
-            'alert_id', 'alert_type', 'node_name', 'barangay_name',
+            'alert_id', 'alert_type', 'node_id', 'node_name', 'barangay_name',
             'timestamp', 'is_read', 'alert_context',
         ]
 

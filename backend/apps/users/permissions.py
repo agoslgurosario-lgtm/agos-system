@@ -134,7 +134,8 @@ class CanAccessOwnCanalReport(BasePermission):
         if user.user_role == 'Barangay':
             if obj.barangay_id != user.barangay_id:
                 return False
-            return (not obj.is_submitted) or request.method in SAFE_METHODS
+            locked = obj.is_submitted or obj.status in ('Verified', 'Voided')
+            return (not locked) or request.method in SAFE_METHODS
         return False
 
 
@@ -165,7 +166,8 @@ class CanAccessOwnCanalReportMedia(BasePermission):
         if user.user_role == 'Barangay':
             if not report or report.barangay_id != user.barangay_id:
                 return False
-            return (not report.is_submitted) or request.method in SAFE_METHODS
+            locked = report.is_submitted or report.status in ('Verified', 'Voided')
+            return (not locked) or request.method in SAFE_METHODS
         return False
 
 

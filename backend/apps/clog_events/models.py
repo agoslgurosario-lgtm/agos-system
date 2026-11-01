@@ -14,7 +14,6 @@ class ClogEvent(models.Model):
         ('Detected', 'Detected'),
         ('Responded', 'Responded'),
         ('Cleared', 'Cleared'),
-        ('Verified', 'Verified'),
     ]
 
     event_id = models.AutoField(primary_key=True)
@@ -60,6 +59,8 @@ class ClogEvent(models.Model):
         related_name='responded_events',
     )
     auto_cleared = models.BooleanField(default=False)
+    settled_at = models.DateTimeField(null=True, blank=True)
+    reopened_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'tbl_clog_events'

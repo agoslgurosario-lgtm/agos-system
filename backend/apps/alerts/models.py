@@ -3,7 +3,10 @@ from apps.clog_events.models import ClogEvent
 from django.conf import settings
 
 # alert types only the owning barangay sees (never Admin / MENRO)
-BARANGAY_ONLY_ALERT_TYPES = ('Waste_Type_Rejected', 'Waste_Type_Approved')
+BARANGAY_ONLY_ALERT_TYPES = (
+    'Waste_Type_Rejected', 'Waste_Type_Approved', 'Report_Due_Soon', 'Report_Overdue',
+    'Node_Inspection_Request',
+)
 
 class Alert(models.Model):
     ALERT_TYPE_CHOICES = [
@@ -18,6 +21,9 @@ class Alert(models.Model):
         ('Report_Submitted',    'Report Submitted'),
         ('Waste_Type_Rejected', 'Waste Type Rejected'),
         ('Waste_Type_Approved', 'Waste Type Approved'),
+        ('Report_Due_Soon',     'Report Due Soon'),
+        ('Report_Overdue',      'Report Overdue'),
+        ('Node_Inspection_Request', 'Node Inspection Request'),
     ]
 
     alert_id = models.AutoField(primary_key=True)

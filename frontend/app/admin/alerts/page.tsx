@@ -26,6 +26,8 @@ import { usePolling } from "@/components/hooks/usePolling"
 import { ALERT_META, ContextRow } from "@/components/Alerts/AlertCard"
 import { ALERT_STYLE } from "@/lib/constant"
 import { SearchFilter } from "@/components/SearchFilter"
+import { DateRangeFilter } from "@/components/DateRangeFilter"
+import { rangeQuery, toISODate } from "@/lib/dateRange"
 import { AlertsSkeleton } from "@/components/Skeleton/Admin/AlertsSkeleton"
 import { SpinnerIcon } from "@/components/SpinnerIcon"
 import { AlertDetailDialog } from "@/components/Alerts/AlertDetailDialog"
@@ -60,27 +62,6 @@ const ALERT_TYPES = [
 ]
 
 // raw fetchers
-  const fetchAlertsTodayRaw = async (): Promise<Alert[]> => {
-    const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/alerts/?date=Today`)
-    if (!res.ok) throw new Error()
-    const data = await res.json()
-    return data.results ?? data
-  }
-
-  const fetchAlerts7DaysRaw = async (): Promise<Alert[]> => {
-    const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/alerts/?date=7Days`)
-    if (!res.ok) throw new Error()
-    const data = await res.json()
-    return data.results ?? data
-  }
-
-  const fetchAlerts30DaysRaw = async (): Promise<Alert[]> => {
-    const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/alerts/?date=30Days`)
-    if (!res.ok) throw new Error()
-    const data = await res.json()
-    return data.results ?? data
-  }
-
   const fetchBarangaysRaw = async (): Promise<Barangay[]> => {
     const data = await api.get('/api/barangays/')
     return data.results ?? data
@@ -92,18 +73,26 @@ export default function Alerts() {
   const [search, setSearch] = useState<string>('')
   const [barangay, setBarangay] = useState<string>('All Barangay')
   const [alertType, setAlertType] = useState<string>('All Alert')
-  const [dateFilter, setDateFilter] = useState<string>('Today')
+  // date range: opens on today; clearing it goes back to today instead of loading every alert
+  const [startDate, setStartDate] = useState<string>(() => toISODate(new Date()))
+  const [endDate, setEndDate] = useState<string>(() => toISODate(new Date()))
 
-  // one cache per date window — switching windows is instant once loaded this session
-  const alertsToday = usePageCache('alerts:today', fetchAlertsTodayRaw, [] as Alert[], { autoFetch: false })
-  const alerts7Days = usePageCache('alerts:7days', fetchAlerts7DaysRaw, [] as Alert[], { autoFetch: false })
-  const alerts30Days = usePageCache('alerts:30days', fetchAlerts30DaysRaw, [] as Alert[], { autoFetch: false })
+  const handleRangeChange = (from: string, to: string) => {
+    const today = toISODate(new Date())
+    setStartDate(from || to ? from : today)
+    setEndDate(from || to ? to : today)
+  }
+
+  const fetchAlertsRaw = async (): Promise<Alert[]> => {
+    const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/alerts/?${rangeQuery(startDate, endDate)}`)
+    if (!res.ok) throw new Error()
+    const data = await res.json()
+    return data.results ?? data
+  }
+
+  // cached per range, so going back to a range already loaded this session is instant
+  const activeAlerts = usePageCache(`alerts:${startDate}:${endDate}`, fetchAlertsRaw, [] as Alert[], { autoFetch: false })
   const barangaysCache = usePageCache('alerts:barangays', fetchBarangaysRaw, [] as Barangay[], { autoFetch: false })
-
-  const activeAlerts =
-    dateFilter === 'Today' ? alertsToday :
-    dateFilter === '7Days' ? alerts7Days :
-    alerts30Days
 
   const alerts = activeAlerts.data
   const barangays = barangaysCache.data
@@ -138,11 +127,11 @@ export default function Alerts() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [search, barangay, alertType, dateFilter])
+  }, [search, barangay, alertType, startDate, endDate])
 
   useEffect(() => {
     activeAlerts.refetch()
-  }, [dateFilter])
+  }, [startDate, endDate])
 
   useEffect(() => {
     barangaysCache.refetch()
@@ -166,6 +155,9 @@ export default function Alerts() {
   useWebSocket({
     path: "/ws/alerts/",
     onMessage: (newAlert) => {
+      // only alerts that fall inside the selected range belong on screen
+      const alertDate = toISODate(new Date(newAlert.timestamp))
+      if ((startDate && alertDate < startDate) || (endDate && alertDate > endDate)) return
       activeAlerts.setData(prev => [newAlert, ...prev])
     },
   })
@@ -197,17 +189,8 @@ export default function Alerts() {
                 </SelectContent>
               </Select>
 
-              {/* date filter */}
-              <Select value={dateFilter} onValueChange={setDateFilter}>
-                <SelectTrigger className="cursor-pointer text-xs px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent position="popper" className='min-w-0'>
-                  <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="Today">Today</SelectItem>
-                  <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="7Days">Last 7 days</SelectItem>
-                  <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="30Days">Last 30 days</SelectItem>
-                </SelectContent>
-              </Select>
+              {/* date range filter */}
+              <DateRangeFilter from={startDate} to={endDate} onChange={handleRangeChange} align="right" width="w-[210px]" />
             </div>
         </div>
 

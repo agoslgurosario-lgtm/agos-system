@@ -2,7 +2,7 @@
 
 // icons
 import { FaSearch } from "react-icons/fa"
-import { MapPinned, CheckCircle, BadgeCheck, Map, UserRound, X, MapPinPlus, MapPin, Navigation, Check, MapPinOff } from "lucide-react";
+import { MapPinned, CheckCircle, BadgeCheck, Map, UserRound, X, MapPinPlus, MapPin, Navigation, Check, MapPinOff, Ban, RotateCcw, Plus, Pencil } from "lucide-react";
 
 // shadcn
 import { Input } from "@/components/ui/input"
@@ -18,6 +18,8 @@ import AgosMapWrapper from "@/components/Map/AgosMapWrapper";
 import { SearchFilter } from "@/components/SearchFilter";
 import { SpinnerIcon } from "@/components/SpinnerIcon";
 import { useFillRows } from "@/components/hooks/useFillRows";
+import { RemarksDialog } from "@/components/RemarksDialog"
+import { BarangayFormDialog } from "@/components/BarangayFormDialog";
 
 // react
 import { useState, useEffect } from "react"
@@ -30,6 +32,7 @@ import { TablePagination } from "@/components/TablePagination";
 import { DIALOG_COLOR } from "@/lib/constant";
 import { api } from "@/lib/api";
 import { usePageCache } from "@/components/hooks/usePageCache";
+import { fetchBarangayBoundaryById } from "@/lib/barangayBoundary"
 
 
 type Barangay = {
@@ -38,6 +41,10 @@ type Barangay = {
   latitude: number
   longitude: number
   is_registered: boolean
+  is_active: boolean
+  deactivation_reason?: string
+  has_boundary?: boolean
+  purok_count?: number
 }
 
 type DialogState = {
@@ -50,20 +57,17 @@ type DialogStateLoading = {
 }
 
 function getFilteredBarangay(barangays: Barangay[], search: string, statusFilter: string) {
+  const rank = (b: Barangay) => (!b.is_active ? 2 : b.is_registered ? 0 : 1)
   return barangays
     .filter(b => {
-      if (statusFilter === 'Registered') return b.is_registered === true
-      if (statusFilter === 'Unregistered') return b.is_registered === false
+      if (statusFilter === 'Registered') return b.is_active && b.is_registered
+      if (statusFilter === 'Unregistered') return b.is_active && !b.is_registered
+      if (statusFilter === 'Inactive') return !b.is_active
       return true
     })
     .filter(b => b.barangay_name.toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => {
-      // registered first
-      if (a.is_registered && !b.is_registered) return -1
-      if (!a.is_registered && b.is_registered) return 1
-      // then alphabetical within each group
-      return a.barangay_name.localeCompare(b.barangay_name)
-    })
+    // registered, then unregistered, then inactive; alphabetical within each
+    .sort((a, b) => rank(a) - rank(b) || a.barangay_name.localeCompare(b.barangay_name))
 }
 
 // open maps redirect to google map
@@ -95,7 +99,7 @@ export default function Barangay() {
 
   // filter states
   const [search, setSearch] = useState<string>('')
-  const [statusFilter, setStatusFilter] = useState<'All' | 'Registered' | 'Unregistered'>('All')
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Registered' | 'Unregistered' | 'Inactive'>('All')
 
   const [registerDialog, setRegisterDialog] = useState<DialogState>({
     open: false,
@@ -125,13 +129,26 @@ export default function Barangay() {
   })
   const [successDialog, setSuccessDialog] = useState<DialogState>({ open: false, barangay: null, })
   const [errorDialog, setErrorDialog] = useState<{ open: boolean; message: string }>({ open: false, message: '' })
-  const [actionResult, setActionResult] = useState<{ barangay: Barangay | null; action: 'Registered' | 'Unregistered' | null }>({
+  const [actionResult, setActionResult] = useState<{ barangay: Barangay | null; action: 'Registered' | 'Unregistered' | 'Deactivated' | 'Reactivated' | 'Added' | 'Updated' | null }>({
     barangay: null,
     action: null,
   })
 
-  const filteredBarangay = getFilteredBarangay(barangays, search, statusFilter)
+  const [formDialog, setFormDialog] = useState<DialogState>({ open: false, barangay: null })
+  const [deactivateDialog, setDeactivateDialog] = useState<DialogState>({ open: false, barangay: null })
+  const [reactivateDialog, setReactivateDialog] = useState<DialogState>({ open: false, barangay: null })
+  const [blockedTitle, setBlockedTitle] = useState('Cannot Unregister Barangay')
+  const [mapBoundary, setMapBoundary] = useState<any>(null)
 
+  useEffect(() => {
+    const b = viewMapDialog.barangay
+    if (!viewMapDialog.open || !b) { setMapBoundary(null); return }
+    let cancelled = false
+    fetchBarangayBoundaryById(b.barangay_id, b.barangay_name).then(f => { if (!cancelled) setMapBoundary(f) })
+    return () => { cancelled = true }
+  }, [viewMapDialog.open, viewMapDialog.barangay?.barangay_id])
+
+  const filteredBarangay = getFilteredBarangay(barangays, search, statusFilter)
   const { panelRef, tableWrapRef, rows } = useFillRows({
     rowHeight: 56,
     initialRows: 7,
@@ -140,9 +157,11 @@ export default function Barangay() {
   const { paginated, currentPage, setCurrentPage, totalItems, itemsPerPage } = usePagination(filteredBarangay, rows)
 
   // summary cards
-  const total = barangays.length
-  const registered = barangays.filter(b => b.is_registered).length
-  const unregistered = barangays.filter(b => !b.is_registered).length
+  const activeList = barangays.filter(b => b.is_active)
+  const total = activeList.length
+  const registered = activeList.filter(b => b.is_registered).length
+  const unregistered = activeList.filter(b => !b.is_registered).length
+  const inactive = barangays.length - activeList.length
 
   // handlers
   const handleRegisterClick = (b: Barangay) => {
@@ -153,6 +172,7 @@ export default function Barangay() {
     try {
       const result = await api.get(`/api/barangays/${b.barangay_id}/check/`)
       if (!result.can_unregister) {
+        setBlockedTitle('Cannot Unregister Barangay')
         setBlockedDialog({ open: true, message: result.detail, issues: result.issues ?? [] })
       } else {
         setUnregisterDialog({ open: true, barangay: b })
@@ -200,6 +220,66 @@ export default function Barangay() {
     }
   }
 
+  const handleDeactivateClick = async (b: Barangay) => {
+    try {
+      const result = await api.get(`/api/barangays/${b.barangay_id}/check/`)
+      if (!result.can_deactivate) {
+        setBlockedTitle('Cannot Deactivate Barangay')
+        setBlockedDialog({
+          open: true,
+          message: `Cannot deactivate ${b.barangay_name}. It still has the following. Please decommission them first:`,
+          issues: result.issues ?? [],
+        })
+      } else {
+        setDeactivateDialog({ open: true, barangay: b })
+      }
+    } catch {
+      setErrorDialog({ open: true, message: 'Failed to check barangay status. Please try again.' })
+    }
+  }
+
+  const handleDeactivate = async (reason: string) => {
+    const b = deactivateDialog.barangay
+    if (!b) return
+    setDeactivateDialog({ open: false, barangay: null })
+    setLoadingDialog({ open: true })
+    try {
+      await api.patch(`/api/barangays/${b.barangay_id}/deactivate/`, { reason })
+      barangaysCache.setData(prev => prev.map(x =>
+        x.barangay_id === b.barangay_id
+          ? { ...x, is_active: false, is_registered: false, deactivation_reason: reason }
+          : x
+      ))
+      setActionResult({ barangay: b, action: 'Deactivated' })
+      setLoadingDialog({ open: false })
+      setSuccessDialog({ open: true })
+    } catch (err: any) {
+      setLoadingDialog({ open: false })
+      setErrorDialog({ open: true, message: err?.detail ?? err?.reason ?? `Failed to deactivate ${b.barangay_name}. Please try again.` })
+    }
+  }
+
+  const handleReactivate = async () => {
+    const b = reactivateDialog.barangay
+    if (!b) return
+    setReactivateDialog({ open: false, barangay: null })
+    setLoadingDialog({ open: true })
+    try {
+      await api.patch(`/api/barangays/${b.barangay_id}/reactivate/`, {})
+      barangaysCache.setData(prev => prev.map(x =>
+        x.barangay_id === b.barangay_id
+          ? { ...x, is_active: true, deactivation_reason: '' }
+          : x
+      ))
+      setActionResult({ barangay: b, action: 'Reactivated' })
+      setLoadingDialog({ open: false })
+      setSuccessDialog({ open: true })
+    } catch (err: any) {
+      setLoadingDialog({ open: false })
+      setErrorDialog({ open: true, message: err?.detail ?? `Failed to reactivate ${b.barangay_name}. Please try again.` })
+    }
+  }
+
   const handleSuccessConfirm = () => {
     setSuccessDialog({ open: false }) 
   }
@@ -211,18 +291,25 @@ export default function Barangay() {
       <div className="hidden md:flex md:flex-col md:h-full">
 
         {/* title container */}
-        <div className="flex justify-between w-full mb-2">
+        <div className="flex justify-between items-center w-full mb-2">
           <div className="text-[#122A48] flex justify-center items-center text-[15px]">
             <p className="font-bold">Barangay</p>
           </div>
+          <Button
+            onClick={() => setFormDialog({ open: true, barangay: null })}
+            className="cursor-pointer hover:bg-[#12569f] rounded-lg text-xs px-3 py-3.5 bg-[#1565BC] gap-2"
+          >
+            <Plus size={16} /> Add Barangay
+          </Button>
         </div>
 
         {/* total cards */}
-        <div className="grid grid-cols-3 gap-3 w-full text-[#122A48]">
+        <div className="grid grid-cols-4 gap-3 w-full text-[#122A48]">
           {[
             { icon: <MapPinned size={20} color="#1565BC" />, bg: "bg-[#CDE3DE]", count: total, label: "Total Barangay" },
             { icon: <CheckCircle size={20} color="#2C7B3C" />, bg: "bg-[#B2FBC1]", count: registered, label: "All Registered" },
             { icon: <MapPinOff size={20} color="#FF0101" />, bg: "bg-[#FFE5E5]", count: unregistered, label: "All Unregistered" },
+            { icon: <Ban size={20} color="#727272" />, bg: "bg-[#E5E5E6]", count: inactive, label: "All Inactive" },
           ].map(card => (
             <div key={card.label} className="rounded-lg border-2 border-[#C6C6C8] h-17 min-[2560px]:h-20 min-[3840px]:h-24 w-full flex items-center p-3 gap-3 relative bg-[#FAFCFD] shadow-[0_5px_4px_-4px_rgba(0,0,0,0.2)]">
               <div className={`${card.bg} rounded-lg p-2`}>{card.icon}</div>
@@ -250,6 +337,7 @@ export default function Barangay() {
                   <SelectItem value="All" className="cursor-pointer p-2 text-xs">All Barangay</SelectItem>
                   <SelectItem value="Registered" className="cursor-pointer p-2 text-xs">Registered</SelectItem>
                   <SelectItem value="Unregistered" className="cursor-pointer p-2 text-xs">Unregistered</SelectItem>
+                  <SelectItem value="Inactive" className="cursor-pointer p-2 text-xs">Inactive</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -262,7 +350,7 @@ export default function Barangay() {
                   <TableHead className="text-[#727272] text-left text-xs font-semibold w-16">ID</TableHead>
                   <TableHead className="text-[#727272] text-left text-xs font-semibold w-1/3">BARANGAY</TableHead>
                   <TableHead className="text-[#727272] text-left text-xs font-semibold w-1/4">LOCATION</TableHead>
-                  <TableHead className="text-[#727272] text-left text-xs font-semibold w-1/4">ACTIONS</TableHead>
+                  <TableHead className="text-[#727272] text-left text-xs font-semibold w-1/3">ACTIONS</TableHead>
                 </TableRow>
               </TableHeader>
 
@@ -271,7 +359,19 @@ export default function Barangay() {
                   <TableRow key={barangay.barangay_id} className="border-b border-[#C6C6C8]">
                     <TableCell className="text-[#122A48] text-left h-14 text-xs">{barangay.barangay_id}</TableCell>
 
-                    <TableCell className="text-[#122A48] text-left h-14 text-xs">{barangay.barangay_name}</TableCell>
+                    <TableCell className="text-[#122A48] text-left h-14 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className={!barangay.is_active ? "text-[#727272]" : ""}>{barangay.barangay_name}</span>
+                        {!barangay.is_active && (
+                          <span
+                            title={barangay.deactivation_reason || undefined}
+                            className="px-2 py-0.5 rounded-full bg-[#E5E5E6] text-[#727272] text-[10px] font-semibold"
+                          >
+                            Inactive
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
 
                     <TableCell className="text-[#122A48] flex gap-3 justify-left items-center h-14 text-xs">
                       <Button
@@ -283,23 +383,49 @@ export default function Barangay() {
                     </TableCell>
 
                     <TableCell>
-                      {barangay.is_registered ? (
+                      <div className="flex gap-2">
                         <Button
-                          suppressHydrationWarning
-                          onClick={() => handleUnregisterClick(barangay)}
-                          className="flex gap-2 text-[#122A48] rounded-lg bg-[#DACDE3] hover:bg-purple-200 cursor-pointer border border-[#C6C6C8] py-3.5 text-xs px-3"
+                          onClick={() => setFormDialog({ open: true, barangay })}
+                          title="Edit barangay"
+                          className="rounded-lg text-[#122A48] bg-[#FAFCFD] hover:bg-[#d6e4eb] cursor-pointer border border-[#C6C6C8] py-3.5 px-3"
                         >
-                          <MapPinOff size={16} /> Unregister
+                          <Pencil size={16} /> Edit
                         </Button>
-                      ) : (
-                        <Button
-                          suppressHydrationWarning
-                          onClick={() => handleRegisterClick(barangay)}
-                          className="flex gap-2 text-[#2C7B3C] rounded-lg bg-[#B2FBC173] hover:bg-[#78ee9073] cursor-pointer border border-[#C6C6C8] py-3.5 text-xs px-3"
-                        >
-                          <MapPinPlus size={16} /> Register
-                        </Button>
-                      )}
+                        {!barangay.is_active ? (
+                          <Button
+                            onClick={() => setReactivateDialog({ open: true, barangay })}
+                            className="flex gap-2 text-[#1565BC] rounded-lg bg-[#1565BC14] hover:bg-[#1565BC29] cursor-pointer border border-[#C6C6C8] py-3.5 text-xs px-3"
+                          >
+                            <RotateCcw size={16} /> Reactivate
+                          </Button>
+                        ) : (
+                          <>
+                            {barangay.is_registered ? (
+                              <Button
+                                suppressHydrationWarning
+                                onClick={() => handleUnregisterClick(barangay)}
+                                className="flex gap-2 text-[#122A48] rounded-lg bg-[#DACDE3] hover:bg-purple-200 cursor-pointer border border-[#C6C6C8] py-3.5 text-xs px-3"
+                              >
+                                <MapPinOff size={16} /> Unregister
+                              </Button>
+                            ) : (
+                              <Button
+                                suppressHydrationWarning
+                                onClick={() => handleRegisterClick(barangay)}
+                                className="flex gap-2 text-[#2C7B3C] rounded-lg bg-[#B2FBC173] hover:bg-[#78ee9073] cursor-pointer border border-[#C6C6C8] py-3.5 text-xs px-3"
+                              >
+                                <MapPinPlus size={16} /> Register
+                              </Button>
+                            )}
+                            <Button
+                              onClick={() => handleDeactivateClick(barangay)}
+                              className="flex gap-2 text-[#D81010] rounded-lg bg-[#FFE5E5] hover:bg-[#ffd0d0] cursor-pointer border border-[#C6C6C8] py-3.5 text-xs px-3"
+                            >
+                              <Ban size={16} /> Deactivate
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </TableCell>
 
                   </TableRow>
@@ -502,7 +628,8 @@ export default function Barangay() {
               latitude={viewMapDialog.barangay?.latitude}
               longitude={viewMapDialog.barangay?.longitude}
               label={viewMapDialog.barangay?.barangay_name}
-              zoom={16}
+              zoom={mapBoundary ? 14 : 16}
+              boundaryGeoJson={mapBoundary}
               showLegend={false}
             />
           </div>
@@ -577,7 +704,7 @@ export default function Barangay() {
         color={DIALOG_COLOR.lightorange}
         icon={MapPinOff}
         iconColor={DIALOG_COLOR.orange}
-        title="Cannot Unregister Barangay"
+        title={blockedTitle}
         description={
           <span className="text-justify block">
             {blockedDialog.message}
@@ -592,6 +719,62 @@ export default function Barangay() {
         }
         cancelLabel="Close"
         confirmLabel="Okay"
+      />
+
+      <BarangayFormDialog
+        open={formDialog.open}
+        barangay={formDialog.barangay ?? null}
+        existingNames={barangays
+          .filter(b => b.barangay_id !== formDialog.barangay?.barangay_id)
+          .map(b => b.barangay_name)}
+        onClose={() => setFormDialog({ open: false, barangay: null })}
+        onSaved={(saved, mode) => {
+          barangaysCache.setData(prev =>
+            mode === 'add'
+              ? [...prev, saved]
+              : prev.map(x => (x.barangay_id === saved.barangay_id ? { ...x, ...saved } : x))
+          )
+          setActionResult({ barangay: saved, action: mode === 'add' ? 'Added' : 'Updated' })
+          setFormDialog({ open: false, barangay: null })
+          setSuccessDialog({ open: true })
+        }}
+      />
+
+      {/* Deactivate (reason required) */}
+      <RemarksDialog
+        open={deactivateDialog.open}
+        title="Deactivate Barangay"
+        description={
+          <span className="text-justify block">
+            <strong>{deactivateDialog.barangay?.barangay_name}</strong> will be retired from the system and unregistered.
+            Its history is kept, but it will no longer count in the report progress or accept reports, nodes or hotspots.
+            Please state the reason.
+          </span>
+        }
+        placeholder="e.g. Merged into another barangay"
+        confirmLabel="Deactivate"
+        confirmColor={DIALOG_COLOR.red}
+        onCancel={() => setDeactivateDialog({ open: false, barangay: null })}
+        onConfirm={handleDeactivate}
+      />
+
+      {/* Reactivate */}
+      <DialogModal
+        open={reactivateDialog.open}
+        onClose={() => setReactivateDialog({ open: false, barangay: null })}
+        onConfirm={handleReactivate}
+        color={DIALOG_COLOR.lightblue}
+        icon={RotateCcw}
+        iconColor={DIALOG_COLOR.blue}
+        title="Reactivate Barangay"
+        description={
+          <span className="text-justify">
+            Reactivate <strong>{reactivateDialog.barangay?.barangay_name}</strong>? It will return as <strong>Unregistered</strong>,
+            and you can register it again from the list.
+          </span>
+        }
+        cancelLabel="Cancel"
+        confirmLabel="Reactivate"
       />
 
       {/* Loading Dialog */}
@@ -611,7 +794,7 @@ export default function Barangay() {
         color={DIALOG_COLOR.lightgreen}
         icon={BadgeCheck}
         iconColor={DIALOG_COLOR.green}
-        title="Barangay Status Updated!"
+        title={actionResult.action === 'Added' || actionResult.action === 'Updated' ? 'Barangay Saved!' : 'Barangay Status Updated!'}
         description={
           <>
             <strong>{actionResult.barangay?.barangay_name}</strong> has been {actionResult.action?.toLowerCase()} successfully.

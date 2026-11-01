@@ -5,6 +5,16 @@ import secrets
 import string
 
 
+def _reject_inactive_barangay(barangay_id):
+    if barangay_id is None:
+        return
+    from apps.barangay.models import Barangay
+    if Barangay.objects.filter(barangay_id=barangay_id, is_active=False).exists():
+        raise serializers.ValidationError(
+            {'barangay_id': 'This barangay is inactive. Reactivate it before assigning or enabling accounts for it.'}
+        )
+
+
 class UserSerializer(serializers.ModelSerializer):
     barangay_details = BarangaySerializer(source='barangay', read_only=True)
     barangay_id = serializers.IntegerField(required=False, allow_null=True)
@@ -27,6 +37,15 @@ class UserSerializer(serializers.ModelSerializer):
             instance.barangay_id = barangay_id
         instance.save()
         return instance
+
+    def validate(self, attrs):
+        inst = self.instance
+        role = attrs.get('user_role', getattr(inst, 'user_role', None))
+        status_ = attrs.get('status', getattr(inst, 'status', 'Active'))
+        barangay_id = attrs.get('barangay_id', getattr(inst, 'barangay_id', None))
+        if role == 'Barangay' and status_ == 'Active':
+            _reject_inactive_barangay(barangay_id)
+        return attrs
     
 
 def generate_random_password(length=10):
@@ -45,6 +64,10 @@ class RegisterSerializer(serializers.ModelSerializer):
             'password', 'user_role',
             'position', 'barangay_id'
         ]
+
+    def validate_barangay_id(self, value):
+        _reject_inactive_barangay(value)
+        return value
 
     def create(self, validated_data):
         password = validated_data.pop('password', None)

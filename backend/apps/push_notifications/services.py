@@ -16,8 +16,23 @@ PUSH_ALERT_TYPES = {
     'Moderate_Clog_Alert': ('Moderate clog detected', 'warning'),
     'Low_Clog_Alert':      ('Low clog detected', 'info'),
     'Water_Level_Rising':  ('Water level rising', 'warning'),
-    'Waste_Type_Rejected': ('Waste type not approved', 'info'),
-    'Waste_Type_Approved': ('Waste type approved', 'info'),
+    'Waste_Type_Rejected': ('Waste type not approved', 'silent'),
+    'Waste_Type_Rejected': ('Waste type not approved', 'silent'),
+    'Waste_Type_Approved': ('Waste type approved', 'silent'),
+    'Report_Due_Soon':     ('Report due soon', 'info'),
+    'Report_Overdue':      ('Report overdue', 'warning'),
+    'Node_Inspection_Request': ('Device inspection requested', 'warning'),
+    'Node_Offline':        ('Device offline', 'warning'),
+    'Low_Battery':         ('Device battery low', 'info'),
+    'Weak_Signal':         ('Device signal weak', 'info'),
+    'Sensor_Failure':      ('Device sensor failing', 'warning'),
+}
+
+HEALTH_PUSH_HINT = {
+    'Node_Offline':   "hasn't reported recently. Please check on it.",
+    'Low_Battery':    "battery is low. Please check its power source.",
+    'Weak_Signal':    "has a weak connection. Please check its antenna.",
+    'Sensor_Failure': "water sensor isn't responding. Please check it.",
 }
 
 
@@ -62,6 +77,15 @@ def _send(messages):
         connection.close()  # this thread's own DB connection
 
 
+def _fmt_day(iso):
+    try:
+        from datetime import date
+        d = date.fromisoformat(iso)
+        return f"{d:%b} {d.day}"
+    except Exception:
+        return ''
+
+
 def notify_alert(alert):
     spec = PUSH_ALERT_TYPES.get(alert.alert_type)
     if not spec:
@@ -80,6 +104,23 @@ def notify_alert(alert):
         body = f"“{ctx.get('waste_type', 'Waste type')}” wasn't approved: {ctx.get('reason', '')}".strip()
     elif alert.alert_type == 'Waste_Type_Approved':
         body = f"“{ctx.get('waste_type', 'Waste type')}” was approved. You can now use it in your reports."
+    elif alert.alert_type in ('Report_Due_Soon', 'Report_Overdue'):
+        label = ctx.get('period_label', 'this period')
+        due = _fmt_day(ctx.get('due_date'))
+        when = f"is due on {due}" if alert.alert_type == 'Report_Due_Soon' else f"was due on {due}"
+        if ctx.get('ready_count'):
+            todo = "Submit it to MENRO now." if alert.alert_type == 'Report_Due_Soon' else "You can still submit it late."
+        else:
+            todo = "You have no verified reports yet. Complete and verify your reports, then submit."
+        body = f"Your report for {label} {when}. {todo}"
+    elif alert.alert_type == 'Node_Inspection_Request':
+        node = payload.get('node_name') or 'A device'
+        body = f"{node}: the admin asked you to inspect this device. Reason: {ctx.get('reason', 'Needs checking')}."
+        if ctx.get('note'):
+            body += f" {ctx['note']}"
+    elif alert.alert_type in HEALTH_PUSH_HINT:
+        node = payload.get('node_name') or 'A device'
+        body = f"{node}: {HEALTH_PUSH_HINT[alert.alert_type]}"
     else:
         body = payload.get('node_name') or 'AGOS node'
         if payload.get('barangay_name'):
@@ -89,7 +130,7 @@ def notify_alert(alert):
         'to': t,
         'title': title,
         'body': body,
-        'sound': 'default',
+        'sound': None if channel == 'silent' else 'default',
         'channelId': channel,
         'priority': 'high',
         'ttl': 3600,  # drop it if the phone is offline for over an hour

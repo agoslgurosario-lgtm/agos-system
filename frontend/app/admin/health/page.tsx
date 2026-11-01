@@ -1,7 +1,7 @@
 "use client"
 
 // icons
-import { BatteryMedium, Signal, ScanSearch, Radar, FileSearch, Battery, FileDown, Wrench, CheckCircle2, X, Moon } from "lucide-react";
+import { BatteryMedium, Signal, ScanSearch, Radar, FileSearch, Battery, FileDown, Wrench, CheckCircle2, X, Moon, BellRing } from "lucide-react";
 
 // react
 import { useEffect, useRef, useState } from "react";
@@ -14,17 +14,19 @@ import { Toast } from "@/components/Toast";
 import { SpinnerIcon } from "@/components/SpinnerIcon";
 import { AssignNodeDialog, AssignNodeDialogPayload } from "@/components/AssignNodeDialog"
 import { PrintReport } from "@/components/PrintReport/PrintReport"
+import { HealthHistoryTable } from "@/components/HealthHistory";
 
 // shadcn
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DialogModal } from "@/components/DialogModal"
 import { Field, FieldLabel, FieldError } from "@/components/ui/field"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 // lib
 import { api } from "@/lib/api"
 import { DIALOG_COLOR } from "@/lib/constant"
-import { printReport } from "@/lib/printReport"
+import { exportOrPrint } from "@/lib/exportOrPrint"
 import { getUser } from "@/lib/auth"
 import { usePolling } from "@/components/hooks/usePolling";
 
@@ -163,6 +165,15 @@ function getRelativeTime(dateStr: string) {
   return `${diffDay} day${diffDay === 1 ? '' : 's'} ago`
 }
 
+const NOTIFY_REASONS = [
+  { value: "offline", label: "Device offline" },
+  { value: "low_battery", label: "Low battery" },
+  { value: "weak_signal", label: "Weak signal" },
+  { value: "sensor_failure", label: "Sensor not responding" },
+  { value: "damaged", label: "Possible physical damage" },
+  { value: "other", label: "Other" },
+]
+
 
 export default function Health() {
   const { toasts, addToast, removeToast } = useToast()
@@ -196,6 +207,11 @@ export default function Health() {
   const [customHours, setCustomHours] = useState('')
   const [sleepError, setSleepError] = useState('')
   const [cancelSleepDialogOpen, setCancelSleepDialogOpen] = useState(false)
+
+  const [notifyDialogOpen, setNotifyDialogOpen] = useState(false)
+  const [notifyReason, setNotifyReason] = useState("")
+  const [notifyNote, setNotifyNote] = useState("")
+  const [notifyError, setNotifyError] = useState("")
 
   const emptyStateText = selectedNodeId === null ? 'No node selected' : 'No health data yet'
   
@@ -238,11 +254,10 @@ export default function Health() {
 
   const sensorFailing = latestLogs.filter(l => l.sensor_continuity === false).length
 
-  const isUnderMaintenance = selectedNode?.node_details.status === 'Maintenance'
-
-  const nodeToFix = selectedNode
-    ? allNodes.find(n => n.node_id === selectedNode.node_details.node_id) ?? null
-    : null  
+  // the node the admin picked, taken from the node list so it works even with no health data
+  const activeNode = allNodes.find(n => n.node_id === selectedNodeId) ?? null
+  const isUnderMaintenance = (activeNode?.status ?? selectedNode?.node_details.status) === 'Maintenance'
+  const nodeToFix = activeNode
 
   const SELECTED_NODE_KEY = 'agos:health:selectedNodeId'
   const restoredSelectionRef = useRef(false)
@@ -349,14 +364,14 @@ export default function Health() {
   }, [allNodes])
 
   const handleMarkMaintenance = async () => {
-    if (!selectedNode) return
+    if (!activeNode) return
     const reason = maintenanceReason.trim()
     if (!reason) {
       setMaintenanceError("Please describe the reason for maintenance.")
       return
     }
-    const nodeName = selectedNode.node_details.node_name
-    const nodeId = selectedNode.node_details.node_id
+    const nodeName = activeNode.node_name
+    const nodeId = activeNode.node_id
 
     setMaintenanceDialog(false)
     setMaintenanceReason("")
@@ -374,6 +389,37 @@ export default function Health() {
     }
   }
 
+  const handleNotifyBarangay = async () => {
+    if (!activeNode) return
+    if (!notifyReason) {
+      setNotifyError("Choose a reason.")
+      return
+    }
+    const note = notifyNote.trim()
+    if (notifyReason === "other" && !note) {
+      setNotifyError("Add a note when the reason is Other.")
+      return
+    }
+    const nodeName = activeNode.node_name
+    const nodeId = activeNode.node_id
+    const barangayName = activeNode.barangay_details?.barangay_name ?? "The barangay"
+
+    setNotifyDialogOpen(false)
+    setNotifyReason("")
+    setNotifyNote("")
+    setNotifyError("")
+    setLoadingDialog({ open: true, title: "Notifying Barangay", description: `Sending the request for ${nodeName}. Please wait.` })
+
+    try {
+      await api.post("/api/alerts/notify-barangay/", { node: nodeId, reason: notifyReason, note })
+      setLoadingDialog({ open: false })
+      setSuccessDialog({ open: true, message: `${barangayName} has been notified to inspect ${nodeName}.` })
+    } catch (err: any) {
+      setLoadingDialog({ open: false })
+      setErrorDialog({ open: true, message: err?.error ?? err?.detail ?? `Failed to notify ${barangayName}.` })
+    }
+  }
+
   const handleFixDialogConfirm = (payload: AssignNodeDialogPayload) => {
     setPendingFix(payload)
     setFixDialogOpen(false)
@@ -381,9 +427,9 @@ export default function Health() {
   }
 
   const handleConfirmFix = async () => {
-    if (!selectedNode || !pendingFix) return
-    const nodeName = selectedNode.node_details.node_name
-    const nodeId = selectedNode.node_details.node_id
+    if (!activeNode || !pendingFix) return
+    const nodeName = activeNode.node_name
+    const nodeId = activeNode.node_id
 
     setFixConfirmDialog(false)
     setLoadingDialog({ open: true, title: "Marking as Fixed", description: `Updating ${nodeName}. Please wait.` })
@@ -404,9 +450,9 @@ export default function Health() {
   }
 
   const handleSkipAssign = async () => {
-    if (!selectedNode) return
-    const nodeName = selectedNode.node_details.node_name
-    const nodeId = selectedNode.node_details.node_id
+    if (!activeNode) return
+    const nodeName = activeNode.node_name
+    const nodeId = activeNode.node_id
 
     setSkipAssignDialog(false)
     setLoadingDialog({ open: true, title: "Marking as Fixed", description: `Updating ${nodeName}. Please wait.` })
@@ -432,9 +478,9 @@ export default function Health() {
   ]
 
   const handleForceSleep = async () => {
-    if (!selectedNode) return
-    const nodeName = selectedNode.node_details.node_name
-    const nodeId = selectedNode.node_details.node_id
+    if (!activeNode) return
+    const nodeName = activeNode.node_name
+    const nodeId = activeNode.node_id
 
     let minutes = sleepMinutes
     if (customHours.trim()) {
@@ -463,9 +509,9 @@ export default function Health() {
   }
 
   const handleCancelForceSleep = async () => {
-    if (!selectedNode) return
-    const nodeName = selectedNode.node_details.node_name
-    const nodeId = selectedNode.node_details.node_id
+    if (!activeNode) return
+    const nodeName = activeNode.node_name
+    const nodeId = activeNode.node_id
 
     setCancelSleepDialogOpen(false)
     setLoadingDialog({ open: true, title: "Cancelling Forced Sleep", description: `Updating ${nodeName}. Please wait.` })
@@ -504,8 +550,85 @@ export default function Health() {
   const currentUser = getUser()
   const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Admin'
 
+  const printTitle = "System Health Summary"
+  const printColumns = ["Node", "Barangay", "Status", "Battery (V)", "Battery %", "Signal (dBm)", "Sensor", "Last Checked"]
+
   const handlePrint = () => {
-    printReport()
+    exportOrPrint({
+      table: { title: printTitle, columns: printColumns, rows: printRows },
+      onError: () => addToast("Failed to export. Please try again.", "error"),
+    })
+  }
+
+  const renderNodeActions = () => {
+    if (!activeNode) return null
+    const isMaintenance = activeNode.status === 'Maintenance'
+
+    return (
+      <>
+        <div className="px-3 mb-3">
+          {isMaintenance ? (
+            <div className="flex flex-col gap-1.5">
+              <button
+                onClick={() => setFixDialogOpen(true)}
+                className="flex items-center justify-center gap-1.5 w-full rounded-full border border-[#2C7B3C] bg-white hover:bg-[#58D07120] text-[#2C7B3C] px-3 py-1.5 text-xs font-medium cursor-pointer"
+              >
+                <CheckCircle2 size={13} /> Mark as Fixed
+              </button>
+              <button
+                onClick={() => setSkipAssignDialog(true)}
+                className="text-[10px] text-[#727272] hover:underline cursor-pointer"
+              >
+                Mark fixed without assigning
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setMaintenanceReason(""); setMaintenanceError(""); setMaintenanceDialog(true) }}
+              className="flex items-center justify-center gap-1.5 w-full rounded-full border border-[#D27000] bg-white hover:bg-[#EE9E4320] text-[#D27000] px-3 py-1.5 text-xs font-medium cursor-pointer"
+            >
+              <Wrench size={13} /> Mark Under Maintenance
+            </button>
+          )}
+        </div>
+
+        {!isMaintenance && (
+          <div className="px-3 mb-3">
+            {activeNode.is_force_sleeping ? (
+              <div className="flex flex-col gap-1 rounded-lg border border-[#2563EB] bg-[#2563EB0D] px-3 py-2">
+                <p className="text-[11px] text-[#2563EB] font-medium">
+                  Forced sleep until {activeNode.forced_sleep_until ? new Date(activeNode.forced_sleep_until).toLocaleString() : '—'}
+                </p>
+                <button
+                  onClick={() => setCancelSleepDialogOpen(true)}
+                  className="text-[10px] text-[#D81010] hover:underline cursor-pointer self-start"
+                >
+                  Cancel forced sleep
+                </button>
+              </div>
+            ) : activeNode.hotspot_details ? (
+              <button
+                onClick={() => { setSleepMinutes(null); setCustomHours(''); setSleepError(''); setForceSleepDialogOpen(true) }}
+                className="flex items-center justify-center gap-1.5 w-full rounded-full border border-[#2563EB] bg-white hover:bg-[#2563EB20] text-[#2563EB] px-3 py-1.5 text-xs font-medium cursor-pointer"
+              >
+                <Moon size={13} /> Force Deep Sleep
+              </button>
+            ) : null}
+          </div>
+        )}
+
+        {activeNode.barangay_details && (
+          <div className="px-3 mb-3">
+            <button
+              onClick={() => { setNotifyReason(""); setNotifyNote(""); setNotifyError(""); setNotifyDialogOpen(true) }}
+              className="flex items-center justify-center gap-1.5 w-full rounded-full border border-[#C2410C] bg-white hover:bg-[#C2410C15] text-[#C2410C] px-3 py-1.5 text-xs font-medium cursor-pointer"
+            >
+              <BellRing size={13} /> Notify Barangay
+            </button>
+          </div>
+        )}
+      </>
+    )
   }
 
   if (loading) return <HealthSkeleton/>
@@ -543,7 +666,7 @@ export default function Health() {
         </div>
 
         {/* map and preview node */}
-        <div className="flex gap-3 mt-2 flex-1 min-h-0">
+        <div className="flex gap-3 mt-2 flex-1 min-h-[500px]">
           {/* map */}
           <div className="rounded-lg bg-[#FAFCFD] shadow-[0_5px_4px_-4px_rgba(0,0,0,0.2)] p-3 border border-[#C9C9C9] flex-[3] min-w-0 h-full flex flex-col">
               <p className="text-[#122A48] font-bold mb-1">Canal Network Map - Rosario, La Union</p>
@@ -582,12 +705,23 @@ export default function Health() {
                 <p className="text-xs text-[#122A4873]">Loading node data...</p>
               </div>
             ) : !selectedNode ? (
-              <div className="flex justify-center items-center h-full flex-col gap-2 border border-[#C9C9C9] w-full rounded-lg">
-                <Radar size={50}className="text-[#1565BC80]"/>
-                <p className="font-semibold text-[#122A488F]">No health data yet</p>
-                <p className="text-[#122A4873] text-xs text-center">
-                  {allNodes.find(n => n.node_id === selectedNodeId)?.node_name ?? 'This node'} hasn't reported <br /> any hardware status yet
-                </p>
+              <div className="flex flex-col text-[#122A48] w-full">
+                <div className="w-full p-3 -mb-2">
+                  <p className="font-semibold">Hardware Details</p>
+                </div>
+                <div className="mx-3 mb-3">
+                  <p className="text-xs">{activeNode?.node_name ?? 'This node'} - {activeNode?.barangay_details?.barangay_name ?? '—'}</p>
+                </div>
+
+                {renderNodeActions()}
+
+                <div className="flex justify-center items-center flex-col gap-2 p-6 text-center">
+                  <Radar size={50} className="text-[#1565BC80]" />
+                  <p className="font-semibold text-[#122A488F]">No health data yet</p>
+                  <p className="text-[#122A4873] text-xs text-center">
+                    {activeNode?.node_name ?? 'This node'} hasn't reported <br /> any hardware status yet
+                  </p>
+                </div>
               </div>
             ) : (
               <div className="flex flex-col text-[#122A48] w-full">
@@ -621,56 +755,7 @@ export default function Health() {
                   })()}
                 </div>
 
-                <div className="px-3 mb-3">
-                  {selectedNode.node_details.status === 'Maintenance' ? (
-                    <div className="flex flex-col gap-1.5">
-                      <button
-                        onClick={() => setFixDialogOpen(true)}
-                        className="flex items-center justify-center gap-1.5 w-full rounded-full border border-[#2C7B3C] bg-white hover:bg-[#58D07120] text-[#2C7B3C] px-3 py-1.5 text-xs font-medium cursor-pointer"
-                      >
-                        <CheckCircle2 size={13} /> Mark as Fixed
-                      </button>
-                      <button
-                        onClick={() => setSkipAssignDialog(true)}
-                        className="text-[10px] text-[#727272] hover:underline cursor-pointer"
-                      >
-                        Mark fixed without assigning
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => { setMaintenanceReason(""); setMaintenanceError(""); setMaintenanceDialog(true) }}
-                      className="flex items-center justify-center gap-1.5 w-full rounded-full border border-[#D27000] bg-white hover:bg-[#EE9E4320] text-[#D27000] px-3 py-1.5 text-xs font-medium cursor-pointer"
-                    >
-                      <Wrench size={13} /> Mark Under Maintenance
-                    </button>
-                  )}
-                </div>
-
-                {selectedNode.node_details.status !== 'Maintenance' && (
-                  <div className="px-3 mb-3">
-                    {nodeToFix?.is_force_sleeping ? (
-                      <div className="flex flex-col gap-1 rounded-lg border border-[#2563EB] bg-[#2563EB0D] px-3 py-2">
-                        <p className="text-[11px] text-[#2563EB] font-medium">
-                          Forced sleep until {nodeToFix.forced_sleep_until ? new Date(nodeToFix.forced_sleep_until).toLocaleString() : '—'}
-                        </p>
-                        <button
-                          onClick={() => setCancelSleepDialogOpen(true)}
-                          className="text-[10px] text-[#D81010] hover:underline cursor-pointer self-start"
-                        >
-                          Cancel forced sleep
-                        </button>
-                      </div>
-                    ) : nodeToFix?.hotspot_details ? (
-                      <button
-                        onClick={() => { setSleepMinutes(null); setCustomHours(''); setSleepError(''); setForceSleepDialogOpen(true) }}
-                        className="flex items-center justify-center gap-1.5 w-full rounded-full border border-[#2563EB] bg-white hover:bg-[#2563EB20] text-[#2563EB] px-3 py-1.5 text-xs font-medium cursor-pointer"
-                      >
-                        <Moon size={13} /> Force Deep Sleep
-                      </button>
-                    ) : null}
-                  </div>
-                )}
+                {renderNodeActions()}
 
                 {isUnderMaintenance ? (
                   <div className="flex flex-col items-center justify-center gap-2 p-6 text-center flex-1">
@@ -901,6 +986,10 @@ export default function Health() {
           </div>
 
         </div>      
+        <HealthHistoryTable
+          barangays={allBarangays}
+          nodes={allNodes}
+        />
       </div>
 
       {/* Mark Under Maintenance Dialog */}
@@ -911,7 +1000,7 @@ export default function Health() {
           </DialogHeader>
           <div className="flex flex-col gap-3">
             <p className="text-xs text-[#727272]">
-              {selectedNode?.node_details.node_name} will be flagged under maintenance and removed from active monitoring until it's marked available again.
+              {activeNode?.node_name} will be flagged under maintenance and removed from active monitoring until it's marked available again.
             </p>
             <Field className="flex gap-1.5 flex-col">
               <FieldLabel className="text-[#122A48] text-xs">Reason</FieldLabel>
@@ -946,6 +1035,73 @@ export default function Health() {
         </DialogContent>
       </Dialog>
 
+      {/* Notify Barangay Dialog */}
+      <Dialog open={notifyDialogOpen} onOpenChange={setNotifyDialogOpen}>
+        <DialogContent className="text-[#122A48] w-[380px]">
+          <DialogHeader>
+            <DialogTitle className="font-bold text-base">Notify Barangay</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <p className="text-xs text-[#727272]">
+              {activeNode?.barangay_details?.barangay_name} will get a notification on their phones asking them to inspect {activeNode?.node_name} in person.
+            </p>
+            <Field className="flex gap-1.5 flex-col">
+              <FieldLabel className="text-[#122A48] text-xs">Reason</FieldLabel>
+              <Select
+                value={notifyReason}
+                onValueChange={(value) => {
+                  setNotifyReason(value)
+                  if (notifyError) setNotifyError("")
+                }}
+              >
+                <SelectTrigger className="w-full text-xs cursor-pointer !font-normal bg-[#1565BC05] h-8 rounded-lg border-[#727272]">
+                  <SelectValue placeholder="Select a reason..." />
+                </SelectTrigger>
+                <SelectContent position="popper" side="bottom">
+                  {NOTIFY_REASONS.map(r => (
+                    <SelectItem key={r.value} className="text-[#122A48] p-2 text-xs cursor-pointer" value={r.value}>
+                      {r.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field className="flex gap-1.5 flex-col">
+              <FieldLabel className="text-[#122A48] text-xs">
+                Note {notifyReason === "other" ? "" : "(optional)"}
+              </FieldLabel>
+              <textarea
+                value={notifyNote}
+                onChange={(e) => {
+                  setNotifyNote(e.target.value)
+                  if (notifyError) setNotifyError("")
+                }}
+                rows={3}
+                maxLength={300}
+                placeholder="e.g. Please check the battery box and the solar panel"
+                className={`w-full rounded-lg bg-[#1565BC05] border p-2 text-xs resize-none ${notifyError ? 'border-[#FF0000]' : 'border-[#727272]'}`}
+              />
+              <FieldError className="text-xs">{notifyError}</FieldError>
+            </Field>
+            <div className="flex gap-3 justify-end mt-1">
+              <Button
+                onClick={() => setNotifyDialogOpen(false)}
+                className="rounded-lg border border-[#C6C6C8] px-4 h-9 cursor-pointer text-xs bg-transparent hover:bg-[#edebeb] text-[#727272]"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleNotifyBarangay}
+                className="rounded-lg border border-[#C6C6C8] px-4 h-9 cursor-pointer text-xs text-white"
+                style={{ backgroundColor: DIALOG_COLOR.yellow }}
+              >
+                Send
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Force Deep Sleep duration picker */}
       <Dialog open={forceSleepDialogOpen} onOpenChange={setForceSleepDialogOpen}>
         <DialogContent className="text-[#122A48] w-[380px]">
@@ -954,7 +1110,7 @@ export default function Health() {
           </DialogHeader>
           <div className="flex flex-col gap-3">
             <p className="text-xs text-[#727272]">
-              {selectedNode?.node_details.node_name} will stop reporting until the sleep period ends or it's cancelled.
+              {activeNode?.node_name} will stop reporting until the sleep period ends or it's cancelled.
             </p>
             <div className="grid grid-cols-3 gap-2">
               {SLEEP_PRESETS.map(p => (
@@ -1005,7 +1161,7 @@ export default function Health() {
         icon={X}
         iconColor={DIALOG_COLOR.red}
         title="Cancel Forced Sleep"
-        description={<>Wake <strong>{selectedNode?.node_details.node_name}</strong> up and resume normal reporting?</>}
+        description={<>Wake <strong>{activeNode?.node_name}</strong> up and resume normal reporting?</>}
         cancelLabel="Back"
         confirmLabel="Confirm"
       />
@@ -1029,7 +1185,7 @@ export default function Health() {
         icon={CheckCircle2}
         iconColor={DIALOG_COLOR.green}
         title="Confirm Assignment"
-        description={<>Mark <strong>{selectedNode?.node_details.node_name}</strong> as fixed and assign it to the selected hotspot?</>}
+        description={<>Mark <strong>{activeNode?.node_name}</strong> as fixed and assign it to the selected hotspot?</>}
         cancelLabel="Cancel"
         confirmLabel="Confirm"
       />
@@ -1043,7 +1199,7 @@ export default function Health() {
         icon={CheckCircle2}
         iconColor={DIALOG_COLOR.green}
         title="Mark Fixed Without Assigning"
-        description={<><strong>{selectedNode?.node_details.node_name}</strong> will be marked fixed and returned to the unassigned pool. You can assign it a hotspot later from Node Assignment.</>}
+        description={<><strong>{activeNode?.node_name}</strong> will be marked fixed and returned to the unassigned pool. You can assign it a hotspot later from Node Assignment.</>}
         cancelLabel="Cancel"
         confirmLabel="Confirm"
       />
@@ -1085,8 +1241,8 @@ export default function Health() {
       <Toast toasts={toasts} onRemove={removeToast} />
 
       <PrintReport
-        reportTitle="System Health Summary"
-        columns={["Node", "Barangay", "Status", "Battery (V)", "Battery %", "Signal (dBm)", "Sensor", "Last Checked"]}
+        reportTitle={printTitle}
+        columns={printColumns}
         rows={printRows}
         generatedBy={generatedBy}
       />

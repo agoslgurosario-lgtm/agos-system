@@ -1,4 +1,5 @@
 from datetime import timedelta
+from django.db import transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
@@ -10,11 +11,10 @@ from channels.layers import get_channel_layer
 from .models import SystemHealthLog, NodeAssignmentHistory
 from apps.alerts.models import Alert
 
-# Single-cell Li-ion discharge curve used app-wide (matches frontend getBatteryPct):
 # 3.0V = 0% (empty), 3.6V = 50% (half), 4.2V = 100% (full)
 BATTERY_EMPTY_V = 3.0
 BATTERY_FULL_V = 4.2
-LOW_BATTERY_PCT_THRESHOLD = 25  # = 3.3V on the 3.0–4.2V scale, matches firmware's Warning line exactly
+LOW_BATTERY_PCT_THRESHOLD = 25
 
 HEALTH_ALERT_COOLDOWN = timedelta(hours=1)
 logger = logging.getLogger(__name__)
@@ -26,14 +26,19 @@ def get_battery_pct(voltage):
 
 
 def _fire_if_not_on_cooldown(node, health_log, alert_type):
-    last_alert = Alert.objects.filter(
-        node=node, alert_type=alert_type
-    ).order_by('-timestamp').first()
+    with transaction.atomic():
+        # lock this node's row so concurrent callers (any process) take turns;
+        # the second one then sees the first one's alert and skips
+        type(node).objects.select_for_update().get(pk=node.pk)
 
-    if last_alert is not None and (timezone.now() - last_alert.timestamp) < HEALTH_ALERT_COOLDOWN:
-        return  # still within the last hour's alert for this node+type — skip
+        last_alert = Alert.objects.filter(
+            node=node, alert_type=alert_type
+        ).order_by('-timestamp').first()
 
-    Alert.objects.create(node=node, health_log=health_log, alert_type=alert_type)
+        if last_alert is not None and (timezone.now() - last_alert.timestamp) < HEALTH_ALERT_COOLDOWN:
+            return  # still within the last hour's alert for this node+type — skip
+
+        Alert.objects.create(node=node, health_log=health_log, alert_type=alert_type)
 
 
 @receiver(post_save, sender=SystemHealthLog)
@@ -50,9 +55,6 @@ def create_health_alert(sender, instance, created, **kwargs):
     if instance.sensor_continuity is False:
         _fire_if_not_on_cooldown(instance.node, instance, 'Sensor_Failure')
 
-    # Node_Offline is NOT created from health logs. A node that is sending
-    # health data is by definition not offline.
-
 
 def _broadcast(group, message):
     # a websocket/Redis hiccup must never break health ingestion
@@ -67,10 +69,15 @@ def broadcast_health_log(sender, instance, created, **kwargs):
     if not created:
         return
     from .serializers import SystemHealthLogSerializer
-    _broadcast("node_health", {
+    from .consumers import barangay_health_group
+    message = {
         "type": "health_message",
         "health": SystemHealthLogSerializer(instance).data,
-    })
+    }
+    _broadcast("node_health", message)
+    barangay_id = instance.node.barangay_id
+    if barangay_id:
+        _broadcast(barangay_health_group(barangay_id), message)
 
 
 @receiver(post_save, sender=NodeAssignmentHistory)

@@ -12,6 +12,7 @@ import { ClogEventsSkeleton } from "@/components/Skeleton/Admin/HistorySkeleton/
 import { useFillRows } from "@/components/hooks/useFillRows"
 import { PrintReport } from "@/components/PrintReport/PrintReport"
 import { SpinnerIcon } from "@/components/SpinnerIcon"
+import { DateRangeFilter } from "@/components/DateRangeFilter"
 
 // react
 import { useState, useEffect, useCallback } from "react"
@@ -31,8 +32,11 @@ import { fetchWithAuth } from "@/lib/auth"
 // lib
 import { usePageCache } from "@/components/hooks/usePageCache"
 import { useWebSocket } from "@/lib/hooks/useWebSocket"
-import { printReport } from "@/lib/printReport"
+import { exportOrPrint } from "@/lib/exportOrPrint"
 import { getUser } from "@/lib/auth"
+import { forHistory, barangayLabel, type BarangayLike } from "@/lib/barangayFilters"
+import { clogSeverityLabel } from '@/lib/clogSeverity'
+import { currentMonthRange, rangeQuery } from "@/lib/dateRange"
 
 
 type Clogs = {
@@ -68,15 +72,22 @@ type Clogs = {
     dominant_waste_type: string
   } | null
   auto_cleared: boolean
-  clear_reason: 'Manual Clear' | 'Auto-cleared' | 'Clear readings' | null
+  responded_by_details: {
+    user_id: number
+    first_name: string
+    last_name: string
+  } | null
+  clear_reason: 'Responded' | 'Manual Clear' | 'Auto-cleared' | 'Clear readings' | null
 }
 
 const CLEAR_REASON_LABEL: Record<string, string> = {
+  'Responded': 'Cleared by response',
   'Manual Clear': 'Cleared manually',
   'Auto-cleared': 'Auto-cleared after 7 days',
   'Clear readings': 'Clear readings',
 }
 const CLEAR_REASON_SHORT: Record<string, string> = {
+  'Responded': 'Responded',
   'Manual Clear': 'Manual clear',
   'Auto-cleared': 'Auto clear (7 days)',
   'Clear readings': 'Clear readings',
@@ -98,35 +109,25 @@ const CATEGORY_LABELS: Record<string, string> = {
 }
 
 // fetch raw data
-const fetchClogsRaw = async (month: string): Promise<Clogs[]> => {
-  const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/clog-events/?month=${month}`)
+const fetchClogsRaw = async (from: string, to: string): Promise<Clogs[]> => {
+  const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/clog-events/?${rangeQuery(from, to)}`)
   if (!res.ok) throw new Error()
   const data = await res.json()
   return data.results ?? data
 }
 
-const fetchBarangaysRaw = async () => {
-  const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/barangays/?is_registered=true`)
+const fetchBarangaysRaw = async (): Promise<BarangayLike[]> => {
+  const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/barangays/all/`)
   if (!res.ok) throw new Error()
   const data = await res.json()
-  return data.results ?? data
+  return forHistory(data.results ?? data)
 }
 
 
 export default function ClogEvents() {
-  const [selectedMonth, setSelectedMonth] = useState<string>(
-    `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
-  )
-  const monthOptions = (() => {
-    const year = new Date().getFullYear()
-    return Array.from({ length: 12 }, (_, m) => {
-      const d = new Date(year, m, 1)
-      return {
-        value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-        label: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
-      }
-    })
-  })()
+  // date range filter: opens on the current month, Clear Filters = all time
+  const [startDate, setStartDate] = useState<string>(() => currentMonthRange().from)
+  const [endDate, setEndDate] = useState<string>(() => currentMonthRange().to)
 
   // filter states
   const [search, setSearch] = useState<string>('')
@@ -135,8 +136,8 @@ export default function ClogEvents() {
   const [status, setStatus] = useState<string>('All Status')
 
   // table state
-  const clogsCache = usePageCache('clogs:events', () => fetchClogsRaw(selectedMonth), [] as Clogs[], { autoFetch: false })
-  const barangaysCache = usePageCache('clogEvents:barangays', fetchBarangaysRaw, [] as { barangay_id: number; barangay_name: string }[], { autoFetch: false })
+  const clogsCache = usePageCache('clogs:events', () => fetchClogsRaw(startDate, endDate), [] as Clogs[], { autoFetch: false })
+  const barangaysCache = usePageCache('clogEvents:barangays', fetchBarangaysRaw, [] as BarangayLike[], { autoFetch: false })
 
   const clogs = clogsCache.data
   const allBarangays = barangaysCache.data
@@ -149,13 +150,12 @@ export default function ClogEvents() {
 
   const { toasts, addToast, removeToast } = useToast()
 
-  function getFilteredClogs(clogs: Clogs[], severity: string, barangay: string, status: string, month: string, search: string) {
+  function getFilteredClogs(clogs: Clogs[], severity: string, barangay: string, status: string, search: string) {
     const q = search.toLowerCase()
     return clogs
       .filter(b => severity === "All Severity" || b.severity === severity)
       .filter(b => barangay === "All Barangay" || b.barangay_details?.barangay_name === barangay)
       .filter(b => status === "All Status" || b.status === status)
-      .filter(b => month === "All" || b.detected_at?.startsWith(month))
       .filter(b =>
         [b.node_details?.node_name, b.barangay_details?.barangay_name, b.severity]
           .some(field => field?.toLowerCase().includes(q))
@@ -163,7 +163,7 @@ export default function ClogEvents() {
     .sort((a, b) => b.event_id - a.event_id)
   }
 
-  const filtered = getFilteredClogs(clogs, severity, barangay, status, selectedMonth, search)
+  const filtered = getFilteredClogs(clogs, severity, barangay, status, search)
 
   const { panelRef, tableWrapRef, rows } = useFillRows({
     rowHeight: 52,
@@ -178,10 +178,12 @@ export default function ClogEvents() {
     .filter(n => severity === 'All Severity' || n.severity === severity)
     .filter(n => status === 'All Status' || n.status === status)
 
-  const total = cardScopedClogs.length
-  const cleared = cardScopedClogs.filter(n => n.status === 'Cleared').length
+  const isCleared = (n: Clogs) => n.status === 'Cleared' || n.status === 'Responded'
 
-  const clearedWithDuration = cardScopedClogs.filter(n => n.status === 'Cleared' && n.resolved_at && n.detected_at)
+  const total = cardScopedClogs.length
+  const cleared = cardScopedClogs.filter(isCleared).length
+
+  const clearedWithDuration = cardScopedClogs.filter(n => isCleared(n) && n.resolved_at && n.detected_at)
   const avgResolutionMinutes = clearedWithDuration.length > 0
     ? clearedWithDuration.reduce((sum, n) => sum + (new Date(n.resolved_at).getTime() - new Date(n.detected_at).getTime()) / 60000, 0) / clearedWithDuration.length
     : 0
@@ -194,15 +196,7 @@ export default function ClogEvents() {
     return `${hrs}h ${mins}m`
   }
 
-  const monthlyCompleted = cardScopedClogs.filter(n => {
-    if (n.status !== 'Cleared' || !n.resolved_at) return false
-    if (selectedMonth === 'All') {
-      const now = new Date()
-      const resolvedDate = new Date(n.resolved_at)
-      return resolvedDate.getMonth() === now.getMonth() && resolvedDate.getFullYear() === now.getFullYear()
-    }
-    return n.resolved_at.startsWith(selectedMonth)
-  }).length
+  const completedCount = cardScopedClogs.filter(n => isCleared(n) && n.resolved_at).length
 
   const fetchMedia = async () => {
     if (!selectedClog) {
@@ -230,7 +224,7 @@ export default function ClogEvents() {
     setCurrentPage(1)
   }, [])
 
-  useEffect(() => { refetchAll() }, [selectedMonth])
+  useEffect(() => { refetchAll() }, [startDate, endDate])
 
   usePolling(refetchAll, 120000)
 
@@ -249,8 +243,14 @@ export default function ClogEvents() {
   const currentUser = getUser()
   const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Admin'
 
+  const printTitle = "Clog Events"
+  const printColumns = ["ID", "Severity", "Detected At", "Resolved At", "Location", "Water Level", "Water Flow", "Status", "Reason"]
+
   const handlePrint = () => {
-    printReport()
+    exportOrPrint({
+      table: { title: printTitle, columns: printColumns, rows: printRows },
+      onError: () => addToast("Failed to export. Please try again.", "error"),
+    })
   }
 
   useWebSocket({
@@ -282,7 +282,7 @@ export default function ClogEvents() {
                   .sort((a, b) => a.barangay_name.localeCompare(b.barangay_name))
                   .map(b => (
                     <SelectItem key={b.barangay_id} value={b.barangay_name} className="text-xs cursor-pointer p-2 text-[#122A48]">
-                      {b.barangay_name}
+                      {barangayLabel(b)}
                     </SelectItem>
                   ))}
               </SelectContent>
@@ -295,8 +295,8 @@ export default function ClogEvents() {
               <SelectContent position="popper" className='min-w-0'>
                 <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="All Severity">All Severity</SelectItem>
                 <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="Low">Low</SelectItem>
-                <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="Medium">Medium</SelectItem>
-                <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="High">High</SelectItem>
+                <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="Medium">Moderate</SelectItem>
+                <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="High">Critical</SelectItem>
               </SelectContent>
             </Select>
 
@@ -307,23 +307,16 @@ export default function ClogEvents() {
               <SelectContent position="popper" className='min-w-0'>
                 <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="All Status">All Status</SelectItem>
                 <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="Detected">Detected</SelectItem>
+                <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="Responded">Responded</SelectItem>
                 <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="Cleared">Cleared</SelectItem>
               </SelectContent>
             </Select>
 
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="text-xs cursor-pointer px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent position="popper" className="text-xs min-w-0 !max-h-70 overflow-y-auto">
-                <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="All">All Months</SelectItem>
-                {monthOptions.map(m => (
-                  <SelectItem key={m.value} className="text-xs cursor-pointer p-2 text-[#122A48]" value={m.value}>
-                    {m.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <DateRangeFilter
+              from={startDate}
+              to={endDate}
+              onChange={(from, to) => { setStartDate(from); setEndDate(to) }}
+            />
           </div>
 
           <div>
@@ -341,7 +334,7 @@ export default function ClogEvents() {
             { icon: <Radar size={20} color="#2C7B3C" />, bg: "bg-[#B2FBC1]", count: total,label: "Total Clog Events" },
             { icon: <ArchiveRestore size={20} color="#FF9705" />, bg: "bg-[#F0FBB2]", count: cleared,  label: "Cleared Events"},
             { icon: <Clock3 size={20} color="#582579" />, bg: "bg-[#E5EAFF]", count: formatDuration(avgResolutionMinutes), label: "Average Resolution Time" },
-            { icon: <ClipboardCheck size={20} color="#A21111" />, bg: "bg-[#D8101059]", count: monthlyCompleted,  label: "Monthly Completed Events" },
+            { icon: <ClipboardCheck size={20} color="#A21111" />, bg: "bg-[#D8101059]", count: completedCount,  label: "Completed Events" },
           ].map(card => (
             <div key={card.label} className="rounded-lg border-2 border-[#C6C6C8] h-17 min-[2560px]:h-20 min-[3840px]:h-24 w-full flex items-center p-3 gap-3 relative bg-[#FAFCFD] shadow-[0_5px_4px_-4px_rgba(0,0,0,0.2)]">
               <div className={`${card.bg} rounded-lg p-2`}>{card.icon}</div>
@@ -392,7 +385,7 @@ export default function ClogEvents() {
                           clog.severity === 'Medium' ? 'bg-[#F4E4A7] text-[#E4B600]' :
                           'bg-[#B2FBC173] text-[#2C7B3C]'
                         }`}>
-                          {clog.severity}
+                          {clogSeverityLabel(clog.severity)}
                         </span>
                       </TableCell>
                       <TableCell className="text-[#122A48] text-left h-13 text-xs">
@@ -488,7 +481,7 @@ export default function ClogEvents() {
               <div className="flex gap-3 px-4 justify-between">
                 <div className="flex flex-col gap-3">
                   <p className="text-[#1565BC] text-sm underline">CLG-2026{selectedClog.event_id}</p>
-                  <p className="text-xs">Clog event - {selectedClog.severity}</p>
+                  <p className="text-xs">Clog event - {clogSeverityLabel(selectedClog.severity)}</p>
                 </div>
                 <div className="flex items-center">
                   <span className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-semibold ${
@@ -496,7 +489,7 @@ export default function ClogEvents() {
                     selectedClog.severity === 'Medium' ? 'bg-[#F4E4A7] text-[#d0a806]' :
                     'bg-[#B2FBC173] text-[#2C7B3C]'
                   }`}>
-                    {selectedClog.severity}
+                    {clogSeverityLabel(selectedClog.severity)}
                   </span>
                 </div>
               </div>
@@ -554,7 +547,7 @@ export default function ClogEvents() {
                 
                 <div className="flex justify-between text-xs">
                   <p>Severity</p>
-                  <p>{selectedClog.severity}</p>
+                  <p>{clogSeverityLabel(selectedClog.severity)}</p>
                 </div>
 
                 <div className="flex justify-between text-xs">
@@ -564,17 +557,21 @@ export default function ClogEvents() {
                   </p>
                 </div>
 
-                {selectedClog.clear_reason && (
-                  <div className="flex justify-between text-xs">
-                    <p>Reason</p>
-                    <p>
-                      {clearReasonLabel(selectedClog.clear_reason)}
-                      {selectedClog.clear_reason === 'Manual Clear' && selectedClog.cleared_by_details
-                        ? ` by ${selectedClog.cleared_by_details.first_name} ${selectedClog.cleared_by_details.last_name}`
-                        : ''}
-                    </p>
-                  </div>
-                )}
+                {selectedClog.clear_reason && (() => {
+                  const by =
+                    selectedClog.clear_reason === 'Responded' ? selectedClog.responded_by_details
+                    : selectedClog.clear_reason === 'Manual Clear' ? selectedClog.cleared_by_details
+                    : null
+                  return (
+                    <div className="flex justify-between items-start gap-4 text-xs">
+                      <p className="shrink-0">Reason</p>
+                      <div className="text-right">
+                        <p>{clearReasonLabel(selectedClog.clear_reason)}</p>
+                        {by && <p className="text-[#727272]">by {by.first_name} {by.last_name}</p>}
+                      </div>
+                    </div>
+                  )
+                })()}
 
               </div>
               
@@ -587,8 +584,8 @@ export default function ClogEvents() {
         <Toast toasts={toasts} onRemove={removeToast} />
         
         <PrintReport
-          reportTitle="Clog Events"
-          columns={["ID", "Severity", "Detected At", "Resolved At", "Location", "Water Level", "Water Flow", "Status", "Reason"]}
+          reportTitle={printTitle}
+          columns={printColumns}
           rows={printRows}
           generatedBy={generatedBy}
         />

@@ -22,6 +22,7 @@ import { AssignNodeDialog, AssignNodeDialogPayload } from "@/components/AssignNo
 import { SpinnerIcon } from "@/components/SpinnerIcon"
 import { AssignSkeleton } from "@/components/Skeleton/Admin/AssignSkeleton"
 import { useFillRows } from "@/components/hooks/useFillRows"
+import { RemarksDialog } from "@/components/RemarksDialog"
 
 // lib
 import { DIALOG_COLOR } from "@/lib/constant"
@@ -117,6 +118,9 @@ export default function NodeAssignment() {
   const [confirmDialog, setConfirmDialog] = useState<DialogState>({ open: false })
   const [cancelDialog, setCancelDialog] = useState<DialogState>({ open: false })
   const [unassignDialog, setUnassignDialog] = useState<DialogState>({ open: false, node: null })
+  const [moveRemarksOpen, setMoveRemarksOpen] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [unassigning, setUnassigning] = useState(false)
 
   const isEdit = !!assignFormDialog.node
 
@@ -175,7 +179,12 @@ export default function NodeAssignment() {
 
   const handleDialogConfirm = (payload: AssignNodeDialogPayload) => {
     setPendingAssignment(payload)
-    setConfirmDialog({ open: true })
+    // editing an occupied node and picking a different hotspot = a move -> remarks required
+    const movedHotspot =
+      isEdit &&
+      String(assignFormDialog.node?.hotspot_details?.hotspot_id ?? '') !== payload.hotspot
+    if (movedHotspot) setMoveRemarksOpen(true)
+    else setConfirmDialog({ open: true })
   }
 
   const handleCancel = () => {
@@ -183,21 +192,27 @@ export default function NodeAssignment() {
     setAssignFormDialog({ open: false, node: null })
   }
 
-  const handleSubmit = async () => {
-    setConfirmDialog({ open: false })
-    setLoadingMessage({
-      title: isEdit ? "Saving Changes" : "Assigning Node",
-      description: "Processing. Please wait.",
-    })
-    setLoadingDialog({ open: true })
+  const handleSubmit = async (remarks?: string) => {
+    const inline = !!remarks   // remarks dialog shows its own spinner
+    if (!pendingAssignment) return
 
-    if (!pendingAssignment) { setLoadingDialog({ open: false }); return }
+    if (inline) {
+      setSubmitting(true)
+    } else {
+      setConfirmDialog({ open: false })
+      setLoadingMessage({
+        title: isEdit ? "Saving Changes" : "Assigning Node",
+        description: "Processing. Please wait.",
+      })
+      setLoadingDialog({ open: true })
+    }
     const { selectedNodeId, barangay, hotspot, installedAt } = pendingAssignment
 
     const payload = {
       barangay: parseInt(barangay),
       hotspot: parseInt(hotspot),
       installed_at: installedAt ? new Date(installedAt).toISOString() : undefined,
+      ...(remarks ? { remarks } : {}),
     }
 
     try {
@@ -214,27 +229,31 @@ export default function NodeAssignment() {
       }
       setAssignFormDialog({ open: false, node: null })
       setPendingAssignment(null)
+      setMoveRemarksOpen(false)
       setLoadingDialog({ open: false })
       setSuccessDialog({ open: true })
     } catch (err: any) {
       setLoadingDialog({ open: false })
+      setMoveRemarksOpen(false)
       setErrorDialog({ open: true, message: err?.detail ?? err?.error ?? 'Something went wrong. Please try again.' })
+    } finally {
+      setSubmitting(false)
     }
   }
 
-  const handleUnassign = async (node: SensorNode) => {
-    setUnassignDialog({ open: false, node: null })
-    setLoadingMessage({ title: "Unassigning Node", description: `Unassigning ${node.node_name}. Please wait.` })
-    setLoadingDialog({ open: true })
+  const handleUnassign = async (node: SensorNode, remarks: string) => {
+    setUnassigning(true)
     try {
-      await api.post(`/api/sensor-nodes/${node.node_id}/unassign/`, {})
+      await api.post(`/api/sensor-nodes/${node.node_id}/unassign/`, { remarks })
       assignedNodesCache.setData(prev => prev.filter(n => n.node_id !== node.node_id))
+      setUnassignDialog({ open: false, node: null })
       setActionResult({ message: `${node.node_name} has been unassigned successfully.` })
-      setLoadingDialog({ open: false })
       setSuccessDialog({ open: true })
     } catch (err: any) {
-      setLoadingDialog({ open: false })
-      setErrorDialog({ open: true, message: err?.detail ?? `Failed to unassign ${node.node_name}. Please try again.` })
+      setUnassignDialog({ open: false, node: null })
+      setErrorDialog({ open: true, message: err?.detail ?? err?.error ?? `Failed to unassign ${node.node_name}. Please try again.` })
+    } finally {
+      setUnassigning(false)
     }
   }
 
@@ -496,7 +515,7 @@ export default function NodeAssignment() {
       <DialogModal
         open={confirmDialog.open}
         onClose={() => setConfirmDialog({ open: false })}
-        onConfirm={handleSubmit}
+        onConfirm={() => handleSubmit()}
         color={DIALOG_COLOR.lightgreen}
         icon={isEdit ? MapPinPen : MapPinPlus}
         iconColor={DIALOG_COLOR.green}
@@ -520,17 +539,28 @@ export default function NodeAssignment() {
       />
 
       {/* Unassign dialog */}
-      <DialogModal
+      <RemarksDialog
         open={unassignDialog.open}
-        onClose={() => setUnassignDialog({ open: false, node: null })}
-        onConfirm={() => handleUnassign(unassignDialog.node!)}
-        color={DIALOG_COLOR.lightyellow}
-        icon={Unplug}
-        iconColor={DIALOG_COLOR.yellow}
         title="Unassign Node"
-        description={<> Are you sure you want to unassign <strong>{unassignDialog.node?.node_name}</strong>? It will return to Available in Node Management. </>}
-        cancelLabel="Cancel"
+        description={<>Unassign <strong>{unassignDialog.node?.node_name}</strong>? It will return to Available in Node Management. Please tell us why.</>}
+        placeholder="e.g. Hotspot is dry this season"
         confirmLabel="Unassign"
+        loading={unassigning}
+        onCancel={() => setUnassignDialog({ open: false, node: null })}
+        onConfirm={(remarks) => handleUnassign(unassignDialog.node!, remarks)}
+      />
+
+      {/* Moving to a different hotspot -> remarks required */}
+      <RemarksDialog
+        open={moveRemarksOpen}
+        title="Confirm Re-assignment"
+        description={<>You're moving <strong>{assignFormDialog.node?.node_name}</strong> to a different hotspot. Please tell us why.</>}
+        placeholder="e.g. Moved to a canal with better flow"
+        confirmLabel="Re-assign"
+        confirmColor={DIALOG_COLOR.blue}
+        loading={submitting}
+        onCancel={() => setMoveRemarksOpen(false)}
+        onConfirm={(remarks) => handleSubmit(remarks)}
       />
 
       {/* Loading dialog */}

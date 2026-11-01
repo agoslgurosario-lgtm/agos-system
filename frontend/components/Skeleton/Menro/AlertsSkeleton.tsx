@@ -1,5 +1,7 @@
 "use client"
 
+import { DateRangeFilter } from "@/components/DateRangeFilter"
+import { toISODate } from "@/lib/dateRange"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -11,11 +13,11 @@ import { useState } from "react"
 
 import { useFillRows } from "@/components/hooks/useFillRows"
 
-const ALERT_TYPE_LABELS = ["All", "Water Level Rising", "Low Clog Alert", "Moderate Clog Alert", "Critical Clog", "Report Submitted"]
+const ALERT_TYPE_LABELS = ["All", "Water Level Rising", "Low Clog", "Moderate Clog", "Critical Clog", "Report Submitted"]
 
 export function AlertsSkeleton() {
   const [barangay, setBarangay] = useState<string>("All Barangay")
-  const [dateFilter, setDateFilter] = useState<string>("Today")
+  const today = toISODate(new Date())
 
   const { panelRef, tableWrapRef, rows } = useFillRows({
     rowHeight: 50.5,
@@ -42,14 +44,7 @@ export function AlertsSkeleton() {
             </SelectContent>
           </Select>
 
-          <Select value={dateFilter} onValueChange={setDateFilter}>
-            <SelectTrigger className="text-xs px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectItem className="p-2 text-xs" value="Today">Today</SelectItem>
-            </SelectContent>
-          </Select>
+          <DateRangeFilter from={today} to={today} onChange={() => {}} disabled align="right" width="w-[210px]" />
         </div>
       </div>
 

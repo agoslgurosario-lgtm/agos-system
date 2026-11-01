@@ -406,6 +406,7 @@ class NodeAssignmentHistorySerializer(serializers.ModelSerializer):
             'hotspot', 'hotspot_name', 'barangay', 'barangay_name',
             'started_at', 'ended_at', 'end_reason',
             'assigned_by', 'assigned_by_name', 'ended_by', 'ended_by_name',
+            'started_at', 'ended_at', 'end_reason', 'end_remarks', 'start_remarks',
         ]
 
     def _user_label(self, user):

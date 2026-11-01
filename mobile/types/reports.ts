@@ -28,6 +28,30 @@ export type MediaCategory = 'Before_Clearing' | 'After_Clearing' | 'Additional_E
 export interface CanalMonitoringReport {
   report_id: number
   is_submitted: boolean
+  status: 'Draft' | 'Awaiting_Post_Report' | 'Ready_To_Verify' | 'Verified' | 'Submitted' | 'Voided'
+  condition_source: 'Sensor' | 'Manual' | 'Mixed'
+  report_scope: 'Purok' | 'Barangay'
+  purok_rows?: ReportPurokRow[]
+  post_completed_at: string | null
+  verified_at: string | null
+  verified_by_name: string | null
+  void_reason?: string | null
+  earlier_voided?: { report_id: number; reason: string; voided_at: string | null; voided_by_name: string | null }[]
+  node_summaries?: {
+    node_name: string
+    hotspot_name: string
+    purok: number | null
+    window_start: string
+    window_end: string
+    reading_count: number
+    peak_clog_pct: number | null
+    avg_clog_pct: number | null
+    peak_water_level_cm: number | null
+    peak_water_level_pct: number | null
+    min_flow_rate: number | null
+    worst_water_status: string
+    worst_flow: string
+  }[]
 
   // Monitoring site
   barangay: number
@@ -88,4 +112,43 @@ export interface ReportCustomWaste {
   waste_type_name: string
   waste_type_status: 'Pending' | 'Approved' | 'Rejected'
   weight_kg: number
+}
+
+export interface ReportPurokRow {
+  row_id: number
+  purok: number
+  included: boolean
+  source: 'Sensor' | 'Manual'
+  overall_water_level: WaterLevel | null
+  overall_obstruction_coverage: ObstructionCoverage | null
+  overall_water_flow_condition: WaterFlowCondition | null
+  node_count: number
+  reading_count: number
+  peak_clog_pct: number | null
+}
+
+// one purok from GET /api/canal-reports/cleanup-preview/
+export interface CleanupPreviewPurok {
+  purok: number
+  node_names: string[]
+  has_sensor_data: boolean
+  reading_count: number
+  peak_clog_pct: number | null
+  overall_water_level: WaterLevel | null
+  overall_obstruction_coverage: ObstructionCoverage | null
+  overall_water_flow_condition: WaterFlowCondition | null
+}
+
+export interface CleanupPreview {
+  window_start: string
+  window_end: string
+  puroks: CleanupPreviewPurok[]
+}
+
+// local form state for one purok card
+export interface PurokFormRow {
+  included: boolean
+  water: WaterLevel | null
+  obstruction: ObstructionCoverage | null
+  flow: WaterFlowCondition | null
 }

@@ -1,4 +1,5 @@
 import re
+from django.db.models import Count, F, Q
 from datetime import timedelta
 from rest_framework import generics
 from rest_framework.views import APIView
@@ -17,7 +18,16 @@ from agos_backend.pdf_utils import render_to_pdf
 from .utils import send_device_key_email 
 from apps.audit_logs.utils import log_action
 from django.utils import timezone
-from .services import assign_node, release_node, sync_assignment_change
+from .services import assign_node, release_node, sync_assignment_change, previous_unassigned_hotspot_id
+from rest_framework.exceptions import ValidationError
+from agos_backend.date_range import has_date_range, filter_by_date_range, filter_overlapping_date_range
+
+
+def barangay_health_scope(qs, user):
+    """What a barangay may see: its own nodes, and only checks made since the node was installed there."""
+    return qs.filter(node__barangay=user.barangay).filter(
+        Q(node__installed_at__isnull=True) | Q(checked_at__gte=F('node__installed_at'))
+    )
 
 
 class SensorNodeListView(generics.ListCreateAPIView):
@@ -79,7 +89,19 @@ class SensorNodeDetailView(generics.RetrieveUpdateDestroyAPIView):
         hotspot = serializer.validated_data.get('hotspot', instance.hotspot)
 
         # If hotspot is being set, mark Occupied; if being cleared, mark Available
+        remarks = (self.request.data.get('remarks') or '').strip()
+
         if 'hotspot' in serializer.validated_data:
+            new_hotspot_id = hotspot.hotspot_id if hotspot else None
+            if new_hotspot_id != prev_hotspot_id:
+                if prev_hotspot_id is not None:
+                    needs_remarks = True    # leaving a hotspot: A -> B, or A -> none
+                else:
+                    last_id = previous_unassigned_hotspot_id(instance)
+                    needs_remarks = last_id is not None and new_hotspot_id != last_id
+                if needs_remarks and not remarks:
+                    raise ValidationError({'error': 'Remarks are required when moving a node.'})
+
             availability_status = 'Occupied' if hotspot else 'Available'
             node = serializer.save(availability_status=availability_status)
             sync_assignment_change(
@@ -87,13 +109,14 @@ class SensorNodeDetailView(generics.RetrieveUpdateDestroyAPIView):
                 prev_hotspot_id,
                 user=self.request.user,
                 installed_at=serializer.validated_data.get('installed_at'),
+                remarks=remarks,
             )
             log_action(
                 user=self.request.user,
                 action='Assigned Node' if hotspot else 'Unassigned Node',
                 affected_table='tbl_sensor_nodes',
                 old_value=f"hotspot: {prev_hotspot_name}",
-                new_value=f"hotspot: {hotspot.name if hotspot else '—'}",
+                new_value=f"hotspot: {hotspot.name if hotspot else '—'}" + (f" | remarks: {remarks}" if remarks else ""),
                 ip_address=self.request.META.get('REMOTE_ADDR')
             )
         else:
@@ -161,7 +184,11 @@ class SensorNodeUnassignView(APIView):
         if node.availability_status == 'Retired':
             return Response({'error': 'Retired nodes cannot be unassigned'}, status=status.HTTP_400_BAD_REQUEST)
 
-        release_node(node, reason='Unassigned', user=request.user)
+        remarks = (request.data.get('remarks') or '').strip()
+        if not remarks:
+            return Response({'error': 'Remarks are required to unassign a node.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        release_node(node, reason='Unassigned', user=request.user, remarks=remarks)
         node.status = 'Active'
         node.save(update_fields=['status'])
 
@@ -170,6 +197,7 @@ class SensorNodeUnassignView(APIView):
             action='Unassigned Node',
             affected_table='tbl_sensor_nodes',
             old_value=f"node: {node.node_name}",
+            new_value=f"remarks: {remarks}",
             ip_address=request.META.get('REMOTE_ADDR')
         )
 
@@ -428,15 +456,19 @@ class SystemHealthLogByNodeView(generics.ListAPIView):
       ?page_size=N                    (default 20, matches other tables)
     """
     serializer_class = SystemHealthLogSerializer
-    permission_classes = [IsAdmin]
+    permission_classes = [IsAdminOrMENROOrBarangay]
 
-    def get_queryset(self):
+    def _base_queryset(self):
+        """This node's logs inside the date range, before the status filter."""
+        user = self.request.user
+        role = getattr(user, 'user_role', None)
+        if role not in ('Admin', 'Barangay'):
+            return SystemHealthLog.objects.none()   # MENRO still has no access here
+
         node_id = self.kwargs['node_id']
         qs = SystemHealthLog.objects.filter(node__node_id=node_id).order_by('-checked_at')
-
-        status_param = self.request.query_params.get('status')
-        if status_param:
-            qs = qs.filter(status=status_param)
+        if role == 'Barangay':
+            qs = barangay_health_scope(qs, user)   # own nodes, checks since installed here
 
         date_from = self.request.query_params.get('from')
         if date_from:
@@ -448,11 +480,80 @@ class SystemHealthLogByNodeView(generics.ListAPIView):
 
         return qs
 
+    def get_queryset(self):
+        qs = self._base_queryset()
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            qs = qs.filter(status=status_param)
+        return qs
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        # counts for the status tabs: same node + date range, ignoring the status filter
+        response.data['summary'] = self._base_queryset().aggregate(
+            total=Count('pk'),
+            normal=Count('pk', filter=Q(status='Normal')),
+            warning=Count('pk', filter=Q(status='Warning')),
+            critical=Count('pk', filter=Q(status='Critical')),
+        )
+        return response
+
     def paginate_queryset(self, queryset):
         page_size = self.request.query_params.get('page_size')
         if page_size:
             self.paginator.page_size = min(int(page_size), 100)
         return super().paginate_queryset(queryset)
+
+
+class SystemHealthLogHistoryView(generics.ListAPIView):
+    """
+    Health history across nodes — the IoT Health table (Admin) and the barangay health page.
+      ?node=<node_id>  ?barangay=<barangay_id> (Admin only)
+      ?status=Normal|Warning|Critical
+      ?from=YYYY-MM-DD&to=YYYY-MM-DD  (inclusive, by checked_at date)
+      ?page_size=N                    (default 20, max 100)
+      ?with_summary=1                 adds `latest`: newest check per node in scope
+    """
+    serializer_class = SystemHealthLogSerializer
+    permission_classes = [IsAdminOrMENROOrBarangay]
+
+    def _scoped(self):
+        user = self.request.user
+        role = getattr(user, 'user_role', None)
+        qs = SystemHealthLog.objects.select_related('node', 'node__barangay', 'node__hotspot')
+        if role == 'Admin':
+            return qs
+        if role == 'Barangay':
+            return barangay_health_scope(qs, user)
+        return qs.none()   # MENRO has no access here
+
+    def get_queryset(self):
+        qs = self._scoped().order_by('-checked_at', '-health_id')
+        p = self.request.query_params
+        if p.get('node'):
+            qs = qs.filter(node__node_id=p['node'])
+        if p.get('barangay'):
+            qs = qs.filter(node__barangay__barangay_id=p['barangay'])
+        if p.get('status'):
+            qs = qs.filter(status=p['status'])
+        if p.get('from'):
+            qs = qs.filter(checked_at__date__gte=p['from'])
+        if p.get('to'):
+            qs = qs.filter(checked_at__date__lte=p['to'])
+        return qs
+
+    def paginate_queryset(self, queryset):
+        page_size = self.request.query_params.get('page_size')
+        if page_size:
+            self.paginator.page_size = min(int(page_size), 100)
+        return super().paginate_queryset(queryset)
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        if request.query_params.get('with_summary'):
+            latest = self._scoped().order_by('node_id', '-checked_at').distinct('node_id')
+            response.data['latest'] = self.get_serializer(latest, many=True).data
+        return response
 
 
 class SystemHealthLogExportView(APIView):
@@ -619,7 +720,9 @@ class MaintenanceLogListView(generics.ListAPIView):
     def get_queryset(self):
         qs = MaintenanceLog.objects.select_related('node', 'marked_by').order_by('-started_at')
         month = self.request.query_params.get('month')  # expects 'YYYY-MM'
-        if month:
+        if has_date_range(self.request):
+            qs = filter_by_date_range(qs, 'started_at', self.request)
+        elif month:
             try:
                 year, mon = month.split('-')
                 qs = qs.filter(started_at__year=int(year), started_at__month=int(mon))
@@ -686,6 +789,7 @@ class NodeAssignmentHistoryView(generics.ListAPIView):
         elif reason:
             qs = qs.filter(end_reason=reason)
 
+        qs = filter_overlapping_date_range(qs, 'started_at', 'ended_at', self.request)
         return qs
 
     def paginate_queryset(self, queryset):

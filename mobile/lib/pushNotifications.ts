@@ -36,6 +36,10 @@ async function setupChannels() {
     name: 'Info alerts',
     importance: Notifications.AndroidImportance.DEFAULT,
   })
+  await Notifications.setNotificationChannelAsync('silent', {
+    name: 'Report updates',
+    importance: Notifications.AndroidImportance.LOW, // shows in the tray, no sound
+  })
 }
 
 async function getExpoPushToken(): Promise<string | null> {

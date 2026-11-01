@@ -10,7 +10,8 @@ import StatCard from "../../components/alerts/StatCard";
 import FilterSheet from "../../components/alerts/FilterSheet";
 import Pagination from "../../components/alerts/Pagination";
 
-import { useAlerts, AlertTypeFilter, DateFilter } from "../../hooks/useAlerts";
+import { useAlerts, AlertTypeFilter } from "../../hooks/useAlerts";
+import { todayRange } from "../../lib/dateRange";
 import { Alert } from "../../types/alert";
 
 const PAGE_SIZE = 5;
@@ -19,12 +20,12 @@ const CLOG_TYPES = ["Low_Clog_Alert", "Moderate_Clog_Alert", "Critical_Clog"];
 
 export default function AlertsScreen() {
   const [alertType, setAlertType] = useState<AlertTypeFilter>("All");
-  const [dateFilter, setDateFilter] = useState<DateFilter>("Today");
+  const [dateRange, setDateRange] = useState(todayRange());
   const [filterVisible, setFilterVisible] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [page, setPage] = useState(1);
 
-  const { alerts, loading, refreshing, error, refetch, markAsRead } = useAlerts(alertType, dateFilter);
+  const { alerts, loading, refreshing, error, refetch, markAsRead, markAllAsRead } = useAlerts(alertType, dateRange.from, dateRange.to);
 
   const { alertId } = useLocalSearchParams<{ alertId?: string }>();
   const openedFromPushRef = useRef<string | null>(null);
@@ -50,9 +51,10 @@ export default function AlertsScreen() {
     return alerts.slice(start, start + PAGE_SIZE);
   }, [alerts, page]);
 
-  const handleApplyFilter = (type: AlertTypeFilter, date: DateFilter) => {
+  const handleApplyFilter = (type: AlertTypeFilter, from: string, to: string) => {
     setAlertType(type);
-    setDateFilter(date);
+    // an empty range would load every alert ever, so it falls back to today
+    setDateRange(from || to ? { from, to } : todayRange());
     setPage(1);
   };
 
@@ -79,7 +81,9 @@ export default function AlertsScreen() {
             <>
               {/* Header */}
               <View className="flex-row justify-between items-center mt-3 mb-2">
-                <View style={{ width: 24 }} />
+                <Pressable onPress={markAllAsRead} hitSlop={8}>
+                  <Ionicons name="checkmark-done-outline" size={22} color="#334155" />
+                </Pressable>
                 <Text className="text-[23px] font-bold text-[#122A48]">
                   Alerts
                 </Text>
@@ -156,7 +160,8 @@ export default function AlertsScreen() {
         visible={filterVisible}
         onClose={() => setFilterVisible(false)}
         selectedType={alertType}
-        selectedDate={dateFilter}
+        selectedFrom={dateRange.from}
+        selectedTo={dateRange.to}
         onApply={handleApplyFilter}
       />
 

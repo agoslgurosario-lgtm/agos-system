@@ -7,13 +7,15 @@ export interface ClogEvent {
   severity: 'Low' | 'Medium' | 'High'
   first_severity: 'Low' | 'Medium' | 'High' | null
   peak_severity: 'Low' | 'Medium' | 'High' | null
-  status: 'Detected' | 'Responded' | 'Cleared' | 'Verified'
+  status: 'Detected' | 'Responded' | 'Cleared'
   detected_at: string
   responded_at: string | null
   resolved_at: string | null
   cleared_by: number | null
   responded_by: number | null
   auto_cleared: boolean
+  reopened_at?: string | null
+  previous_responded_at?: string | null
   barangay_details: {
     barangay_id: number
     barangay_name: string

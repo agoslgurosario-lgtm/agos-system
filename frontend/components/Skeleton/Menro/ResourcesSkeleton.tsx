@@ -4,10 +4,9 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { RadioTower, Trash2, TriangleAlert, BadgeCheck, ChevronLeft, ChevronRight } from "lucide-react"
+import { CLOG_LEGEND } from "@/lib/clogSeverity"
 
-// Mirrors app/menro/resources/page.tsx. Static text (titles, headers, labels, legend)
-// is rendered for real; only data-driven values are skeletons. Keep the structure
-// and class names in sync with the page so nothing shifts when loading finishes.
+
 export function ResourcesSkeleton() {
   return (
     <div className="hidden md:flex md:flex-col md:h-full">
@@ -93,14 +92,10 @@ export function ResourcesSkeleton() {
           {/* clog level legend (static, same as the page) */}
           <div className="border-t px-4 py-2 mt-auto">
             <div className="flex flex-wrap justify-center gap-3 text-[10px] text-[#122A48]">
-              {[
-                { color: "bg-[#E85656]", range: "80% - 100%", label: "Critical" },
-                { color: "bg-[#FFCC00]", range: "30% - 79%", label: "Medium" },
-                { color: "bg-[#2C7B3C]", range: "0% - 29%", label: "Low" },
-              ].map(l => (
+              {CLOG_LEGEND.map(l => (
                 <div key={l.label} className="flex flex-col items-center">
                   <div className="flex gap-2">
-                    <div className={`w-3 h-3 rounded-full ${l.color}`} />
+                    <div className={`w-3 h-3 rounded-full ${l.dot}`} />
                     <span>{l.range}</span>
                   </div>
                   <div>

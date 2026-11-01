@@ -3,6 +3,7 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio'
 import { api, BASE_URL, getAccessToken } from './api'
 import { useAuth } from './AuthContext'
 import { resolveSoundSource } from './soundUtils'
+import { APP_ALERT_TYPES } from '../constants/alerts'
 
 type AlertsContextType = {
   unreadCount: number
@@ -28,7 +29,12 @@ const SEVERITY_MAP: Record<string, 'critical' | 'warning' | 'info'> = {
   Sensor_Failure: 'info',
   Waste_Type_Rejected: 'info',
   Waste_Type_Approved: 'info',
+  Report_Due_Soon: 'info',
+  Report_Overdue: 'warning',
+  Node_Inspection_Request: 'warning',
 }
+
+const SILENT_ALERT_TYPES = new Set(['Waste_Type_Approved', 'Waste_Type_Rejected'])
 
 const SEVERITY_RANK: Record<string, number> = { critical: 3, warning: 2, info: 1 }
 
@@ -54,10 +60,10 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
 
   const refreshUnreadCount = useCallback(async () => {
     try {
-      const data = await api.get('/api/alerts/unread-count/')
+      const data = await api.get(`/api/alerts/unread-count/?alert_type=${APP_ALERT_TYPES.join(',')}`)
       setUnreadCount(data.unread_count ?? 0)
-    } catch {
-      // network hiccup, keep showing the last known count
+    } catch (e) {
+      console.warn('[unread-count] failed', e)  
     }
   }, [])
 
@@ -112,6 +118,7 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
       if (seenAlertIdsRef.current.has(alert.alert_id)) return // same alert delivered twice
       seenAlertIdsRef.current.add(alert.alert_id)
     }
+    if (SILENT_ALERT_TYPES.has(alert.alert_type ?? '')) return
     pendingAlertTypesRef.current.push(alert.alert_type ?? '')
     if (flushTimerRef.current) return
 

@@ -23,7 +23,8 @@ import {
   Map, Package, FileBarChart, CalendarDays,
   MapPin, Wrench, LogOut, RadioTower, ChevronDown,
   SlidersHorizontal, Target, GitBranchPlus,
-  TriangleAlert, Settings, Book, FileSignature
+  TriangleAlert, Settings, Book, FileSignature,
+  ChartColumn
 } from "lucide-react"
 
 // logo
@@ -80,6 +81,7 @@ const navItems: Record<string, NavItem[]> = {
         { label: "Clog Events",              href: "/admin/history/clog-events",      icon: <TriangleAlert size={14} /> },
         { label: "Waste Classification",     href: "/admin/history/waste",            icon: <Package size={14} /> },
         { label: "Barangay Reports", href: "/admin/history/barangay-reports", icon: <FileBarChart size={14} /> },
+        { label: "Report Analytics", href: "/admin/history/report-analytics", icon: <ChartColumn size={14} /> },
       ]
     },
     {
@@ -104,6 +106,7 @@ const navItems: Record<string, NavItem[]> = {
     { label: "Resource Optimization",        href: "/menro/resources",        icon: <Package size={18} /> },
     { label: "Canal Hotspots",        href: "/menro/hotspots",        icon: <Target size={18} /> },
     { label: "Barangay Reports", href: "/menro/barangay-reports", icon: <FileBarChart size={18} /> },
+    { label: "Report Analytics", href: "/menro/report-analytics", icon: <ChartColumn size={18} /> },
     { label: "User Manual",    href: "/menro/manual",  icon: <Book size={14} /> },
   ],
   MENRO_Staff: [
@@ -113,6 +116,7 @@ const navItems: Record<string, NavItem[]> = {
     { label: "Resource Optimization", href: "/menro/resources", icon: <Package size={18} /> },
     { label: "Canal Hotspots",    href: "/menro/hotspots",   icon: <Target size={18} /> },
     { label: "Barangay Reports", href: "/menro/barangay-reports", icon: <FileBarChart size={18} /> },
+    { label: "Report Analytics", href: "/menro/report-analytics", icon: <ChartColumn size={18} /> },
     { label: "User Manual",    href: "/menro/manual",  icon: <Book size={14} /> },
   ],
   Barangay: [
@@ -121,6 +125,7 @@ const navItems: Record<string, NavItem[]> = {
     { label: "Analytics",   href: "/barangay/analytics",        icon: <ChartNoAxesCombined size={18} /> },
     { label: "Readings",    href: "/barangay/readings",         icon: <Activity size={18} /> },
     { label: "Clog Events", href: "/barangay/clog-events",      icon: <TriangleAlert size={18} /> },
+    { label: "Node Health", href: "/barangay/health", icon: <Activity size={18} /> },
     { label: "Barangay Reports",     href: "/barangay/barangay-reports", icon: <FileBarChart size={18} /> },
     { label: "Help", href: "/barangay/user-manual",      icon: <Book size={18} /> },
   ],

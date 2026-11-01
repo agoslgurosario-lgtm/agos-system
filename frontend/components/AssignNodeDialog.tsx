@@ -58,6 +58,7 @@ type Props = {
   onConfirm: (payload: AssignNodeDialogPayload) => void
   onNoChanges?: () => void
   assign?: boolean
+  excludeHotspotId?: number | null   // never offer this hotspot (e.g. the node's previous one)
 }
 
 export function AssignNodeDialog({
@@ -70,6 +71,7 @@ export function AssignNodeDialog({
   onConfirm,
   onNoChanges,
   assign,
+  excludeHotspotId = null,
 }: Props) {
   const hasFixedNode = !!node
   const isEdit = hasFixedNode && !assign
@@ -174,6 +176,10 @@ export function AssignNodeDialog({
           if (!alreadyIncluded) {
             spots = [{ hotspot_id: current.hotspot_id, name: current.name, latitude: current.latitude, longitude: current.longitude }, ...spots]
           }
+        }
+
+        if (excludeHotspotId != null) {
+          spots = spots.filter(h => h.hotspot_id !== excludeHotspotId)
         }
 
         setHotspots(spots)
@@ -368,11 +374,20 @@ export function AssignNodeDialog({
                             {barangay ? "No available hotspots" : "Select a barangay first"}
                           </div>
                         ) : (
-                          hotspots.map(h => (
-                            <SelectItem key={h.hotspot_id} value={String(h.hotspot_id)} className="p-1 md:p-2 text-[#122A48]">
-                              {h.name}
-                            </SelectItem>
-                          ))
+                          hotspots.map(h => {
+                            const isCurrent = isEdit && h.hotspot_id === node?.hotspot_details?.hotspot_id
+                            return (
+                              <SelectItem
+                                key={h.hotspot_id}
+                                value={String(h.hotspot_id)}
+                                // can't "move" to where it already is; still shown so the current value displays
+                                disabled={isCurrent && hotspot !== String(h.hotspot_id)}
+                                className="p-1 md:p-2 text-[#122A48]"
+                              >
+                                {h.name}{isCurrent ? " (current)" : ""}
+                              </SelectItem>
+                            )
+                          })
                         )}
                       </SelectContent>
                     </Select>

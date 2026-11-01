@@ -71,7 +71,7 @@ export const ROLE_VALUE: Record<string, string> = {
 export function getBatteryLevel(voltage: number): string {
   if (voltage >= 4.1) return `Full (${voltage}V)`
   if (voltage >= 3.9) return `Good (${voltage}V)`
-  if (voltage >= 3.7) return `Medium (${voltage}V)`
+  if (voltage >= 3.7) return `Moderate (${voltage}V)`
   if (voltage >= 3.5) return `Low (${voltage}V)`
   return `Critical (${voltage}V)`
 }

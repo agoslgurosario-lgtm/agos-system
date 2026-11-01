@@ -48,6 +48,11 @@
     p.keep { -pdf-keep-with-next: true; }
     div.opts { font-size: 10px; padding: 2px 0 2px 0; }
 
+    table.purok-table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+    table.purok-table th { border: 1px solid #122A48; background-color: #F1F5F9; font-size: 8px; text-align: left; padding: 3px 4px; text-transform: uppercase; }
+    table.purok-table td { border: 1px solid #122A48; font-size: 9px; padding: 3px 4px; }
+    td.purok-note { font-style: italic; color: #727272; }
+
     /* ── boxed text (action taken, remarks) ── */
     table.textbox { width: 100%; border-collapse: collapse; }
     /* no fixed height here: xhtml2pdf shrinks the text to fit a fixed-height cell. Bottom padding gives the minimum box size instead. */
@@ -125,8 +130,8 @@
   <table class="fields">
     <tr>
       <td style="width: 50%;">
-          <div class="lbl">Purok</div>
-          <div class="val">{{ report.purok|default:"—" }}</div>
+          <div class="lbl">{% if is_cleanup %}Coverage{% else %}Purok{% endif %}</div>
+          <div class="val">{% if is_cleanup %}Whole barangay{% else %}{{ report.purok|default:"—" }}{% endif %}</div>
       </td>
       <td style="width: 50%;">
         <div class="lbl">Barangay</div>
@@ -146,16 +151,18 @@
   </table>
 
   <!-- ═════════ DETECTION SUMMARY ═════════ -->
-  <p class="section-bar">Detection Summary</p>
+  <p class="section-bar">{% if is_cleanup %}Cleanup Details{% else %}Detection Summary{% endif %}</p>
   <table class="fields">
     <tr>
       <td style="width: 50%;">
-        <div class="lbl">Date / Time Observed</div>
+        <div class="lbl">{% if is_cleanup %}Date / Time of Cleanup{% else %}Date / Time Observed{% endif %}</div>
         <div class="val">{% if report.date_observed %}{{ report.date_observed|date:"F j, Y  g:i A" }}{% else %}—{% endif %}</div>
       </td>
       <td style="width: 50%;">
+        {% if not is_cleanup %}
         <div class="lbl">Severity (choose one)</div>
         <div class="opts">{% for o in severity_options %}{% if o.checked %}[X]{% else %}[&nbsp;&nbsp;&nbsp;]{% endif %}&nbsp;{{ o.label }}&nbsp;&nbsp;&nbsp;{% endfor %}</div>
+        {% endif %}
       </td>
     </tr>
     <tr>
@@ -168,7 +175,7 @@
   </table>
 
   <!-- ═════════ CANAL CONDITION ═════════ -->
-  <p class="section-bar">Overall Canal Condition (Whole Purok)</p>
+  <p class="section-bar">{% if is_cleanup %}Overall Canal Condition (Whole Barangay){% elif report.purok %}Overall Canal Condition (Purok {{ report.purok }}){% else %}Overall Canal Condition{% endif %}</p>
   <table class="fields">
     <tr>
       <td style="width: 50%;">
@@ -187,6 +194,59 @@
       </td>
     </tr>
   </table>
+
+  {% if peak_water_pct is not None or peak_clog_pct is not None %}
+  <p class="lbl" style="margin-top: 4px;">
+    Sensor peaks:
+    {% if peak_water_pct is not None %}water level {{ peak_water_pct|floatformat:0 }}% of canal depth{% endif %}{% if peak_water_pct is not None and peak_clog_pct is not None %} &middot; {% endif %}{% if peak_clog_pct is not None %}clog {{ peak_clog_pct|floatformat:0 }}%{% endif %}
+  </p>
+  {% endif %}
+  <p class="lbl" style="margin-top: 2px; font-weight: normal; text-transform: none;">
+    How to read this: water level is how high the water is compared with the canal depth. Obstruction is how much of the canal is blocked. High water together with high obstruction usually means a blockage is backing the water up.
+  </p>
+
+  {% if is_cleanup %}
+  <p class="lbl" style="margin-top: 4px;">
+    {% if report.condition_source == "Manual" %}Entered by the barangay, not taken from sensors.{% else %}Based on {{ counted_puroks }} of {{ purok_table|length }} puroks with sensor data.{% endif %}
+  </p>
+  {% if purok_table %}
+  <table class="purok-table">
+    <tr><th>Purok</th><th>Water level</th><th>Obstruction</th><th>Water flow</th></tr>
+    {% for r in purok_table %}
+    <tr>
+      <td>Purok {{ r.purok }}</td>
+      {% if r.included %}
+      <td>{{ r.water }}</td><td>{{ r.coverage }}</td><td>{{ r.flow }}</td>
+      {% else %}
+      <td colspan="3" class="purok-note">{{ r.note }}</td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+  {% endif %}
+
+  {% if not is_cleanup and report.node_summaries.all %}
+  <p class="section-bar">Sensor Data</p>
+  <table class="purok-table">
+    <tr><th>Node</th><th>Readings</th><th>Peak clog</th><th>Avg clog</th><th>Peak water level</th><th>Worst water</th><th>Worst flow</th></tr>
+    {% for s in report.node_summaries.all %}
+    <tr>
+      <td>
+        <b>{{ s.node_name }}</b><br/>
+        {{ s.hotspot_name }}{% if s.purok %} · Purok {{ s.purok }}{% endif %}<br/>
+        {{ s.window_start|date:"M j, g:i A" }} to {{ s.window_end|date:"M j, g:i A" }}
+      </td>
+      <td>{{ s.reading_count }}</td>
+      <td>{% if s.peak_clog_pct is not None %}{{ s.peak_clog_pct|floatformat:1 }}%{% else %}—{% endif %}</td>
+      <td>{% if s.avg_clog_pct is not None %}{{ s.avg_clog_pct|floatformat:1 }}%{% else %}—{% endif %}</td>
+      <td>{% if s.peak_water_level_pct is not None %}{{ s.peak_water_level_pct|floatformat:1 }}% of depth{% elif s.peak_water_level_cm is not None %}{{ s.peak_water_level_cm|floatformat:1 }} cm{% else %}—{% endif %}</td>
+      <td>{{ s.worst_water_status|default:"—" }}</td>
+      <td>{{ s.worst_flow|default:"—" }}{% if s.min_flow_rate is not None %} ({{ s.min_flow_rate|floatformat:1 }} m/s){% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
 
   <!-- ═════════ WASTE COMPOSITION ═════════ -->
   <p class="section-bar">Waste Composition (kg)</p>
@@ -240,6 +300,15 @@
       <td class="item-lbl"></td>
       <td class="item-val"></td>
     </tr>
+    {% for c in report.custom_waste.all %}
+    <tr>
+      <td class="item-lbl">{{ c.waste_type.name }}</td>
+      <td class="item-val">{{ c.weight_kg|floatformat:2 }}</td>
+      <td class="item-gap"></td>
+      <td class="item-lbl"></td>
+      <td class="item-val"></td>
+    </tr>
+    {% endfor %}
   </table>
 
   <!-- ═════════ BARANGAY RESPONSE ═════════ -->
@@ -251,8 +320,10 @@
         <div class="val">{{ report.assigned_personnel|default:"—" }}</div>
       </td>
       <td style="width: 50%;">
+        {% if not is_cleanup %}
         <div class="lbl">Date / Time Responded</div>
         <div class="val">{% if report.date_responded %}{{ report.date_responded|date:"F j, Y  g:i A" }}{% else %}—{% endif %}</div>
+        {% endif %}
       </td>
     </tr>
       <tr>

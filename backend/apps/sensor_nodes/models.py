@@ -168,6 +168,8 @@ class NodeAssignmentHistory(models.Model):
     end_reason = models.CharField(
         max_length=15, choices=END_REASON_CHOICES, null=True, blank=True
     )
+    end_remarks = models.TextField(blank=True, default='')
+    start_remarks = models.TextField(blank=True, default='') 
 
     assigned_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

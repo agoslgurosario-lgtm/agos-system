@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     SensorNodeListView, SensorNodeDetailView, SensorNodeByBarangayView,
-    SystemHealthLogListView, SystemHealthLogByNodeView, SystemHealthLogExportView,
+    SystemHealthLogListView, SystemHealthLogByNodeView, SystemHealthLogHistoryView, SystemHealthLogExportView,
     SensorNodeUnassignView, SensorNodeRetireView, SensorNodeConfigView,
     SensorNodeNextCodeView, SensorNodeGenerateKeyView,
     SensorNodeMarkMaintenanceView, SensorNodeMarkAvailableView,
@@ -20,6 +20,7 @@ urlpatterns = [
     path('sensor-nodes/<int:node_id>/unassign/', SensorNodeUnassignView.as_view(), name='sensor-node-unassign'),
     path('sensor-nodes/<int:node_id>/retire/', SensorNodeRetireView.as_view(), name='sensor-node-retire'),
     path('system-health/', SystemHealthLogListView.as_view(), name='system-health-list'),
+    path('system-health/history/', SystemHealthLogHistoryView.as_view(), name='system-health-history'),
     path('system-health/node/<int:node_id>/', SystemHealthLogByNodeView.as_view(), name='system-health-by-node'),
     path('system-health/export/', SystemHealthLogExportView.as_view(), name='system-health-export'),
     path('sensor-nodes/<int:node_id>/mark-maintenance/', SensorNodeMarkMaintenanceView.as_view(), name='sensor-node-mark-maintenance'),

@@ -17,18 +17,22 @@ import { SpinnerIcon } from "@/components/SpinnerIcon"
 import { Toast } from "@/components/Toast"
 import { useToast } from "@/components/hooks/useToast"
 import StyledBadge from "../StyledBadge"
-import { PrintCanalReport } from "@/components/PrintReport/PrintCanalReport"
+import { PrintCanalReport, SIGNATORY_POSITIONS } from "@/components/PrintReport/PrintCanalReport"
 
 // lib
 import { fetchWithAuth } from "@/lib/auth"
 import {
-  SEVERITY_STYLE,
+  SEVERITY_STYLE, SEVERITY_LABEL,
   WATER_LEVEL_LABEL, OBSTRUCTION_LABEL, WATER_FLOW_LABEL,
-  WASTE_CATEGORIES, formatDateTime, filedByName, reportDate, weekOf,
+  WASTE_CATEGORIES, formatDateTime, filedByName, reportDate,
+  isCleanupReport, cleanupCoverage, purokRowNote,
 } from "@/lib/reportOptions"
-import type { CanalMonitoringReport, ReportMedia } from "@/types/report"
+import type { CanalMonitoringReport, ReportMedia, ReportPurokRow, ReportNodeSummary } from "@/types/report"
 import { printReport } from "@/lib/printReport"
 import { getUser } from "@/lib/auth"
+import { openPdf } from "@/lib/openPdf"
+import { isIOSDevice } from "@/lib/device"
+
 
 type Props = {
   id: string | null
@@ -85,8 +89,92 @@ function TextBox({ label, text }: { label: string; text: string | null }) {
   )
 }
 
-function ReportDocument({ report }: { report: CanalMonitoringReport }) {
+function PurokBreakdownTable({ rows }: { rows: ReportPurokRow[] }) {
+  if (rows.length === 0) return null
+  return (
+    <div className="mt-4">
+      <p className="text-[10px] font-bold uppercase text-[#727272] mb-1">Per purok</p>
+      <table className="w-full text-sm text-[#122A48] border border-[#122A48]/30">
+        <thead>
+          <tr className="bg-[#F1F5F9] text-[11px] uppercase text-[#727272]">
+            <th className="text-left px-2 py-1.5">Purok</th>
+            <th className="text-left px-2 py-1.5">Water level</th>
+            <th className="text-left px-2 py-1.5">Obstruction</th>
+            <th className="text-left px-2 py-1.5">Water flow</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.purok} className="border-t border-[#DDDDDD]">
+              <td className="px-2 py-1.5 font-semibold">Purok {r.purok}</td>
+              {r.included ? (
+                <>
+                  <td className="px-2 py-1.5">{r.overall_water_level ? WATER_LEVEL_LABEL[r.overall_water_level] : "—"}</td>
+                  <td className="px-2 py-1.5">{r.overall_obstruction_coverage ? OBSTRUCTION_LABEL[r.overall_obstruction_coverage] : "—"}</td>
+                  <td className="px-2 py-1.5">{r.overall_water_flow_condition ? WATER_FLOW_LABEL[r.overall_water_flow_condition] : "—"}</td>
+                </>
+              ) : (
+                <td colSpan={3} className="px-2 py-1.5 italic text-[#727272]">{purokRowNote(r)}</td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function SensorDataSection({ summaries }: { summaries: ReportNodeSummary[] }) {
+  if (summaries.length === 0) return null
+  const num = (v: number | null, unit: string) => (v == null ? "—" : `${Math.round(v * 10) / 10}${unit}`)
+  const when = (iso: string) =>
+    new Date(iso).toLocaleString("en-PH", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+
+  return (
+    <>
+      <SectionBar title="Sensor Data" />
+      <p className="text-xs text-[#727272] mb-2">What the sensors recorded for this report.</p>
+      <div className="flex flex-col gap-3">
+        {summaries.map(s => (
+          <div key={s.summary_id} className="border border-[#122A48]/30 rounded p-3 bg-[#F8F9FA]">
+            <p className="font-bold text-sm text-[#122A48]">{s.node_name}</p>
+            <p className="text-xs text-[#727272] mb-3">
+              {s.hotspot_name}{s.purok ? ` · Purok ${s.purok}` : ""}
+            </p>
+            <div className="grid grid-cols-3 gap-x-8 gap-y-3">
+              <Field label="Readings">{String(s.reading_count)}</Field>
+              <Field label="Peak clog">{num(s.peak_clog_pct, "%")}</Field>
+              <Field label="Average clog">{num(s.avg_clog_pct, "%")}</Field>
+              <Field label="Peak water level">
+                {s.peak_water_level_pct != null ? `${num(s.peak_water_level_pct, "%")} of depth` : num(s.peak_water_level_cm, " cm")}
+              </Field>
+              <Field label="Worst water status">{s.worst_water_status}</Field>
+              <Field label="Worst flow">
+                {s.worst_flow}{s.min_flow_rate != null ? ` (${num(s.min_flow_rate, " m/s")})` : ""}
+              </Field>
+            </div>
+            <p className="text-[11px] text-[#727272] mt-2">{when(s.window_start)} to {when(s.window_end)}</p>
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
+function ReportDocument({ report, signatoryNames }: { report: CanalMonitoringReport; signatoryNames: Record<string, string> }) {
   const barangayName = report.barangay_details?.barangay_name ?? "—"
+  const cleanup = isCleanupReport(report)
+
+  const nodeSummaries = report.node_summaries ?? []
+  const peakWaterPct = nodeSummaries.reduce<number | null>(
+    (max, s) => (s.peak_water_level_pct == null ? max : Math.max(max ?? 0, s.peak_water_level_pct)),
+    null
+  )
+  const peakClogPct = nodeSummaries.reduce<number | null>(
+    (max, s) => (s.peak_clog_pct == null ? max : Math.max(max ?? 0, s.peak_clog_pct)),
+    null
+  )
+  const { counted, total } = cleanupCoverage(report)
 
   const hasOldOther = Number(report.waste_other_kg ?? 0) > 0 || !!report.waste_other_label
 
@@ -132,32 +220,71 @@ function ReportDocument({ report }: { report: CanalMonitoringReport }) {
       {/* Monitoring site */}
       <SectionBar title="Monitoring Site Information" />
         <div className="grid grid-cols-2 gap-x-8 gap-y-3">
-          <Field label="Purok">{report.purok}</Field>
+          <Field label={cleanup ? "Coverage" : "Purok"}>{cleanup ? "Whole barangay" : report.purok}</Field>
           <Field label="Barangay">{barangayName}</Field>
           <Field label="City / Municipality">Rosario</Field>
           <Field label="Province">La Union</Field>
         </div>
 
       {/* Detection summary */}
-      <SectionBar title="Detection Summary" />
+      <SectionBar title={cleanup ? "Cleanup Details" : "Detection Summary"} />
       <div className="grid grid-cols-2 gap-x-8 gap-y-3">
-        <Field label="Date / Time Observed">{formatDateTime(report.date_observed)}</Field>
-        <Field label="Severity">
-          {report.severity && <StyledBadge text={report.severity} style={SEVERITY_STYLE[report.severity]} />}
-        </Field>
+        <Field label={cleanup ? "Date / Time of Cleanup" : "Date / Time Observed"}>{formatDateTime(report.date_observed)}</Field>
+        {!cleanup && (
+          <Field label="Severity">
+            {report.severity && <StyledBadge text={SEVERITY_LABEL[report.severity]} style={SEVERITY_STYLE[report.severity]} />}
+          </Field>
+        )}
         <Field label="Date / Time Submitted">
           {formatDateTime(reportDate(report))}
-          <span className="font-normal text-[#727272]"> · Week {weekOf(report)}</span>
+          {report.submission_info && (
+            <span className="font-normal text-[#727272]"> · Period {report.submission_info.label}</span>
+          )}
         </Field>
       </div>
 
       {/* Canal condition */}
-      <SectionBar title="Overall Canal Condition (Whole Purok)" />
+      <SectionBar
+        title={
+          cleanup
+            ? "Overall Canal Condition (Whole Barangay)"
+            : report.purok ? `Overall Canal Condition (Purok ${report.purok})` : "Overall Canal Condition"
+        }
+      />
       <div className="grid grid-cols-3 gap-x-8 gap-y-3">
-        <Field label="Overall Water Level">{report.overall_water_level && WATER_LEVEL_LABEL[report.overall_water_level]}</Field>
+        <Field label="Overall Water Level">
+          {report.overall_water_level && WATER_LEVEL_LABEL[report.overall_water_level]}
+          {peakWaterPct != null && (
+            <span className="font-normal text-[#727272]"> · peak {Math.round(peakWaterPct)}% of depth</span>
+          )}
+        </Field>
         <Field label="Overall Water Flow Condition">{report.overall_water_flow_condition && WATER_FLOW_LABEL[report.overall_water_flow_condition]}</Field>
-        <Field label="Overall Obstruction Coverage">{report.overall_obstruction_coverage && OBSTRUCTION_LABEL[report.overall_obstruction_coverage]}</Field>
+        <Field label="Overall Obstruction Coverage">
+          {report.overall_obstruction_coverage && OBSTRUCTION_LABEL[report.overall_obstruction_coverage]}
+          {peakClogPct != null && (
+            <span className="font-normal text-[#727272]"> · peak clog {Math.round(peakClogPct)}%</span>
+          )}
+        </Field>
       </div>
+
+      <p className="text-xs text-[#727272] mt-2">
+        How to read this: water level is how high the water is compared with the canal depth.
+        Obstruction is how much of the canal is blocked. High water together with high
+        obstruction usually means a blockage is backing the water up.
+      </p>
+
+      {cleanup && (
+        <>
+          <p className="text-xs text-[#727272] mt-2">
+            {report.condition_source === "Manual"
+              ? "Entered by the barangay, not taken from sensors."
+              : `Based on ${counted} of ${total} puroks with sensor data.`}
+          </p>
+          <PurokBreakdownTable rows={report.purok_rows ?? []} />
+        </>
+      )}
+
+      {!cleanup && <SensorDataSection summaries={report.node_summaries ?? []} />}
 
       {/* Waste composition */}
       <SectionBar title="Waste Composition (kg)" />
@@ -180,13 +307,29 @@ function ReportDocument({ report }: { report: CanalMonitoringReport }) {
       <SectionBar title="Barangay Response" />
       <div className="grid grid-cols-2 gap-x-8 gap-y-3">
         <Field label="Assigned Personnel">{report.assigned_personnel}</Field>
-        <Field label="Date / Time Responded">{formatDateTime(report.date_responded)}</Field>
+        {!cleanup && <Field label="Date / Time Responded">{formatDateTime(report.date_responded)}</Field>}
         <Field label="Waste Collected">
           {report.waste_collected_amount != null ? `${Number(report.waste_collected_amount).toFixed(2)} kg` : ""}
         </Field>
       </div>
       <TextBox label="Action Taken" text={report.action_taken} />
       <TextBox label="Remarks" text={report.remarks} />
+
+      {/* Signatories */}
+      <div className="grid grid-cols-2 gap-x-10 gap-y-10 mt-10">
+        {SIGNATORY_POSITIONS.map(pos => {
+          const name = signatoryNames[pos]
+          return (
+            <div key={pos} className="text-center">
+              <div className="h-10" />
+              <div className={`border-t border-[#122A48] pt-1 text-sm ${name ? "font-semibold text-[#122A48]" : "italic text-[#727272]"}`}>
+                {name || "Name of Signatory"}
+              </div>
+              <div className="text-xs text-[#727272]">{pos}</div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -271,26 +414,30 @@ export default function CanalReportDetail({ id, backHref }: Props) {
 
   useEffect(() => { fetchReport() }, [id])
 
+  const resolveSignatories = async (r: CanalMonitoringReport): Promise<Record<string, string>> => {
+    if (r.signatory_snapshot) return r.signatory_snapshot
+    const barangayId = r.barangay_details?.barangay_id
+    if (!barangayId) return {}
+    try {
+      const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/signatories/?barangay=${barangayId}`)
+      if (!res.ok) return {}
+      const slots = await res.json()
+      const names: Record<string, string> = {}
+      slots.forEach((s: any) => { if (s.active) names[s.position] = s.active.name })
+      return names
+    } catch {
+      return {}
+    }
+  }
+
+  // load names as soon as the report opens (also used by print)
+  useEffect(() => {
+    if (!report) return
+    resolveSignatories(report).then(setSignatoryNames)
+  }, [report])
+
   useEffect(() => {
     if (!printRequested || !report) return
-
-    const resolveSignatories = async (): Promise<Record<string, string>> => {
-      if (report.signatory_snapshot) {
-        return report.signatory_snapshot
-      }
-      const barangayId = report.barangay_details?.barangay_id
-      if (!barangayId) return {}
-      try {
-        const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/signatories/?barangay=${barangayId}`)
-        if (!res.ok) return {}
-        const slots = await res.json()
-        const names: Record<string, string> = {}
-        slots.forEach((s: any) => { if (s.active) names[s.position] = s.active.name })
-        return names
-      } catch {
-        return {}
-      }
-    }
 
     const urls = [
       '/ROS-logo.jpg',
@@ -306,7 +453,7 @@ export default function CanalReportDetail({ id, backHref }: Props) {
       setPrintRequested(false)
     }
 
-    resolveSignatories().then(names => {
+    resolveSignatories(report).then(names => {
       setSignatoryNames(names)
       if (remaining === 0) { finish(); return }
       urls.forEach(url => {
@@ -325,6 +472,15 @@ export default function CanalReportDetail({ id, backHref }: Props) {
 
 const currentUser = getUser()
 const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Admin'
+
+const handleExport = async () => {
+  if (!report) return
+  try {
+    await openPdf(`/api/canal-reports/${report.report_id}/export/`)
+  } catch {
+    addToast("Failed to export the report. Please try again.", "error")
+  }
+}
 
   if (loading) {
     return (
@@ -367,13 +523,13 @@ const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_
             </button>
             <div className="flex gap-3 items-center">
               <p className="font-bold text-[#122A48] text-sm">
-                {report.barangay_details?.barangay_name} — {report.purok ? `Purok ${report.purok}` : "Untitled report"}
+                {report.barangay_details?.barangay_name} — {isCleanupReport(report) ? "Weekly cleanup" : report.purok ? `Purok ${report.purok}` : "Untitled report"}
               </p>
-              {report.severity && <StyledBadge text={report.severity} style={SEVERITY_STYLE[report.severity]} />}
+              {!isCleanupReport(report) && report.severity && <StyledBadge text={SEVERITY_LABEL[report.severity]} style={SEVERITY_STYLE[report.severity]} />}
             </div>
           </div>
           <Button
-            onClick={() => setPrintRequested(true)}
+            onClick={() => (isIOSDevice() ? handleExport() : setPrintRequested(true))}
             className="cursor-pointer bg-[#2fd45b] hover:bg-[#28b54e] text-white"
           >
             <FileDown size={16} className="mr-1" />
@@ -402,7 +558,7 @@ const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_
         </div>
 
         {activeTab === "details" ? (
-          <ReportDocument report={report} />
+          <ReportDocument report={report} signatoryNames={signatoryNames} />
         ) : (
           <PhotosPanel media={report.media} onOpen={setPreviewUrl} />
         )}

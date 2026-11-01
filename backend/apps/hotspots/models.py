@@ -37,6 +37,10 @@ class Hotspot(models.Model):
     )
 
     code = models.CharField(max_length=50, blank=True, default='')
+    purok = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text="Purok (1 up to the barangay's purok_count) where this canal point is located."
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

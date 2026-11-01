@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import ( HotspotListView, HotspotDetailView, HotspotByBarangayView, HotspotAvailableByBarangayView, HotspotNextCodeView, HotspotAssignmentHistoryView, )
+from .views import ( HotspotListView, HotspotDetailView, HotspotByBarangayView, HotspotAvailableByBarangayView, HotspotNextCodeView, HotspotAssignmentHistoryView, HotspotBulkCreateView, )
 
 urlpatterns = [
     path('hotspots/', HotspotListView.as_view(), name='hotspot-list'),
@@ -8,4 +8,5 @@ urlpatterns = [
     path('hotspots/barangay/<int:barangay_id>/', HotspotByBarangayView.as_view(), name='hotspot-by-barangay'),
     path('hotspots/barangay/<int:barangay_id>/available/', HotspotAvailableByBarangayView.as_view(), name='hotspot-available-by-barangay'),
     path('hotspots/next-code/', HotspotNextCodeView.as_view(), name='hotspot-next-code'),
+    path('hotspots/bulk/', HotspotBulkCreateView.as_view(), name='hotspot-bulk-create'),
 ]

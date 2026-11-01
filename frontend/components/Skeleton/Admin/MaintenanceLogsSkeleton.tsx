@@ -9,6 +9,8 @@ import { FaSearch } from "react-icons/fa"
 
 import { useFillRows } from "@/components/hooks/useFillRows"
 
+import { DateRangeFilter } from "@/components/DateRangeFilter"
+
 export function MaintenanceLogsSkeleton() {
   const { panelRef, tableWrapRef, rows } = useFillRows({
     rowHeight: 33,
@@ -24,14 +26,8 @@ export function MaintenanceLogsSkeleton() {
           <input disabled suppressHydrationWarning placeholder="Search maintenance logs..." className="text-xs bg-transparent border-0 rounded-lg placeholder:text-gray text-[#122A48] outline-none w-full" />
         </div>
 
-        <div className="relative flex gap-2">
-          <button
-            disabled
-            className="flex items-center justify-between w-[200px] h-9 px-3 border border-[#D0D0D0] rounded-lg bg-white text-[12px] font-normal text-[#999999] outline-none text-left"
-          >
-            <span>All Months</span>
-            <ChevronDown size={14} className="text-[#999999]" />
-          </button>
+        <div className="flex gap-2">
+          <DateRangeFilter from="" to="" onChange={() => {}} disabled />
 
           <Button disabled className="bg-[#2fd45b] opacity-60 py-[17px]">
             <FileDown size={16} /> Export PDF

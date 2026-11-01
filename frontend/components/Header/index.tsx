@@ -30,6 +30,8 @@ const SEVERITY_MAP: Record<string, "critical" | "warning" | "info"> = {
   Report_Submitted: "info",
 }
 
+const SILENT_ALERT_TYPES = new Set(["Report_Submitted"])
+
 const SEVERITY_RANK: Record<string, number> = { critical: 3, warning: 2, info: 1 }
 
 type AlertLite = { alert_id: number; alert_type: string }
@@ -52,6 +54,7 @@ const pageTitles: Record<string, string> = {
   "/admin/history/waste": "Waste Classification",
   "/admin/history/barangay-reports": "Barangay Reports",
   "/admin/history/barangay-reports/view-barangay-report": "Barangay Reports",
+  "/admin/history/report-analytics": "Report Analytics",
   "/admin/health": "Sensor Nodes Health",
   "/admin/audit": "System Audit Logs",
   "/admin/settings": "Settings",
@@ -64,12 +67,14 @@ const pageTitles: Record<string, string> = {
   "/menro/hotspots": "Canal Hotspot Management",
   "/menro/barangay-reports": "Barangay Reports",
   "/menro/barangay-reports/view-barangay-report": "Barangay Reports",
+  "/menro/report-analytics": "Report Analytics",
   "/menro/manual": "MENRO User Manual",
   "/barangay/map": "Map Monitoring",
   "/barangay/alerts": "Alerts",
   "/barangay/analytics": "Waste Analytics",
   "/barangay/readings": "Sensor Readings",
   "/barangay/clog-events": "Clog Events",
+  "/barangay/health": "Node Health",
   "/barangay/barangay-reports": "Barangay Reports",
   "/barangay/user-manual": "Help",
 }
@@ -106,22 +111,20 @@ export default function Header() {
     if (role) setAlertHref(alertRoutes[role] ?? "#")
   }, [])
 
-  useEffect(() => {
-    async function fetchUnread() {
-      try {
-        const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/alerts/unread-count/`)
-        if (!res.ok) return
-        const data = await res.json()
-        setUnreadCount(data.unread_count)
-      } catch {
-      }
-    }
-
-    fetchUnread()
-    // poll every 30 seconds for live updates
-    const interval = setInterval(fetchUnread, 60000)
-    return () => clearInterval(interval)
+  const fetchUnread = useCallback(async () => {
+    try {
+      const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/alerts/unread-count/`)
+      if (!res.ok) return
+      const data = await res.json()
+      setUnreadCount(data.unread_count)
+    } catch {}
   }, [])
+
+  useEffect(() => {
+    fetchUnread()
+    const interval = setInterval(fetchUnread, 60000) // backstop; the websocket refreshes it live
+    return () => clearInterval(interval)
+  }, [fetchUnread])
 
   // Sound settings: load on mount and again whenever the page changes
   // (so changes saved in Settings apply when you come back)
@@ -160,9 +163,12 @@ export default function Header() {
     if (fresh.length === 0) return
     fresh.forEach(a => seenAlertIds.current.add(a.alert_id))
 
+    const audible = fresh.filter(a => !SILENT_ALERT_TYPES.has(a.alert_type))
+    if (audible.length === 0) return
+
     if (!soundConfigRef.current) await loadSoundConfig()
 
-    const top = fresh
+    const top = audible
       .map(a => SEVERITY_MAP[a.alert_type] ?? "info")
       .sort((a, b) => SEVERITY_RANK[b] - SEVERITY_RANK[a])[0]
     playSeverity(top)
@@ -185,12 +191,12 @@ export default function Header() {
     path: "/ws/alerts/",
     onMessage: (alert) => {
       if (alert?.alert_id == null) return
+      // small delay so the alert is committed before we count it
+      setTimeout(fetchUnread, 500)
       queueAlert({ alert_id: alert.alert_id, alert_type: alert.alert_type })
     },
   })
-
-  // Safety net: remember what already exists on first load (no sound for it),
-  // then catch anything the socket missed, every 30 s and when the tab is shown again.
+  
   useEffect(() => {
     let first = true
 

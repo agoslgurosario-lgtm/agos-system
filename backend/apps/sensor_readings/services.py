@@ -114,7 +114,8 @@ def evaluate_clog(reading):
     """
     already_open = ClogEvent.objects.filter(
         node=reading.node,
-        status__in=['Detected', 'Responded']
+        status__in=['Detected', 'Responded'],
+        settled_at__isnull=True,
     ).first()
 
     severity = get_clog_severity(reading.clog_pct)
@@ -127,8 +128,13 @@ def evaluate_clog(reading):
             already_open.clear_streak += 1
             required = get_clear_streak_count(already_open.barangay)
             if already_open.clear_streak >= required:
-                already_open.status = 'Cleared'
-                already_open.resolved_at = timezone.now()
+                now = timezone.now()
+                already_open.settled_at = now
+                if already_open.status == 'Detected':
+                    # no response happened: the readings cleared it
+                    already_open.status = 'Cleared'
+                    already_open.resolved_at = now
+                # a Responded event stays Responded; it just stops absorbing readings
             already_open.save()
         return
 

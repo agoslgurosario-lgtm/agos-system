@@ -6,6 +6,7 @@ import { RadioTower, CheckCircle, SquarePen, MapPinPlus, MapPinPen, MapPin, Chec
 
 // react
 import { useState, useEffect, useCallback, useRef } from "react"
+import { DateRangeFilter } from "@/components/DateRangeFilter"
 import { useRouter } from "next/navigation"
 
 // shadcn
@@ -29,6 +30,7 @@ import { PrintReport } from "@/components/PrintReport/PrintReport"
 import { useToast } from "@/components/hooks/useToast"
 import { Toast } from "@/components/Toast"
 import { AssignNodeDialog, AssignNodeDialogPayload } from "@/components/AssignNodeDialog"
+import { RemarksDialog } from "@/components/RemarksDialog"
 
 // lib
 import { DIALOG_COLOR } from "@/lib/constant"
@@ -38,6 +40,10 @@ import { printReport } from "@/lib/printReport"
 import { getUser } from "@/lib/auth"
 import { useWebSocket } from "@/lib/hooks/useWebSocket"
 import { historyCache } from "@/lib/historyCache"
+import { remarksText } from "@/lib/historyRemarks"
+import { isIOSDevice } from "@/lib/device"
+import { openTablePdf, PdfTable } from "@/lib/openPdf"
+
 
 type SensorNode = {
   node_id: number
@@ -120,6 +126,8 @@ export default function NodeManagement() {
   const [readingsError, setReadingsError] = useState(false)
   const [openMenuId, setOpenMenuId] = useState<number | null>(null)
   const [readingsStatusFilter, setReadingsStatusFilter] = useState('All Status')
+  const [readingsFrom, setReadingsFrom] = useState('')
+  const [readingsTo, setReadingsTo] = useState('')
   const [readingsPage, setReadingsPage] = useState(1)
   const [readingsHasNext, setReadingsHasNext] = useState(false)
   const [readingsHasPrev, setReadingsHasPrev] = useState(false)
@@ -144,6 +152,8 @@ export default function NodeManagement() {
   const [hotspotLoadedKey, setHotspotLoadedKey] = useState('')
   const [hotspotHistoryError, setHotspotHistoryError] = useState(false)
   const [hotspotReasonFilter, setHotspotReasonFilter] = useState('All')
+  const [hotspotFrom, setHotspotFrom] = useState('')
+  const [hotspotTo, setHotspotTo] = useState('')
   const [hotspotHistoryPage, setHotspotHistoryPage] = useState(1)
   const [hotspotHistoryHasNext, setHotspotHistoryHasNext] = useState(false)
   const [hotspotHistoryHasPrev, setHotspotHistoryHasPrev] = useState(false)
@@ -186,7 +196,10 @@ export default function NodeManagement() {
     hotspotName: string
     isReassign: boolean
     payload: AssignNodeDialogPayload | null // null = re-assign to previous hotspot
-  }>({ open: false, node: null, hotspotName: '', isReassign: false, payload: null })
+    needsRemarks: boolean
+  }>({ open: false, node: null, hotspotName: '', isReassign: false, payload: null, needsRemarks: false })
+  const [assigning, setAssigning] = useState(false)
+  const [unassigning, setUnassigning] = useState(false)
 
   // history print/export states
   const [historyExporting, setHistoryExporting] = useState(false)
@@ -269,9 +282,9 @@ export default function NodeManagement() {
 
   const healthFetchKeyRef = useRef('')
   const historyNodeId = readingsDialog.open ? readingsDialog.node?.node_id : undefined
-  const readingsBaseKey = `${historyNodeId}|${readingsStatusFilter}|${readingsHotspotFilter}|${readingsPage}`
+  const readingsBaseKey = `${historyNodeId}|${readingsStatusFilter}|${readingsHotspotFilter}|${readingsFrom}|${readingsTo}|${readingsPage}`
   const healthBaseKey = `${historyNodeId}|${healthStatusFilter}|${healthFrom}|${healthTo}|${healthPage}`
-  const hotspotBaseKey = `${historyNodeId}|${hotspotReasonFilter}|${hotspotHistoryPage}`
+  const hotspotBaseKey = `${historyNodeId}|${hotspotReasonFilter}|${hotspotFrom}|${hotspotTo}|${hotspotHistoryPage}`
   const readingsBusy = readingsLoading || (historyNodeId !== undefined && readingsLoadedKey !== readingsBaseKey)
   const healthBusy = healthLoading || (historyNodeId !== undefined && healthLoadedKey !== healthBaseKey)
   const hotspotBusy = hotspotHistoryLoading || (historyNodeId !== undefined && hotspotLoadedKey !== hotspotBaseKey)
@@ -329,8 +342,8 @@ export default function NodeManagement() {
   }, [readingsDialog.open, readingsDialog.node, historyTab, healthStatusFilter, healthFrom, healthTo, healthPage, healthTick])
 
   useEffect(() => { setHealthPage(1) }, [healthStatusFilter, healthFrom, healthTo])
-  useEffect(() => { setReadingsPage(1) }, [readingsStatusFilter, readingsHotspotFilter])
-  useEffect(() => { setHotspotHistoryPage(1) }, [hotspotReasonFilter])
+  useEffect(() => { setReadingsPage(1) }, [readingsStatusFilter, readingsHotspotFilter, readingsFrom, readingsTo])
+  useEffect(() => { setHotspotHistoryPage(1) }, [hotspotReasonFilter, hotspotFrom, hotspotTo])
 
   const resetForm = () => {
     setNodeCode('')
@@ -351,11 +364,11 @@ export default function NodeManagement() {
     if (!readingsDialog.open || !readingsDialog.node || historyTab !== 'readings') return
 
     const nodeId = readingsDialog.node.node_id
-    const key = `${nodeId}|${readingsStatusFilter}|${readingsHotspotFilter}|${readingsPage}|${readingsTick}`
+    const key = `${nodeId}|${readingsStatusFilter}|${readingsHotspotFilter}|${readingsFrom}|${readingsTo}|${readingsPage}|${readingsTick}`
     if (readingsFetchKeyRef.current === key) return
     readingsFetchKeyRef.current = key
 
-    const cacheKey = `node:${nodeId}:readings:${readingsStatusFilter}|${readingsHotspotFilter}|${readingsPage}`
+    const cacheKey = `node:${nodeId}:readings:${readingsStatusFilter}|${readingsHotspotFilter}|${readingsFrom}|${readingsTo}|${readingsPage}`
     const cached = historyCache.get(cacheKey)
     if (cached) {
       setNodeReadings(cached.rows)
@@ -374,6 +387,8 @@ export default function NodeManagement() {
         const params = new URLSearchParams({ page: String(readingsPage) })
         if (readingsStatusFilter !== 'All Status') params.set('status', readingsStatusFilter)
         if (readingsHotspotFilter !== 'All Hotspots') params.set('hotspot', readingsHotspotFilter)
+        if (readingsFrom) params.set('from', readingsFrom)
+        if (readingsTo) params.set('to', readingsTo)
 
         const res = await fetchWithAuth(
           `${process.env.NEXT_PUBLIC_API_URL}/api/sensor-readings/node/${readingsDialog.node!.node_id}/?${params.toString()}`
@@ -396,17 +411,17 @@ export default function NodeManagement() {
       }
     }
     fetchReadings()
-  }, [readingsDialog.open, readingsDialog.node, historyTab, readingsStatusFilter, readingsHotspotFilter, readingsPage, readingsTick])
+  }, [readingsDialog.open, readingsDialog.node, historyTab, readingsStatusFilter, readingsHotspotFilter, readingsFrom, readingsTo, readingsPage, readingsTick])
 
   useEffect(() => {
     if (!readingsDialog.open || !readingsDialog.node || historyTab !== 'hotspot') return
 
     const nodeId = readingsDialog.node.node_id
-    const key = `${nodeId}|${hotspotReasonFilter}|${hotspotHistoryPage}|${hotspotTick}`
+    const key = `${nodeId}|${hotspotReasonFilter}|${hotspotFrom}|${hotspotTo}|${hotspotHistoryPage}|${hotspotTick}`
     if (hotspotHistoryFetchKeyRef.current === key) return
     hotspotHistoryFetchKeyRef.current = key
 
-    const cacheKey = `node:${nodeId}:hotspot:${hotspotReasonFilter}|${hotspotHistoryPage}`
+    const cacheKey = `node:${nodeId}:hotspot:${hotspotReasonFilter}|${hotspotFrom}|${hotspotTo}|${hotspotHistoryPage}`
     const cached = historyCache.get(cacheKey)
     if (cached) {
       setHotspotHistory(cached.rows)
@@ -424,6 +439,8 @@ export default function NodeManagement() {
       try {
         const params = new URLSearchParams({ page: String(hotspotHistoryPage) })
         if (hotspotReasonFilter !== 'All') params.set('reason', hotspotReasonFilter)
+        if (hotspotFrom) params.set('from', hotspotFrom)
+        if (hotspotTo) params.set('to', hotspotTo)
 
         const res = await fetchWithAuth(
           `${process.env.NEXT_PUBLIC_API_URL}/api/sensor-nodes/${nodeId}/assignment-history/?${params.toString()}`
@@ -446,7 +463,7 @@ export default function NodeManagement() {
       }
     }
     fetchHotspotHistory()
-  }, [readingsDialog.open, readingsDialog.node, historyTab, hotspotReasonFilter, hotspotHistoryPage, hotspotTick])
+  }, [readingsDialog.open, readingsDialog.node, historyTab, hotspotReasonFilter, hotspotFrom, hotspotTo, hotspotHistoryPage, hotspotTick])
 
   const openNodeIdRef = useRef<number | null>(null)
   openNodeIdRef.current = readingsDialog.open ? readingsDialog.node?.node_id ?? null : null
@@ -537,6 +554,8 @@ export default function NodeManagement() {
 
     setReadingsStatusFilter('All Status')
     setReadingsHotspotFilter('All Hotspots')
+    setReadingsFrom('')
+    setReadingsTo('')
     setReadingsPage(1)
     readingsFetchKeyRef.current = ''
 
@@ -547,6 +566,8 @@ export default function NodeManagement() {
     healthFetchKeyRef.current = ''
 
     setHotspotReasonFilter('All')
+    setHotspotFrom('')
+    setHotspotTo('')
     setHotspotHistoryPage(1)
     hotspotHistoryFetchKeyRef.current = ''
   }, [readingsDialog.open, readingsDialog.node])
@@ -632,24 +653,37 @@ export default function NodeManagement() {
     }
   }
 
-  const handleAssignConfirm = async (payload: AssignNodeDialogPayload) => {
+  const handleAssignConfirm = async (payload: AssignNodeDialogPayload, remarks?: string) => {
     const node = assignDialog.node!
     const hotspotName = assignHotspots.find(h => String(h.hotspot_id) === payload.hotspot)?.name ?? 'the selected hotspot'
-    setAssignDialog({ open: false, node: null })
-    setLoadingMessage({ title: 'Assigning Node', description: `Assigning ${node.node_name}. Please wait.` })
-    setLoadingDialog({ open: true })
+    const inline = !!remarks   // remarks dialog shows its own spinner
+
+    if (inline) {
+      setAssigning(true)
+    } else {
+      setAssignDialog({ open: false, node: null })
+      setLoadingMessage({ title: 'Assigning Node', description: `Assigning ${node.node_name}. Please wait.` })
+      setLoadingDialog({ open: true })
+    }
     try {
       await api.patch(`/api/sensor-nodes/${node.node_id}/`, {
         barangay: parseInt(payload.barangay),
         hotspot: parseInt(payload.hotspot),
         installed_at: payload.installedAt ? new Date(payload.installedAt).toISOString() : undefined,
+        ...(remarks ? { remarks } : {}),
       })
       setLoadingDialog({ open: false })
+      setAssignDialog({ open: false, node: null })
+      setAssignConfirm(prev => ({ ...prev, open: false }))
       setActionResult({ name: node.node_name, action: `assigned to ${hotspotName}`, goToAssign: true })
       setSuccessDialog({ open: true })
     } catch (err: any) {
       setLoadingDialog({ open: false })
+      setAssignDialog({ open: false, node: null })
+      setAssignConfirm(prev => ({ ...prev, open: false }))
       setErrorDialog({ open: true, message: err?.detail ?? err?.error ?? 'Something went wrong. Please try again.' })
+    } finally {
+      setAssigning(false)
     }
   }
 
@@ -657,12 +691,14 @@ export default function NodeManagement() {
   const requestAssignConfirm = (payload: AssignNodeDialogPayload) => {
     const node = assignDialog.node!
     const hotspotName = assignHotspots.find(h => String(h.hotspot_id) === payload.hotspot)?.name ?? 'the selected hotspot'
-    setAssignConfirm({ open: true, node, hotspotName, isReassign: !!node.prev_hotspot, payload })
+    // moving to a hotspot other than the one it was last unassigned from -> remarks required
+    const needsRemarks = !!node.prev_hotspot && String(node.prev_hotspot.hotspot_id) !== payload.hotspot
+    setAssignConfirm({ open: true, node, hotspotName, isReassign: !!node.prev_hotspot, payload, needsRemarks })
   }
 
   const requestReassignPrevConfirm = () => {
     const node = reassignPrompt.node!
-    setAssignConfirm({ open: true, node, hotspotName: node.prev_hotspot!.name, isReassign: true, payload: null })
+    setAssignConfirm({ open: true, node, hotspotName: node.prev_hotspot!.name, isReassign: true, payload: null, needsRemarks: false })
   }
 
   const handleAssignConfirmYes = () => {
@@ -759,12 +795,10 @@ export default function NodeManagement() {
     }
   }
 
-  const handleUnassign = async (node: SensorNode) => {
-    setUnassignDialog({ open: false, node: null })
-    setLoadingMessage({ title: "Unassigning Node", description: `Unassigning ${node.node_name}. Please wait.` })
-    setLoadingDialog({ open: true })
+  const handleUnassign = async (node: SensorNode, remarks: string) => {
+    setUnassigning(true)
     try {
-      await api.post(`/api/sensor-nodes/${node.node_id}/unassign/`, {})
+      await api.post(`/api/sensor-nodes/${node.node_id}/unassign/`, { remarks })
       nodesCache.setData(prev => prev.map(n =>
         n.node_id === node.node_id
           ? { ...n, availability_status: 'Available', status: 'Active',
@@ -776,12 +810,14 @@ export default function NodeManagement() {
             } : n.prev_hotspot }
           : n
       ))
+      setUnassignDialog({ open: false, node: null })
       setActionResult({ name: node.node_name, action: 'unassigned and is now available' })
-      setLoadingDialog({ open: false })
       setSuccessDialog({ open: true })
     } catch (err: any) {
-      setLoadingDialog({ open: false })
-      setErrorDialog({ open: true, message: err?.detail ?? `Failed to unassign ${node.node_name}. Please try again.` })
+      setUnassignDialog({ open: false, node: null })
+      setErrorDialog({ open: true, message: err?.detail ?? err?.error ?? `Failed to unassign ${node.node_name}. Please try again.` })
+    } finally {
+      setUnassigning(false)
     }
   }
 
@@ -812,56 +848,79 @@ export default function NodeManagement() {
     if (goToAssign) router.push('/admin/assign')
   }
 
+  // the table for the open tab, built once and used by both the print view and the PDF
+  const buildHistoryTable = async (): Promise<PdfTable> => {
+    if (!readingsDialog.node) throw new Error('No node selected')
+    if (historyTab === 'readings') {
+      const params = new URLSearchParams()
+      if (readingsStatusFilter !== 'All Status') params.set('status', readingsStatusFilter)
+      if (readingsHotspotFilter !== 'All Hotspots') params.set('hotspot', readingsHotspotFilter)
+      if (readingsFrom) params.set('from', readingsFrom)
+      if (readingsTo) params.set('to', readingsTo)
+      const all = await fetchAllPages(`${process.env.NEXT_PUBLIC_API_URL}/api/sensor-readings/node/${readingsDialog.node.node_id}/?${params.toString()}`)
+      const columns = ["Timestamp", "Hotspot Name", "Water Level", "Flow Rate", "Clog %", "Water Status", "Clog Status", "Status"]
+      const rows = all.map(r => [
+        new Date(r.timestamp).toLocaleString('en-PH', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }),
+        r.node_details.hotspot_details?.name ?? '—',
+        r.water_level != null ? `${r.water_level} cm` : '—',
+        r.water_flow_rate != null ? `${Number(r.water_flow_rate).toFixed(5)} m/s` : '—',
+        r.clog_pct != null ? `${r.clog_pct} %` : '—',
+        r.reading_status,
+        r.clog_status ?? '—',
+        r.overall_status ?? r.reading_status,
+      ])
+      return { title: `${readingsDialog.node.node_name} — Readings History`, columns, rows }
+    } else if (historyTab === 'health') {
+      const params = new URLSearchParams()
+      if (healthStatusFilter) params.set('status', healthStatusFilter)
+      if (healthFrom) params.set('from', healthFrom)
+      if (healthTo) params.set('to', healthTo)
+      const all = await fetchAllPages(`${process.env.NEXT_PUBLIC_API_URL}/api/system-health/node/${readingsDialog.node.node_id}/?${params.toString()}`)
+      const columns = ["Checked At", "Status", "Battery", "Signal", "Sensor"]
+      const rows = all.map(h => [
+        new Date(h.checked_at).toLocaleString('en-PH', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }),
+        h.status,
+        h.battery_voltage != null ? `${h.battery_voltage} V` : '—',
+        h.signal_strength != null ? `${h.signal_strength} dBm` : '—',
+        h.sensor_continuity == null ? '—' : h.sensor_continuity ? 'OK' : 'Fault',
+      ])
+      return { title: `${readingsDialog.node.node_name} — Health History`, columns, rows }
+    } else {
+      const params = new URLSearchParams()
+      if (hotspotReasonFilter !== 'All') params.set('reason', hotspotReasonFilter)
+      if (hotspotFrom) params.set('from', hotspotFrom)
+      if (hotspotTo) params.set('to', hotspotTo)
+      const all = await fetchAllPages(`${process.env.NEXT_PUBLIC_API_URL}/api/sensor-nodes/${readingsDialog.node.node_id}/assignment-history/?${params.toString()}`)
+      const columns = ["Hotspot", "Barangay", "From", "To", "Reason", "Remarks"]
+      const rows = all.map(h => [
+        h.hotspot_name || '—',
+        h.barangay_name || '—',
+        new Date(h.started_at).toLocaleDateString(),
+        h.ended_at ? new Date(h.ended_at).toLocaleDateString() : 'Current',
+        h.end_reason || '—',
+        remarksText(h),
+      ])
+      return { title: `${readingsDialog.node.node_name} — Hotspot History`, columns, rows }
+    }
+  }
+
   const handleExportHistory = async () => {
     if (!readingsDialog.node) return
     setHistoryExporting(true)
+
+    if (isIOSDevice()) {
+      // iPhone/iPad ignore window.print(): open the PDF tab right now (still inside the tap), then fill it
+      openTablePdf(buildHistoryTable)
+        .catch(() => addToast('Failed to export history.', 'error'))
+        .finally(() => setHistoryExporting(false))
+      return
+    }
+
     try {
-      if (historyTab === 'readings') {
-        const params = new URLSearchParams()
-        if (readingsStatusFilter !== 'All Status') params.set('status', readingsStatusFilter)
-        if (readingsHotspotFilter !== 'All Hotspots') params.set('hotspot', readingsHotspotFilter)
-        const all = await fetchAllPages(`${process.env.NEXT_PUBLIC_API_URL}/api/sensor-readings/node/${readingsDialog.node.node_id}/?${params.toString()}`)
-        setHistoryPrintColumns(["Timestamp", "Hotspot Name", "Water Level", "Flow Rate", "Clog %", "Water Status", "Clog Status", "Status"])
-        setHistoryPrintRows(all.map(r => [
-          new Date(r.timestamp).toLocaleString('en-PH', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }),
-          r.node_details.hotspot_details?.name ?? '—',
-          r.water_level != null ? `${r.water_level} cm` : '—',
-          r.water_flow_rate != null ? `${Number(r.water_flow_rate).toFixed(5)} m/s` : '—',
-          r.clog_pct != null ? `${r.clog_pct} %` : '—',
-          r.reading_status,
-          r.clog_status ?? '—',
-          r.overall_status ?? r.reading_status,
-        ]))
-        setHistoryPrintTitle(`${readingsDialog.node.node_name} — Readings History`)
-      } else if (historyTab === 'health') {
-        const params = new URLSearchParams()
-        if (healthStatusFilter) params.set('status', healthStatusFilter)
-        if (healthFrom) params.set('from', healthFrom)
-        if (healthTo) params.set('to', healthTo)
-        const all = await fetchAllPages(`${process.env.NEXT_PUBLIC_API_URL}/api/system-health/node/${readingsDialog.node.node_id}/?${params.toString()}`)
-        setHistoryPrintColumns(["Checked At", "Status", "Battery", "Signal", "Sensor"])
-        setHistoryPrintRows(all.map(h => [
-          new Date(h.checked_at).toLocaleString('en-PH', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }),
-          h.status,
-          h.battery_voltage != null ? `${h.battery_voltage} V` : '—',
-          h.signal_strength != null ? `${h.signal_strength} dBm` : '—',
-          h.sensor_continuity == null ? '—' : h.sensor_continuity ? 'OK' : 'Fault',
-        ]))
-        setHistoryPrintTitle(`${readingsDialog.node.node_name} — Health History`)
-      } else {
-        const params = new URLSearchParams()
-        if (hotspotReasonFilter !== 'All') params.set('reason', hotspotReasonFilter)
-        const all = await fetchAllPages(`${process.env.NEXT_PUBLIC_API_URL}/api/sensor-nodes/${readingsDialog.node.node_id}/assignment-history/?${params.toString()}`)
-        setHistoryPrintColumns(["Hotspot", "Barangay", "From", "To", "Reason"])
-        setHistoryPrintRows(all.map(h => [
-          h.hotspot_name || '—',
-          h.barangay_name || '—',
-          new Date(h.started_at).toLocaleDateString(),
-          h.ended_at ? new Date(h.ended_at).toLocaleDateString() : 'Current',
-          h.end_reason || '—',
-        ]))
-        setHistoryPrintTitle(`${readingsDialog.node.node_name} — Hotspot History`)
-      }
+      const table = await buildHistoryTable()
+      setHistoryPrintColumns(table.columns)
+      setHistoryPrintRows(table.rows)
+      setHistoryPrintTitle(table.title)
       setTriggerPrint(true)
     } catch {
       addToast('Failed to export history.', 'error')
@@ -1315,6 +1374,8 @@ export default function NodeManagement() {
                     ))}
                   </SelectContent>
                 </Select>
+
+                <DateRangeFilter from={readingsFrom} to={readingsTo} onChange={(f, t) => { setReadingsFrom(f); setReadingsTo(t) }} width="w-[210px]" />
               </div>
               
               <div>
@@ -1423,27 +1484,7 @@ export default function NodeManagement() {
                       <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="Critical">Critical</SelectItem>
                     </SelectContent>
                   </Select>
-                  <input
-                    type="date"
-                    value={healthFrom}
-                    onChange={e => setHealthFrom(e.target.value)}
-                    className="text-xs border border-[#C6C6C8] rounded-lg px-2 py-1.5"
-                  />
-                  <span className="text-xs text-[#727272]">to</span>
-                  <input
-                    type="date"
-                    value={healthTo}
-                    onChange={e => setHealthTo(e.target.value)}
-                    className="text-xs border border-[#C6C6C8] rounded-lg px-2 py-1.5"
-                  />
-                  {(healthStatusFilter || healthFrom || healthTo) && (
-                    <button
-                      onClick={() => { setHealthStatusFilter(''); setHealthFrom(''); setHealthTo('') }}
-                      className="text-xs text-[#1565BC] hover:underline cursor-pointer"
-                    >
-                      Clear filters
-                    </button>
-                  )}
+                  <DateRangeFilter from={healthFrom} to={healthTo} onChange={(f, t) => { setHealthFrom(f); setHealthTo(t) }} width="w-[210px]" />
                 </div>
 
                 <div>
@@ -1523,7 +1564,7 @@ export default function NodeManagement() {
           {historyTab === 'hotspot' && (
             <div className="flex-1 overflow-y-auto flex flex-col">
               <div className="flex gap-2 items-center p-2 md:p-3 border-b border-[#C6C6C8] justify-between">
-                <div>
+                <div className="flex gap-2">
                   <Select value={hotspotReasonFilter} onValueChange={setHotspotReasonFilter}>
                     <SelectTrigger className="text-xs cursor-pointer px-3 py-2 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                       <SelectValue placeholder="Reason" />
@@ -1537,6 +1578,8 @@ export default function NodeManagement() {
                       <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="Unassigned">Unassigned</SelectItem>
                     </SelectContent>
                   </Select>
+
+                  <DateRangeFilter from={hotspotFrom} to={hotspotTo} onChange={(f, t) => { setHotspotFrom(f); setHotspotTo(t) }} width="w-[210px]" />
                 </div>
 
                 <div>
@@ -1555,14 +1598,15 @@ export default function NodeManagement() {
                     <TableHead className="font-semibold text-center text-xs text-[#727272]">FROM</TableHead>
                     <TableHead className="font-semibold text-center text-xs text-[#727272]">TO</TableHead>
                     <TableHead className="font-semibold text-center text-xs text-[#727272]">REASON</TableHead>
+                    <TableHead className="font-semibold text-center text-xs text-[#727272]">REMARKS</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {hotspotHistoryError ? (
-                    <TableRow><TableCell colSpan={5} className="text-center py-10"><p className="text-[#D81010] font-semibold text-sm">Failed to load hotspot history.</p></TableCell></TableRow>
+                    <TableRow><TableCell colSpan={6} className="text-center py-10"><p className="text-[#D81010] font-semibold text-sm">Failed to load hotspot history.</p></TableCell></TableRow>
                   ) : hotspotBusy ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-10">
+                      <TableCell colSpan={6} className="text-center py-10">
                         <div className="flex flex-col items-center gap-2">
                           <SpinnerIcon size={24} />
                           <p className="text-[#727272] text-sm">Loading hotspots...</p>
@@ -1570,7 +1614,7 @@ export default function NodeManagement() {
                       </TableCell>
                     </TableRow>
                   ) : hotspotHistory.length === 0 ? (
-                    <TableRow><TableCell colSpan={5} className="text-center py-10"><p className="text-[#727272] text-sm">No assignment history yet.</p></TableCell></TableRow>
+                    <TableRow><TableCell colSpan={6} className="text-center py-10"><p className="text-[#727272] text-sm">No assignment history yet.</p></TableCell></TableRow>
                   ) : (
                     hotspotHistory.map(h => (
                       <TableRow key={h.history_id} className="border-b border-[#C6C6C8] text-xs">
@@ -1583,6 +1627,7 @@ export default function NodeManagement() {
                           )}
                         </TableCell>
                         <TableCell className="text-center h-11">{h.end_reason || '—'}</TableCell>
+                        <TableCell className="text-left h-11 max-w-[220px] whitespace-normal break-words">{remarksText(h)}</TableCell>
                       </TableRow>
                     ))
                   )}
@@ -1722,6 +1767,7 @@ export default function NodeManagement() {
         open={assignDialog.open}
         node={assignDialog.node as any}
         assign
+        excludeHotspotId={assignDialog.node?.prev_hotspot?.hotspot_id ?? null}
         allBarangays={assignBarangays}
         allHotspotMarkers={assignMarkers}
         loadingBarangays={assignLoadingData}
@@ -1731,7 +1777,7 @@ export default function NodeManagement() {
 
       {/* Assign / re-assign confirmation */}
       <DialogModal
-        open={assignConfirm.open}
+        open={assignConfirm.open && !assignConfirm.needsRemarks}
         onClose={() => setAssignConfirm(prev => ({ ...prev, open: false }))}
         onConfirm={handleAssignConfirmYes}
         color={DIALOG_COLOR.lightblue}
@@ -1743,18 +1789,29 @@ export default function NodeManagement() {
         confirmLabel={assignConfirm.isReassign ? 'Yes, Re-assign' : 'Yes, Assign'}
       />
 
+      {/* Different hotspot than the previous one → remarks required */}
+      <RemarksDialog
+        open={assignConfirm.open && assignConfirm.needsRemarks}
+        title="Confirm Re-assignment"
+        description={<>Assign <strong>{assignConfirm.node?.node_name}</strong> to <strong>{assignConfirm.hotspotName}</strong> instead of its previous hotspot? Please tell us why.</>}
+        placeholder="e.g. Previous hotspot is dry, moved to a flowing canal"
+        confirmLabel="Re-assign"
+        confirmColor={DIALOG_COLOR.blue}
+        loading={assigning}
+        onCancel={() => setAssignConfirm(prev => ({ ...prev, open: false }))}
+        onConfirm={(remarks) => handleAssignConfirm(assignConfirm.payload!, remarks)}
+      />
+
       {/* Unassign dialog */}
-      <DialogModal
+      <RemarksDialog
         open={unassignDialog.open}
-        onClose={() => setUnassignDialog({ open: false, node: null })}
-        onConfirm={() => handleUnassign(unassignDialog.node!)}
-        color={DIALOG_COLOR.lightyellow}
-        icon={Unplug}
-        iconColor={DIALOG_COLOR.yellow}
         title="Unassign Node"
-        description={<> Are you sure you want to unassign <strong>{unassignDialog.node?.node_name}</strong> from its hotspot? It will return to Available. </>}
-        cancelLabel="Cancel"
+        description={<>Unassign <strong>{unassignDialog.node?.node_name}</strong> from its hotspot? It will return to Available. Please tell us why.</>}
+        placeholder="e.g. Hotspot is dry this season"
         confirmLabel="Unassign"
+        loading={unassigning}
+        onCancel={() => setUnassignDialog({ open: false, node: null })}
+        onConfirm={(remarks) => handleUnassign(unassignDialog.node!, remarks)}
       />
 
       {/* Cancel assignment dialog */}
@@ -1839,6 +1896,7 @@ export default function NodeManagement() {
         description={errorDialog.message}
         confirmLabel="Okay"
       />
+
 
       <PrintReport
         reportTitle={historyPrintTitle}

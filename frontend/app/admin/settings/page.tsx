@@ -20,6 +20,7 @@ import { DialogModal } from "@/components/DialogModal"
 
 // components 
 import { SpinnerIcon } from "@/components/SpinnerIcon"
+import { AlertThresholdsCard } from "@/components/Settings/AlertThresholdsCard"
 
 // table pagination
 import { usePagination } from "@/components/hooks/usePagination";
@@ -482,6 +483,13 @@ export default function Page() {
             <h2 className="font-bold text-[#122A48] text-base">Alert Sound</h2>
           </div>
 
+          <p className="text-[#727272] text-xs">
+            A sound plays when a new alert arrives, on both the web and the mobile app. Each severity has its own sound:
+            <strong> Critical</strong> for critical clogs, <strong>Warning</strong> for moderate clogs and rising water, and
+            <strong> Info</strong> for everything else. Pick a built-in sound or upload your own (up to 10 seconds).
+            Report submissions and waste type updates are always silent. Changes apply to everyone using the system.
+          </p>
+
           {loading ? (
             <div className="flex justify-center items-center h-90">
               <div className="flex flex-col items-center gap-3 -mt-10">
@@ -574,6 +582,9 @@ export default function Page() {
             </>
           )}
         </div>
+
+        {/* Alert Thresholds section */}
+        <AlertThresholdsCard waitFor={loading} />
 
         {/* Backup & Restore section */}
         <div className="rounded-lg bg-[#FAFCFD] shadow-[0_5px_4px_-4px_rgba(0,0,0,0.2)] p-3 border border-[#C9C9C9] flex flex-col gap-3">

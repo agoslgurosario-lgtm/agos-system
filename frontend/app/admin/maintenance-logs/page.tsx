@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 
 // lib
 import { api } from "@/lib/api"
-import { printReport } from "@/lib/printReport"
+import { exportOrPrint } from "@/lib/exportOrPrint"
 import { getUser } from "@/lib/auth"
 
 // hooks
@@ -27,6 +27,7 @@ import { SearchFilter } from "@/components/SearchFilter"
 import { SpinnerIcon } from "@/components/SpinnerIcon"
 import { Toast } from "@/components/Toast"
 import { MaintenanceLogsSkeleton } from "@/components/Skeleton/Admin/MaintenanceLogsSkeleton"
+import { DateRangeFilter } from "@/components/DateRangeFilter"
 
 
 type MaintenanceLog = {
@@ -81,9 +82,8 @@ export default function MaintenanceLogs() {
   const logs = logsCache.data
   const [search, setSearch] = useState<string>('')
 
-  const monthOptions = useMemo(() => getMonthOptions(), [])
-  const [selectedMonth, setSelectedMonth] = useState<string>('') // '' = all months
-  const [isOpen, setIsOpen] = useState<boolean>(false)
+  const [startDate, setStartDate] = useState<string>('')   // empty range = all dates
+  const [endDate, setEndDate] = useState<string>('')
 
   const loading = logsCache.loading
   const fetchError = logsCache.error
@@ -92,8 +92,14 @@ export default function MaintenanceLogs() {
 
   const { toasts, addToast, removeToast } = useToast()
 
+  const printTitle = "Maintenance Logs"
+  const printColumns = ["Node", "Reason", "Date Marked", "Date Fixed"]
+
   const handlePrint = () => {
-    printReport()
+    exportOrPrint({
+      table: { title: printTitle, columns: printColumns, rows: printRows },
+      onError: () => addToast("Failed to export. Please try again.", "error"),
+    })
   }
 
   const filteredLogs = useMemo(() => {
@@ -112,14 +118,13 @@ export default function MaintenanceLogs() {
         if (!matchesSearch) return false
       }
 
-      if (selectedMonth) {
-        const logMonth = l.started_at.slice(0, 7) // 'YYYY-MM'
-        if (logMonth !== selectedMonth) return false
-      }
+      const logDate = l.started_at.slice(0, 10) // 'YYYY-MM-DD'
+      if (startDate && logDate < startDate) return false
+      if (endDate && logDate > endDate) return false
 
       return true
     })
-  }, [logs, search, selectedMonth])
+  }, [logs, search, startDate, endDate])
 
   const { panelRef, tableWrapRef, rows } = useFillRows({
     rowHeight: 33,
@@ -143,7 +148,7 @@ export default function MaintenanceLogs() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [search, selectedMonth, setCurrentPage])
+  }, [search, startDate, endDate, setCurrentPage])
 
   usePolling(async () => { await logsCache.refetch() }, 30000)
 
@@ -156,44 +161,18 @@ export default function MaintenanceLogs() {
       <div className="w-full flex gap-2 items-center justify-between ">
         <SearchFilter value={search} onChange={setSearch} placeholder='Search maintenance logs...' width="w-150" height="h-9" />
 
-        <div className="relative flex gap-2">
-          <button
-            type="button"
-            onClick={() => setIsOpen(!isOpen)}
-            className={`cursor-pointer flex items-center justify-between w-[200px] h-9 px-3 border border-[#D0D0D0] rounded-lg bg-white text-[12px] font-normal transition-colors outline-none text-left ${
-              selectedMonth ? "text-[#122A48]" : "text-[#999999]"
-            }`}
-          >
-            <span>{selectedMonth ? monthOptions.find(m => m.value === selectedMonth)?.label : "All Months"}</span>
-            <ChevronDown size={14} className="text-[#999999]" />
-          </button>
+        <div className="flex gap-2">
+          <DateRangeFilter
+            from={startDate}
+            to={endDate}
+            onChange={(from, to) => { setStartDate(from); setEndDate(to) }}
+            align="right"
+          />
 
           <Button onClick={handlePrint} className="bg-[#2fd45b] hover:bg-[#28b54e] cursor-pointer py-[17px]">
             <FileDown size={16}/>
             Export
           </Button>
-
-          {isOpen && (
-            <div className="absolute right-20 top-9 mt-1.5 p-2 bg-white border border-[#D0D0D0] rounded-lg shadow-xl z-50 flex flex-col w-[200px] max-h-[260px] overflow-y-auto">
-              <button
-                type="button"
-                onClick={() => { setSelectedMonth(''); setIsOpen(false) }}
-                className={`text-left px-2 py-1.5 rounded text-[12px] hover:bg-[#F0F4F7] ${!selectedMonth ? 'text-[#1565BC] font-semibold' : 'text-[#122A48]'}`}
-              >
-                All Months
-              </button>
-              {monthOptions.map(m => (
-                <button
-                  key={m.value}
-                  type="button"
-                  onClick={() => { setSelectedMonth(m.value); setIsOpen(false) }}
-                  className={`text-left px-2 py-1.5 rounded text-[12px] hover:bg-[#F0F4F7] ${selectedMonth === m.value ? 'text-[#1565BC] font-semibold' : 'text-[#122A48]'}`}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 
@@ -281,8 +260,8 @@ export default function MaintenanceLogs() {
     <Toast toasts={toasts} onRemove={removeToast} />
 
     <PrintReport
-      reportTitle="Maintenance Logs"
-      columns={["Node", "Reason", "Date Marked", "Date Fixed"]}
+      reportTitle={printTitle}
+      columns={printColumns}
       rows={printRows}
       generatedBy={generatedBy}
     />
