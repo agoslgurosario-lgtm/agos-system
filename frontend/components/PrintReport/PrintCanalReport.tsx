@@ -42,6 +42,16 @@ export function PrintCanalReport({ report, generatedBy, signatoryNames }: PrintC
   const cleanup = isCleanupReport(report)
   const { counted, total } = cleanupCoverage(report)
   const rowLabel = (v: string | null, opts: [string, string][]) => opts.find(([k]) => k === v)?.[1] ?? '—'
+
+  const nodeSummaries = report.node_summaries ?? []
+  const peakWaterPct = nodeSummaries.reduce<number | null>(
+    (max, s) => (s.peak_water_level_pct == null ? max : Math.max(max ?? 0, s.peak_water_level_pct)),
+    null
+  )
+  const peakClogPct = nodeSummaries.reduce<number | null>(
+    (max, s) => (s.peak_clog_pct == null ? max : Math.max(max ?? 0, s.peak_clog_pct)),
+    null
+  )
   
   const hasOldOther = Number(report.waste_other_kg ?? 0) > 0 || !!report.waste_other_label
 
@@ -135,6 +145,21 @@ export function PrintCanalReport({ report, generatedBy, signatoryNames }: PrintC
           <td colSpan={2}><div className="print-canal-lbl">Overall Obstruction (choose one)</div><ChoiceRow options={COVERAGE_OPTIONS} selected={report.overall_obstruction_coverage} /></td>
         </tr>
       </tbody></table>
+
+      {(peakWaterPct != null || peakClogPct != null) && (
+        <p style={{ fontSize: '9pt', margin: '4px 0' }}>
+          Sensor peaks:{' '}
+          {[
+            peakWaterPct != null ? `water level ${Math.round(peakWaterPct)}% of canal depth` : null,
+            peakClogPct != null ? `clog ${Math.round(peakClogPct)}%` : null,
+          ].filter(Boolean).join(' · ')}
+        </p>
+      )}
+      <p style={{ fontSize: '8pt', margin: '4px 0', color: '#727272' }}>
+        How to read this: water level is how high the water is compared with the canal depth.
+        Obstruction is how much of the canal is blocked. High water together with high
+        obstruction usually means a blockage is backing the water up.
+      </p>
 
       {cleanup && (
         <>

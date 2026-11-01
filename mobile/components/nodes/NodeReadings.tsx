@@ -3,8 +3,9 @@ import { View, Text, ScrollView, Pressable, ActivityIndicator, RefreshControl } 
 import Pagination from '../alerts/Pagination'
 import { useReadings, type SeverityTab } from '../../hooks/useReadings'
 import type { ReadingStatus } from '../../types/readings'
-import MonthFilter from '../common/MonthFilter'
-import { monthLabel } from '../../lib/months'
+import DateRangeFilter from '../common/DateRangeFilter'
+import { rangeLabel } from '../../lib/dateRange'
+import { formatWeight } from '../../lib/formatWeight'
 
 const SEVERITY_TABS: SeverityTab[] = ['All', 'Normal', 'Warning', 'Critical']
 
@@ -50,8 +51,8 @@ function SummaryCard({ label, value, color }: { label: string; value: number; co
 export default function NodeReadings({ nodeId }: { nodeId: number }) {
   const scrollRef = useRef<ScrollView>(null)
   const {
-    readings, summary, selectedTab, month, page, totalPages,
-    loading, refreshing, fetching, error, selectTab, selectMonth, changePage, refresh,
+    readings, summary, selectedTab, range, page, totalPages,
+    loading, refreshing, fetching, error, selectTab, selectRange, changePage, refresh,
   } = useReadings(nodeId)
 
   const tabCounts: Record<SeverityTab, number> = {
@@ -111,7 +112,7 @@ export default function NodeReadings({ nodeId }: { nodeId: number }) {
         )}
 
         <View className='flex justify-center items-center'>
-          <MonthFilter value={month} onChange={selectMonth} />
+          <DateRangeFilter from={range.from} to={range.to} onChange={selectRange} loading={fetching} />
         </View>
 
         {/* summary cards */}
@@ -127,7 +128,7 @@ export default function NodeReadings({ nodeId }: { nodeId: number }) {
         {/* list */}
         {readings.length === 0 ? (
           <Text className="text-[#94A3B8] text-sm text-center mt-8">
-            No readings found for {selectedTab} status in {monthLabel(month)}.
+            No readings found for {selectedTab} status in {rangeLabel(range.from, range.to)}.
           </Text>
         ) : (
           readings.map((item) => {
@@ -196,6 +197,13 @@ export default function NodeReadings({ nodeId }: { nodeId: number }) {
                       style={{ width: `${Math.min(clog ?? 0, 100)}%`, backgroundColor: clogColor }}
                     />
                   </View>
+                </View>
+
+                <View className="flex-row gap-1 mt-2.5 pt-2.5 border-t border-[#F1F5F9]">
+                  <Text className="text-[10px] text-[#94A3B8] font-medium">Estimated Weight (AI):</Text>
+                  <Text className="text-[11px] font-bold text-[#334155]">
+                    {(item.estimated_weight ?? 0) > 0 ? `~ ${formatWeight(item.estimated_weight)}` : '0 g'}
+                  </Text>
                 </View>
 
                 <View className="flex-row gap-2 mt-2.5">

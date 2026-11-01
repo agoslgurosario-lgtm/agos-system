@@ -3,7 +3,7 @@ import { useFocusEffect } from 'expo-router'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/AuthContext'
 import { useLiveSocket } from '../lib/useLiveSocket'
-import { currentMonthValue } from '../lib/months'
+import { currentMonthRange, inRange } from '../lib/dateRange'
 import type { ReadingStatus, ReadingsPage, ReadingsSummary, SensorReading } from '../types/readings'
 
 export type SeverityTab = 'All' | ReadingStatus
@@ -19,7 +19,7 @@ export function useReadings(nodeId?: number) {
   const [summary, setSummary] = useState<ReadingsSummary>(EMPTY_SUMMARY)
   const [matchCount, setMatchCount] = useState(0) // rows matching the selected tab
   const [selectedTab, setSelectedTab] = useState<SeverityTab>('All')
-  const [month, setMonth] = useState<string>(currentMonthValue())
+  const [range, setRange] = useState(currentMonthRange())
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -29,7 +29,7 @@ export function useReadings(nodeId?: number) {
   // latest values for callbacks that outlive a render (focus + socket)
   const tabRef = useRef<SeverityTab>('All')
   const pageRef = useRef(1)
-  const monthRef = useRef<string>(currentMonthValue())
+  const rangeRef = useRef(currentMonthRange())
   const hasLoadedOnce = useRef(false)
   const requestId = useRef(0) // drops responses from superseded requests
   const seenIdsRef = useRef<Set<number>>(new Set())
@@ -43,10 +43,16 @@ export function useReadings(nodeId?: number) {
 
     try {
       const params = new URLSearchParams({
-        month: monthRef.current,
         page: String(pageNum),
         page_size: String(READINGS_PAGE_SIZE),
       })
+      const { from, to } = rangeRef.current
+      if (from || to) {
+        if (from) params.set('from', from)
+        if (to) params.set('to', to)
+      } else {
+        params.set('month', 'All')
+      }
       if (tab !== 'All') params.set('severity', tab)
       if (nodeId != null) params.set('node', String(nodeId))
 
@@ -81,8 +87,8 @@ export function useReadings(nodeId?: number) {
     (incoming) => {
       if (incoming.reading_id == null) return
 
-      // a brand-new reading only belongs to the current month (or All Time)
-      if (monthRef.current !== 'All' && monthRef.current !== currentMonthValue()) return
+      // a brand-new reading only belongs here if its date is inside the selected range
+      if (!inRange(incoming.timestamp, rangeRef.current.from, rangeRef.current.to)) return
 
       if (nodeId != null && incoming.node_details?.node_id !== nodeId) return
 
@@ -123,10 +129,10 @@ export function useReadings(nodeId?: number) {
     fetchReadings(tab, 1)
   }
 
-  const selectMonth = (value: string) => {
-    monthRef.current = value
+  const selectRange = (from: string, to: string) => {
+    rangeRef.current = { from, to }
     pageRef.current = 1
-    setMonth(value)
+    setRange({ from, to })
     setPage(1)
     fetchReadings(tabRef.current, 1)
   }
@@ -141,7 +147,7 @@ export function useReadings(nodeId?: number) {
     readings,
     summary,
     selectedTab,
-    month,
+    range,
     page,
     totalPages: Math.ceil(matchCount / READINGS_PAGE_SIZE),
     loading,
@@ -149,7 +155,7 @@ export function useReadings(nodeId?: number) {
     fetching,
     error,
     selectTab,
-    selectMonth,
+    selectRange,
     changePage,
     refresh: () => fetchReadings(tabRef.current, pageRef.current, true),
   }

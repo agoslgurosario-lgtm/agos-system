@@ -11,7 +11,9 @@ export type AlertType =
   | "Sensor_Failure"
   | "Sensor_Failure"
   | "Report_Due_Soon"
-  | "Report_Overdue";
+  | "Report_Overdue"
+  | "Node_Inspection_Request";
+
 
 export type ClogTier = "Low" | "Moderate" | "Critical";
 
@@ -68,7 +70,13 @@ export interface ReportReminderContext {
   unverified_count?: number;
 }
 
-export type AlertContext = ClogAlertContext | WaterLevelAlertContext | WasteTypeRejectedContext | WasteTypeApprovedContext | HealthAlertContext | ReportReminderContext | Record<string, never>;
+export interface NodeInspectionContext {
+  reason?: string;
+  note?: string;
+  requested_by?: string;
+}
+
+export type AlertContext = ClogAlertContext | WaterLevelAlertContext | WasteTypeRejectedContext | WasteTypeApprovedContext | HealthAlertContext | ReportReminderContext | NodeInspectionContext | Record<string, never>;
 
 export interface Alert {
   alert_id: number;

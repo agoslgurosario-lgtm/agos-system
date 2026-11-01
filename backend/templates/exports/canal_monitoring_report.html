@@ -195,6 +195,16 @@
     </tr>
   </table>
 
+  {% if peak_water_pct is not None or peak_clog_pct is not None %}
+  <p class="lbl" style="margin-top: 4px;">
+    Sensor peaks:
+    {% if peak_water_pct is not None %}water level {{ peak_water_pct|floatformat:0 }}% of canal depth{% endif %}{% if peak_water_pct is not None and peak_clog_pct is not None %} &middot; {% endif %}{% if peak_clog_pct is not None %}clog {{ peak_clog_pct|floatformat:0 }}%{% endif %}
+  </p>
+  {% endif %}
+  <p class="lbl" style="margin-top: 2px; font-weight: normal; text-transform: none;">
+    How to read this: water level is how high the water is compared with the canal depth. Obstruction is how much of the canal is blocked. High water together with high obstruction usually means a blockage is backing the water up.
+  </p>
+
   {% if is_cleanup %}
   <p class="lbl" style="margin-top: 4px;">
     {% if report.condition_source == "Manual" %}Entered by the barangay, not taken from sensors.{% else %}Based on {{ counted_puroks }} of {{ purok_table|length }} puroks with sensor data.{% endif %}

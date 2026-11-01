@@ -6,6 +6,8 @@ import { Target, Map, SquarePen, Trash2, X, Check, Navigation, MapPin, MapPinPlu
 
 // react
 import { useState, useEffect, useCallback, useRef, Fragment } from "react"
+import { DateRangeFilter } from "@/components/DateRangeFilter"
+import { rangeQuery } from "@/lib/dateRange"
 
 // shadcn
 import { Input } from "@/components/ui/input"
@@ -40,6 +42,8 @@ import { historyCache } from "@/lib/historyCache"
 import { remarksText } from "@/lib/historyRemarks"
 import { fetchBarangayBoundaryById } from "@/lib/barangayBoundary"
 import { purokOptions } from "@/lib/purok"
+import { isIOSDevice } from "@/lib/device"
+import { openTablePdf, PdfTable } from "@/lib/openPdf"
 
 // turf for point-in-polygon check
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon"
@@ -231,6 +235,8 @@ export default function HotspotManagement() {
   const [hotspotHistoryLoadedKey, setHotspotHistoryLoadedKey] = useState('')
   const [hotspotHistoryError, setHotspotHistoryError] = useState(false)
   const [hotspotHistoryPage, setHotspotHistoryPage] = useState(1)
+  const [hotspotHistoryFrom, setHotspotHistoryFrom] = useState('')
+  const [hotspotHistoryTo, setHotspotHistoryTo] = useState('')
   const [hotspotHistoryHasNext, setHotspotHistoryHasNext] = useState(false)
   const [hotspotHistoryHasPrev, setHotspotHistoryHasPrev] = useState(false)
 
@@ -238,7 +244,7 @@ export default function HotspotManagement() {
   const hotspotHistoryReqRef = useRef(0)
   const hotspotHistoryRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const historyHotspotId = hotspotHistoryDialog.open ? hotspotHistoryDialog.hotspot?.hotspot_id : undefined
-  const hotspotHistoryBaseKey = `${historyHotspotId}|${hotspotHistoryPage}`
+  const hotspotHistoryBaseKey = `${historyHotspotId}|${hotspotHistoryFrom}|${hotspotHistoryTo}|${hotspotHistoryPage}`
   const hotspotHistoryBusy =
     hotspotHistoryLoading || (historyHotspotId !== undefined && hotspotHistoryLoadedKey !== hotspotHistoryBaseKey)
 
@@ -379,12 +385,14 @@ export default function HotspotManagement() {
     if (!hotspotHistoryDialog.open || !hotspotHistoryDialog.hotspot) {
       setHotspotHistoryRows([])
       setHotspotHistoryPage(1)
+      setHotspotHistoryFrom('')
+      setHotspotHistoryTo('')
       setHotspotHistoryLoadedKey('')
       return
     }
 
     const hotspotId = hotspotHistoryDialog.hotspot.hotspot_id
-    const cacheKey = `hotspot:${hotspotId}:assignments:${hotspotHistoryPage}`
+    const cacheKey = `hotspot:${hotspotId}:assignments:${hotspotHistoryFrom}|${hotspotHistoryTo}|${hotspotHistoryPage}`
     const cached = historyCache.get(cacheKey)
     if (cached) {
       setHotspotHistoryRows(cached.rows)
@@ -401,7 +409,7 @@ export default function HotspotManagement() {
       setHotspotHistoryError(false)
       try {
         const res = await fetchWithAuth(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/hotspots/${hotspotId}/assignment-history/?page=${hotspotHistoryPage}`
+          `${process.env.NEXT_PUBLIC_API_URL}/api/hotspots/${hotspotId}/assignment-history/?page=${hotspotHistoryPage}${hotspotHistoryFrom || hotspotHistoryTo ? `&${rangeQuery(hotspotHistoryFrom, hotspotHistoryTo)}` : ''}`
         )
         if (!res.ok) throw new Error()
         const data = await res.json()
@@ -421,7 +429,9 @@ export default function HotspotManagement() {
       }
     }
     fetchHistory()
-    }, [hotspotHistoryDialog.open, hotspotHistoryDialog.hotspot, hotspotHistoryPage, hotspotHistoryTick])
+    }, [hotspotHistoryDialog.open, hotspotHistoryDialog.hotspot, hotspotHistoryFrom, hotspotHistoryTo, hotspotHistoryPage, hotspotHistoryTick])
+
+  useEffect(() => { setHotspotHistoryPage(1) }, [hotspotHistoryFrom, hotspotHistoryTo])
 
     const openHotspotIdRef = useRef<number | null>(null)
     openHotspotIdRef.current = hotspotHistoryDialog.open ? hotspotHistoryDialog.hotspot?.hotspot_id ?? null : null
@@ -659,18 +669,39 @@ export default function HotspotManagement() {
     return all
   }
 
-  const handleExportHistory = async () => {
-    if (!hotspotHistoryDialog.hotspot) return
-    setHistoryExporting(true)
-    try {
-      const all = await fetchAllPages(`${process.env.NEXT_PUBLIC_API_URL}/api/hotspots/${hotspotHistoryDialog.hotspot.hotspot_id}/assignment-history/`)
-      setHistoryPrintRows(all.map(h => [
+  // the history table, built once and used by both the print view and the PDF
+  const buildHistoryTable = async (): Promise<PdfTable> => {
+    const hotspot = hotspotHistoryDialog.hotspot
+    if (!hotspot) throw new Error('No hotspot selected')
+    const all = await fetchAllPages(`${process.env.NEXT_PUBLIC_API_URL}/api/hotspots/${hotspot.hotspot_id}/assignment-history/${hotspotHistoryFrom || hotspotHistoryTo ? `?${rangeQuery(hotspotHistoryFrom, hotspotHistoryTo)}` : ''}`)
+    return {
+      title: `${hotspot.name} — Assignment History`,
+      columns: ["Node", "From", "To", "Reason", "Remarks"],
+      rows: all.map(h => [
         h.node_name || '—',
         new Date(h.started_at).toLocaleDateString(),
         h.ended_at ? new Date(h.ended_at).toLocaleDateString() : 'Current',
         h.end_reason || '—',
         remarksText(h),
-      ]))
+      ]),
+    }
+  }
+
+  const handleExportHistory = async () => {
+    if (!hotspotHistoryDialog.hotspot) return
+    setHistoryExporting(true)
+
+    if (isIOSDevice()) {
+      // iPhone/iPad ignore window.print(): open the PDF tab right now (still inside the tap), then fill it
+      openTablePdf(buildHistoryTable)
+        .catch(() => addToast('Failed to export history.', 'error'))
+        .finally(() => setHistoryExporting(false))
+      return
+    }
+
+    try {
+      const table = await buildHistoryTable()
+      setHistoryPrintRows(table.rows)
       setTriggerPrint(true)
     } catch {
       addToast('Failed to export history.', 'error')
@@ -1325,6 +1356,10 @@ export default function HotspotManagement() {
           </DialogHeader>
           <DialogTitle className="sr-only">Node Assignment History</DialogTitle>
 
+          <div className="flex items-center p-2 md:p-3 border-b border-[#C6C6C8]">
+            <DateRangeFilter from={hotspotHistoryFrom} to={hotspotHistoryTo} onChange={(f, t) => { setHotspotHistoryFrom(f); setHotspotHistoryTo(t) }} width="w-[210px]" />
+          </div>
+
           <Table>
             <TableHeader className="bg-[#e8eef1b4] border border-[#CFD8DC]">
               <TableRow>
@@ -1499,6 +1534,7 @@ export default function HotspotManagement() {
       />
 
       <Toast toasts={toasts} onRemove={removeToast} />
+
 
       <PrintReport
         reportTitle={`${hotspotHistoryDialog.hotspot?.name ?? 'Hotspot'} — Assignment History`}

@@ -6,12 +6,11 @@ import { useLiveSocket } from "../lib/useLiveSocket";
 import { useAuth } from "../lib/AuthContext";
 import { useAlertsContext } from "../lib/AlertsContext";
 import { APP_ALERT_TYPES } from "../constants/alerts";
+import { inRange, rangeQuery } from "../lib/dateRange";
 
 export type AlertTypeFilter = "All" | AlertType;
-export type DateFilter = "Today" | "7Days" | "30Days";
 
-
-export function useAlerts(alertType: AlertTypeFilter, dateFilter: DateFilter) {
+export function useAlerts(alertType: AlertTypeFilter, from: string, to: string) {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -29,16 +28,15 @@ export function useAlerts(alertType: AlertTypeFilter, dateFilter: DateFilter) {
         "alert_type",
         alertType === "All" ? APP_ALERT_TYPES.join(",") : alertType
       );
-      if (dateFilter) params.append("date", dateFilter);
 
-      const data = await api.get(`/api/alerts/?${params.toString()}`);
+      const data = await api.get(`/api/alerts/?${params.toString()}&${rangeQuery(from, to)}`);
       setAlerts(data.results ?? data);
     } catch {
       setError(true);
     } finally {
       isRefresh ? setRefreshing(false) : setLoading(false);
     }
-  }, [alertType, dateFilter]);
+  }, [alertType, from, to]);
 
   useEffect(() => {
     fetchAlerts();
@@ -52,6 +50,7 @@ export function useAlerts(alertType: AlertTypeFilter, dateFilter: DateFilter) {
       }
       const matchesType = alertType === 'All' || incoming.alert_type === alertType;
       if (!matchesType) return;
+      if (!inRange(incoming.timestamp, from, to)) return;
 
       setAlerts((prev) => {
         const exists = prev.some((a) => a.alert_id === incoming.alert_id);

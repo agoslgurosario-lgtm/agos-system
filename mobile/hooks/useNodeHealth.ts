@@ -1,21 +1,11 @@
 import { useState, useCallback, useRef } from 'react'
 import { useFocusEffect } from 'expo-router'
 import { api } from '../lib/api'
-import { currentMonthValue } from '../lib/months'
+import { currentMonthRange } from '../lib/dateRange'
 import type { NodeHealthLog } from '../types/health'
 
 export type HealthTab = 'All' | 'Normal' | 'Warning' | 'Critical'
 export const HEALTH_PAGE_SIZE = 10
-
-const pad = (n: number) => String(n).padStart(2, '0')
-
-// 'YYYY-MM' -> first and last day of that month ('All' = no limit)
-function monthRange(month: string): { from?: string; to?: string } {
-  if (month === 'All') return {}
-  const [y, m] = month.split('-').map(Number)
-  const lastDay = new Date(y, m, 0).getDate()
-  return { from: `${y}-${pad(m)}-01`, to: `${y}-${pad(m)}-${pad(lastDay)}` }
-}
 
 export function useNodeHealth(nodeId: number) {
   const [latest, setLatest] = useState<NodeHealthLog | null>(null)
@@ -23,7 +13,7 @@ export function useNodeHealth(nodeId: number) {
   const [matchCount, setMatchCount] = useState(0)
   const [summary, setSummary] = useState({ total: 0, normal: 0, warning: 0, critical: 0 })
   const [tab, setTab] = useState<HealthTab>('All')
-  const [month, setMonth] = useState<string>(currentMonthValue())
+  const [range, setRange] = useState(currentMonthRange())
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -31,7 +21,7 @@ export function useNodeHealth(nodeId: number) {
   const [error, setError] = useState(false)
 
   const tabRef = useRef<HealthTab>('All')
-  const monthRef = useRef<string>(currentMonthValue())
+  const rangeRef = useRef(currentMonthRange())
   const pageRef = useRef(1)
   const requestId = useRef(0) // drops responses from superseded requests
   const loadedOnce = useRef(false)
@@ -49,7 +39,7 @@ export function useNodeHealth(nodeId: number) {
         page_size: String(HEALTH_PAGE_SIZE),
       })
       if (tabRef.current !== 'All') params.set('status', tabRef.current)
-      const { from, to } = monthRange(monthRef.current)
+      const { from, to } = rangeRef.current
       if (from) params.set('from', from)
       if (to) params.set('to', to)
 
@@ -81,9 +71,9 @@ export function useNodeHealth(nodeId: number) {
     tabRef.current = t; pageRef.current = 1
     setTab(t); setPage(1); fetchAll()
   }
-  const selectMonth = (m: string) => {
-    monthRef.current = m; pageRef.current = 1
-    setMonth(m); setPage(1); fetchAll()
+  const selectRange = (from: string, to: string) => {
+    rangeRef.current = { from, to }; pageRef.current = 1
+    setRange({ from, to }); setPage(1); fetchAll()
   }
   const changePage = (p: number) => {
     pageRef.current = p
@@ -91,10 +81,10 @@ export function useNodeHealth(nodeId: number) {
   }
 
   return {
-    latest, logs, matchCount, summary, tab, month, page,
+    latest, logs, matchCount, summary, tab, range, page,
     totalPages: Math.ceil(matchCount / HEALTH_PAGE_SIZE),
     loading, refreshing, fetching, error,
-    selectTab, selectMonth, changePage,
+    selectTab, selectRange, changePage,
     refresh: () => fetchAll(true),
   }
 }

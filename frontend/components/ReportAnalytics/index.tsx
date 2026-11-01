@@ -18,6 +18,7 @@ import { formatWeight } from "@/lib/formatWeight"
 import { SpinnerIcon } from "@/components/SpinnerIcon"
 import { FileBarChart, Trash2, Clock, BadgeCheck } from "lucide-react"
 import type { ReportBarangay } from "@/types/report"
+import { DateRangeFilter } from "@/components/DateRangeFilter"
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -192,6 +193,9 @@ export default function ReportAnalytics() {
 
   const [month, setMonth] = useState(months[0].value)
   const [period, setPeriod] = useState("All")
+  const [from, setFrom] = useState("")
+  const [to, setTo] = useState("")
+  const rangeActive = from !== "" || to !== ""
   const [barangay, setBarangay] = useState("All")
   const [purok, setPurok] = useState("All")
   const [node, setNode] = useState("All")
@@ -232,8 +236,15 @@ export default function ReportAnalytics() {
   }, [])
 
   useEffect(() => {
-    const qs = new URLSearchParams({ month, periods: "12" })
-    if (period !== "All") qs.set("period", period)
+    const qs = new URLSearchParams({ periods: "12" })
+    if (rangeActive) {
+      // a date range replaces the month and period filters
+      if (from) qs.set("from", from)
+      if (to) qs.set("to", to)
+    } else {
+      qs.set("month", month)
+      if (period !== "All") qs.set("period", period)
+    }
     if (barangay !== "All") qs.set("barangay", barangay)
     if (purok !== "All") qs.set("purok", purok)
     if (node !== "All") qs.set("node", node)
@@ -247,7 +258,7 @@ export default function ReportAnalytics() {
       .catch(() => { if (!cancelled) setError(true) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [month, period, barangay, purok, node])
+  }, [month, period, from, to, barangay, purok, node])
 
   const handleMonth = (v: string) => { setMonth(v); setPeriod("All") }
   const handleBarangay = (v: string) => { setBarangay(v); setPurok("All"); setNode("All") }
@@ -289,8 +300,9 @@ export default function ReportAnalytics() {
 
       {/* filters */}
       <div className="flex flex-wrap items-center gap-3">
-        <FilterSelect value={month} onChange={handleMonth} options={months} allLabel="All Months" />
-        <FilterSelect value={period} onChange={setPeriod} options={buildPeriodOptions(month).filter(o => o.value !== "All")} allLabel="All periods" disabled={month === "All"} />
+        <FilterSelect value={month} onChange={handleMonth} options={months} allLabel="All Months" disabled={rangeActive} />
+        <FilterSelect value={period} onChange={setPeriod} options={buildPeriodOptions(month).filter(o => o.value !== "All")} allLabel="All periods" disabled={rangeActive || month === "All"} />
+        <DateRangeFilter from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t) }} />
         <FilterSelect value={barangay} onChange={handleBarangay} options={barangayOptions} allLabel="All Barangays" />
         <FilterSelect value={purok} onChange={setPurok} options={purokOptions} allLabel="All Puroks" disabled={barangay === "All"} />
         <FilterSelect value={node} onChange={setNode} options={nodeOptions} allLabel="All Nodes" disabled={barangay === "All"} />
@@ -332,7 +344,7 @@ export default function ReportAnalytics() {
             {/* trend across periods */}
             <Panel
               title="Trend by period"
-              note="The last 12 periods up to the selected one."
+              note={rangeActive ? "The periods inside the selected date range (the latest 24 at most)." : "The last 12 periods up to the selected one."}
               right={
                 <div className="flex flex-col items-end gap-1.5">
                   <div className="flex gap-1">

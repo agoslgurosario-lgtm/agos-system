@@ -4,10 +4,14 @@ from rest_framework.response import Response
 from .models import Alert, AlertRead, BARANGAY_ONLY_ALERT_TYPES
 from .serializers import AlertSerializer
 from apps.users.permissions import IsAdmin, IsAdminOrMENROOrBarangay
+from apps.sensor_nodes.models import SensorNode
+from apps.audit_logs.utils import log_action
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from datetime import timedelta
 from django.db.models import Q
+
+from agos_backend.date_range import has_date_range, filter_by_date_range
 
 
 class AlertListView(generics.ListAPIView):
@@ -41,7 +45,9 @@ class AlertListView(generics.ListAPIView):
 
         # date filter
         date_filter = self.request.query_params.get('date')
-        if date_filter == 'Today':
+        if has_date_range(self.request):
+            qs = filter_by_date_range(qs, 'timestamp', self.request)
+        elif date_filter == 'Today':
             qs = qs.filter(timestamp__date=timezone.localtime(timezone.now()).date())
         elif date_filter == '7Days':
             qs = qs.filter(timestamp__gte=timezone.now() - timedelta(days=7))
@@ -117,3 +123,66 @@ class AlertMarkAllReadView(APIView):
             ignore_conflicts=True,
         )
         return Response({'detail': 'All alerts marked as read.'})
+
+
+NOTIFY_REASONS = {
+    'offline':        'Device offline',
+    'low_battery':    'Low battery',
+    'weak_signal':    'Weak signal',
+    'sensor_failure': 'Sensor not responding',
+    'damaged':        'Possible physical damage',
+    'other':          'Other',
+}
+
+
+class AlertNotifyBarangayView(APIView):
+    """
+    POST /api/alerts/notify-barangay/   (Admin only)
+    Body: { node, reason, note? }
+    Tells the barangay that owns the node to physically inspect it.
+    """
+    permission_classes = [IsAdmin]
+
+    def post(self, request):
+        reason_key = request.data.get('reason')
+        note = (request.data.get('note') or '').strip()
+
+        if reason_key not in NOTIFY_REASONS:
+            return Response({'error': 'Choose a valid reason.'}, status=status.HTTP_400_BAD_REQUEST)
+        if reason_key == 'other' and not note:
+            return Response({'error': 'Add a note when the reason is Other.'}, status=status.HTTP_400_BAD_REQUEST)
+        if len(note) > 300:
+            return Response({'error': 'Note is too long (300 characters max).'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            node = SensorNode.objects.get(pk=request.data.get('node'))
+        except (SensorNode.DoesNotExist, ValueError, TypeError):
+            return Response({'error': 'Node not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not node.barangay_id:
+            return Response({'error': 'This node is not assigned to a barangay.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        alert = Alert.objects.create(
+            alert_type='Node_Inspection_Request',
+            node=node,
+            barangay_id=node.barangay_id,
+            alert_context={
+                'reason': NOTIFY_REASONS[reason_key],
+                'note': note,
+                'requested_by': f"{request.user.first_name} {request.user.last_name}",
+            },
+        )
+
+        log_action(
+            user=request.user,
+            action='Requested Node Inspection',
+            affected_table='tbl_alerts',
+            old_value=node.node_name,
+            new_value=NOTIFY_REASONS[reason_key],
+            ip_address=request.META.get('REMOTE_ADDR'),
+        )
+
+        return Response(
+            AlertSerializer(alert, context={'request': request}).data,
+            status=status.HTTP_201_CREATED,
+        )

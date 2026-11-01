@@ -1,8 +1,8 @@
 import { useRef } from 'react'
 import { View, Text, ScrollView, Pressable, ActivityIndicator, RefreshControl } from 'react-native'
 import Pagination from '../alerts/Pagination'
-import MonthFilter from '../common/MonthFilter'
-import { monthLabel } from '../../lib/months'
+import DateRangeFilter from '../common/DateRangeFilter'
+import { rangeLabel } from '../../lib/dateRange'
 import { useNodeHealth, type HealthTab } from '../../hooks/useNodeHealth'
 import type { NodeHealthLog } from '../../types/health'
 
@@ -133,8 +133,8 @@ function HistoryRow({ log }: { log: NodeHealthLog }) {
 export default function NodeHealth({ nodeId }: { nodeId: number }) {
   const scrollRef = useRef<ScrollView>(null)
   const {
-    latest, logs, summary, tab, month, page, totalPages,
-    loading, refreshing, fetching, error, selectTab, selectMonth, changePage, refresh,
+    latest, logs, summary, tab, range, page, totalPages,
+    loading, refreshing, fetching, error, selectTab, selectRange, changePage, refresh,
   } = useNodeHealth(nodeId)
 
   if (loading) {
@@ -196,12 +196,12 @@ export default function NodeHealth({ nodeId }: { nodeId: number }) {
       </ScrollView>
 
       <View className="flex justify-center items-center">
-        <MonthFilter value={month} onChange={selectMonth} loading={fetching} />
+        <DateRangeFilter from={range.from} to={range.to} onChange={selectRange} loading={fetching} />
       </View>
 
       {logs.length === 0 ? (
         <Text className="text-[#94A3B8] text-sm text-center mt-6">
-          No {tab === 'All' ? '' : `${tab} `}health checks in {monthLabel(month)}.
+          No {tab === 'All' ? '' : `${tab} `}health checks in {rangeLabel(range.from, range.to)}.
         </Text>
       ) : (
         logs.map((l) => <HistoryRow key={l.health_id} log={l} />)

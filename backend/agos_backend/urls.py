@@ -21,6 +21,8 @@ from django.conf.urls.static import static
 
 from django.http import JsonResponse
 
+from agos_backend.pdf_views import TablePdfExportView
+
 def healthz(request):
     return JsonResponse({"status": "ok"})
 
@@ -44,4 +46,5 @@ urlpatterns = [
     path('api/', include('apps.alert_sounds.urls')),
     path('api/', include('apps.rainfall.urls')),
     path('api/', include('apps.push_notifications.urls')),
+    path('api/export/table-pdf/', TablePdfExportView.as_view()),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -12,6 +12,7 @@ import { useFillRows } from "@/components/hooks/useFillRows"
 import { SpinnerIcon } from "@/components/SpinnerIcon"
 import StyledBadge from "@/components/StyledBadge"
 import { PrintCanalReport } from "@/components/PrintReport/PrintCanalReport"
+import { DateRangeFilter } from "@/components/DateRangeFilter"
 
 // react
 import { useState, useEffect, useCallback } from "react"
@@ -34,13 +35,15 @@ import { fetchWithAuth } from "@/lib/auth"
 import {
   SEVERITY_STYLE, SEVERITY_LABEL,
   formatDate, filedByName, buildMonthOptions,
-  reportDate, monthOf, periodMatches, buildPeriodOptions, periodRangeLabel, periodTitle,
+  reportDate, monthOf, periodMatches, buildPeriodOptions, periodRangeLabel, periodTitle, inDateRange, rangeLabel,
   averageResponseMinutes, formatDuration, purokLabel,
   ON_TIME_STYLE, LATE_STYLE, submissionStatus,
 } from "@/lib/reportOptions"
 import { printReport } from "@/lib/printReport"
 import { getUser } from "@/lib/auth"
 import { barangayLabel } from "@/lib/barangayFilters"
+import { openPdf } from "@/lib/openPdf"
+import { isIOSDevice } from "@/lib/device"
 
 // types
 import type { CanalMonitoringReport, ReportBarangay } from "@/types/report"
@@ -75,6 +78,11 @@ export default function BarangayReports() {
   const now = new Date()
   const currentMonthValue = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthValue)
+
+  // date range: when set, it replaces the month and period filters
+  const [startDate, setStartDate] = useState<string>('')
+  const [endDate, setEndDate] = useState<string>('')
+  const rangeActive = startDate !== '' || endDate !== ''
   const [outcomeDialog, setOutcomeDialog] = useState(false)
 
   const { toasts, addToast, removeToast } = useToast()
@@ -103,8 +111,9 @@ export default function BarangayReports() {
   // reports in scope of the barangay + month + week filters (search doesn't affect the cards or the bar)
   const scopedReports = reports
     .filter(r => filterBarangay === "All" || String(r.barangay_details?.barangay_id) === filterBarangay)
-    .filter(r => selectedMonth === "All" || monthOf(r) === selectedMonth)
-    .filter(r => periodMatches(r, selectedPeriod))
+    // a date range replaces the month and period filters
+    .filter(r => rangeActive ? inDateRange(r, startDate, endDate) : (selectedMonth === "All" || monthOf(r) === selectedMonth))
+    .filter(r => rangeActive || periodMatches(r, selectedPeriod))
 
   const q = search.toLowerCase()
   const filtered = scopedReports
@@ -139,8 +148,8 @@ export default function BarangayReports() {
   ]
 
   // labels for the bar and the reporting period card
-  const periodLabel = periodTitle(selectedMonth, selectedPeriod)
-  const periodRange = periodRangeLabel(selectedMonth, selectedPeriod)
+  const periodLabel = rangeActive ? rangeLabel(startDate, endDate) : periodTitle(selectedMonth, selectedPeriod)
+  const periodRange = rangeActive ? rangeLabel(startDate, endDate) : periodRangeLabel(selectedMonth, selectedPeriod)
 
   const refetchAll = useCallback(async () => {
     await Promise.allSettled([
@@ -210,6 +219,14 @@ export default function BarangayReports() {
   const currentUser = getUser()
   const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Admin'
 
+  const handleExportReport = async (report: CanalMonitoringReport) => {
+    try {
+      await openPdf(`/api/canal-reports/${report.report_id}/export/`)
+    } catch {
+      addToast("Failed to export the report. Please try again.", "error")
+    }
+  }
+
   if (loading) return <BarangayReportsSkeleton/>
 
   return (
@@ -238,7 +255,7 @@ export default function BarangayReports() {
             </Select>
 
             {/* month filter */}
-            <Select value={selectedMonth} onValueChange={handleMonthChange}>
+            <Select value={selectedMonth} onValueChange={handleMonthChange} disabled={rangeActive}>
               <SelectTrigger className="cursor-pointer text-xs px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                 <SelectValue />
               </SelectTrigger>
@@ -253,7 +270,7 @@ export default function BarangayReports() {
             </Select>
 
             {/* period filter (only inside a single month) */}
-            <Select value={selectedPeriod} onValueChange={setSelectedPeriod} disabled={selectedMonth === "All"}>
+            <Select value={selectedPeriod} onValueChange={setSelectedPeriod} disabled={rangeActive || selectedMonth === "All"}>
               <SelectTrigger className="cursor-pointer text-xs px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                 <SelectValue />
               </SelectTrigger>
@@ -265,6 +282,14 @@ export default function BarangayReports() {
                 ))}
               </SelectContent>
             </Select>
+
+            {/* date range (overrides month and period) */}
+            <DateRangeFilter
+              from={startDate}
+              to={endDate}
+              onChange={(from, to) => { setStartDate(from); setEndDate(to) }}
+              width="w-[210px]"
+            />
 
             {/* submission filter (on time / late) */}
             <Select value={filterTimeliness} onValueChange={setFilterTimeliness}>
@@ -360,7 +385,7 @@ export default function BarangayReports() {
                         View
                       </Button>
                       <Button
-                        onClick={() => setPrintingReport(report)}
+                        onClick={() => (isIOSDevice() ? handleExportReport(report) : setPrintingReport(report))}
                         className="text-xs bg-[#2fd45b] hover:bg-[#28b54e] cursor-pointer"
                       >
                         <FileDown size={16} className="mr-1" />

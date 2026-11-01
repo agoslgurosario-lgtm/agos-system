@@ -114,6 +114,21 @@ export const buildPeriodOptions = (month: string): { value: string; label: strin
 export const periodMatches = (report: CanalMonitoringReport, period: string): boolean =>
   period === "All" || periodOf(report) === period
 
+// true when the period a report was submitted for starts inside the date range (an empty end is open)
+export const inDateRange = (report: CanalMonitoringReport, from: string, to: string): boolean => {
+  const start = periodOf(report)
+  return (!from || start >= from) && (!to || start <= to)
+}
+
+const formatIso = (iso: string): string =>
+  new Date(`${iso}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+
+// "Aug 1, 2026 - Oct 31, 2026" for titles and the Reporting Period card
+export const rangeLabel = (from: string, to: string): string => {
+  if (from && to) return `${formatIso(from)} - ${formatIso(to)}`
+  return from ? `From ${formatIso(from)}` : `Until ${formatIso(to)}`
+}
+
 // e.g. "October 16 - 30, 2026" for the Reporting Period card
 export const periodRangeLabel = (month: string, period: string): string => {
   if (month === "All") return "All months"

@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { useRouter } from "expo-router";
 import { Modal, Pressable, Text, View } from "react-native";
-import { Alert, ClogAlertContext, WaterLevelAlertContext, WasteTypeRejectedContext, WasteTypeApprovedContext, HealthAlertContext, ReportReminderContext } from "../../types/alert";
+import { Alert, ClogAlertContext, WaterLevelAlertContext, WasteTypeRejectedContext, WasteTypeApprovedContext, HealthAlertContext, ReportReminderContext, NodeInspectionContext } from "../../types/alert";
 import { ALERT_META, ALERT_STYLE, WATER_SEVERITY_STYLE, getWaterSeverity, HEALTH_ALERT_TYPES, batteryLevel, signalLevel, REPORT_ALERT_TYPES, reminderText, fmtDueDay } from "../../constants/alerts";
 
 interface Props {
@@ -28,6 +28,28 @@ function ContextDetails({ alert }: { alert: Alert }) {
 
   const hasWaterData =
     context.water_level != null || context.water_flow_rate != null || context.water_flow;
+
+  if (alert.alert_type === "Node_Inspection_Request") {
+    const c = alert.alert_context as NodeInspectionContext;
+    return (
+      <View className="gap-2">
+        <Text className="text-slate-500 text-[12px]">
+          Reason: <Text className="font-semibold text-slate-800">{c.reason ?? "—"}</Text>
+        </Text>
+        {c.note ? (
+          <Text className="text-slate-500 text-[12px]">
+            Note: <Text className="font-semibold text-slate-800">{c.note}</Text>
+          </Text>
+        ) : null}
+        <Text className="text-slate-500 text-[12px]">
+          Requested by: <Text className="font-semibold text-slate-800">{c.requested_by ?? "Admin"}</Text>
+        </Text>
+        <Text className="text-slate-400 text-[11px] mt-1">
+          The admin asked you to check this device in person. Please inspect it on site and tell the admin if anything looks wrong.
+        </Text>
+      </View>
+    );
+  }
 
   if (HEALTH_ALERT_TYPES.includes(alert.alert_type)) {
     const c = alert.alert_context as HealthAlertContext;
@@ -220,7 +242,9 @@ export default function AlertModal({ alert, visible, onClose }: Props) {
 
   const meta = ALERT_META[alert.alert_type];
   const style = ALERT_STYLE[alert.alert_type];
-  const canViewHealth = HEALTH_ALERT_TYPES.includes(alert.alert_type) && alert.node_id != null;
+  const canViewHealth =
+    (HEALTH_ALERT_TYPES.includes(alert.alert_type) || alert.alert_type === "Node_Inspection_Request") &&
+    alert.node_id != null;
   const isReport = REPORT_ALERT_TYPES.includes(alert.alert_type);
 
   const openSubmit = () => {
@@ -292,7 +316,7 @@ export default function AlertModal({ alert, visible, onClose }: Props) {
 
             <View className="flex-row justify-between">
               <Text className="text-slate-500">
-                {alert.alert_type === "Waste_Type_Rejected" || alert.alert_type === "Waste_Type_Approved" ? "Reviewed" : isReport ? "Sent" : "Detected"}
+                {alert.alert_type === "Waste_Type_Rejected" || alert.alert_type === "Waste_Type_Approved" ? "Reviewed" : isReport ? "Sent" : alert.alert_type === "Node_Inspection_Request" ? "Requested" : "Detected"}
               </Text>
               <Text className="font-semibold">{formatDetectedAt(alert.timestamp)}</Text>
             </View>

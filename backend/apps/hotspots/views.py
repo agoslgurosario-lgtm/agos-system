@@ -11,6 +11,7 @@ from apps.sensor_nodes.models import NodeAssignmentHistory
 from apps.sensor_nodes.serializers import NodeAssignmentHistorySerializer
 from django.db import transaction, IntegrityError
 from apps.barangay.models import Barangay
+from agos_backend.date_range import filter_overlapping_date_range
 
 MAX_BULK_HOTSPOTS = 50
 
@@ -127,13 +128,14 @@ class HotspotAvailableByBarangayView(generics.ListAPIView):
 class HotspotAssignmentHistoryView(generics.ListAPIView):
     """Every node this hotspot has had assigned to it, newest first."""
     serializer_class = NodeAssignmentHistorySerializer
-    permission_classes = [IsAdmin]
+    permission_classes = [IsAdminOrMENRO]
     pagination_class = None
 
     def get_queryset(self):
-        return NodeAssignmentHistory.objects.filter(
+        qs = NodeAssignmentHistory.objects.filter(
             hotspot_id=self.kwargs['hotspot_id']
         ).select_related('node', 'assigned_by', 'ended_by').order_by('-started_at')
+        return filter_overlapping_date_range(qs, 'started_at', 'ended_at', self.request)
 
 
 class HotspotBulkCreateView(APIView):

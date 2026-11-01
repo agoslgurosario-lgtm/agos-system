@@ -8,8 +8,12 @@ import { Button } from "@/components/ui/button"
 import { FileDown, Trash, Recycle, Leaf, Trash2, Biohazard } from "lucide-react"
 import { useState } from "react"
 
+import { DateRangeFilter } from "@/components/DateRangeFilter"
+import { currentMonthRange } from "@/lib/dateRange"
+
+
 export function AnalyticsSkeleton() {
-  const [selectedMonth, setSelectedMonth] = useState<string>("current")
+  const [range] = useState(() => currentMonthRange())
 
   return (
     <div className="hidden md:flex md:flex-col md:h-full text-[#122A48]">
@@ -19,14 +23,7 @@ export function AnalyticsSkeleton() {
           <p className="font-bold text-base">Overview</p>
         </div>
         <div className="flex gap-2">
-          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="cursor-pointer px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectItem className="p-2 py-1 text-[#122A48]" value="current">This Month</SelectItem>
-            </SelectContent>
-          </Select>
+          <DateRangeFilter from={range.from} to={range.to} onChange={() => {}} disabled align="right" />
 
           <Button disabled className="bg-[#2fd45b] opacity-60">
             <FileDown size={16} className="mr-1" /> Export PDF

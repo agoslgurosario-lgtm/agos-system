@@ -25,15 +25,17 @@ import { Toast } from "@/components/Toast"
 import { AnalyticsSkeleton } from "@/components/Skeleton/Menro/AnalyticsSkeleton";
 import { useFillRows } from "@/components/hooks/useFillRows";
 import { PrintReport } from "@/components/PrintReport/PrintReport"
+import { DateRangeFilter } from "@/components/DateRangeFilter"
 
 // lib
 import { useWebSocket } from "@/lib/hooks/useWebSocket"
 import { usePolling } from "@/components/hooks/usePolling"
 import { usePageCache } from "@/components/hooks/usePageCache";
 import { SpinnerIcon } from "@/components/SpinnerIcon";
-import { printReport } from "@/lib/printReport";
+import { exportOrPrint } from "@/lib/exportOrPrint"
 import { formatWeight, formatWeightIn, pickWeightUnit } from "@/lib/formatWeight"
 import { getUser } from "@/lib/auth";
+import { currentMonthRange, rangeQuery } from "@/lib/dateRange"
 
 
 type WasteClassification = {
@@ -77,7 +79,7 @@ export default function Analytics() {
   // waste classification state
   const fetchWasteRaw = async (): Promise<WasteClassification[]> => {
     let url: string | null =
-      `${process.env.NEXT_PUBLIC_API_URL}/api/waste-classifications/?month=${selectedMonth}&page_size=100`
+      `${process.env.NEXT_PUBLIC_API_URL}/api/waste-classifications/?${rangeQuery(startDate, endDate)}&page_size=100`
     let all: WasteClassification[] = []
 
     while (url) {
@@ -110,22 +112,9 @@ export default function Analytics() {
   const [exporting, setExporting] = useState(false)
   const { toasts, addToast, removeToast } = useToast()
 
-  const getMonthOptions = () => {
-    const months = []
-    const year = new Date().getFullYear()
-    for (let m = 0; m < 12; m++) {
-      const d = new Date(year, m, 1)
-      months.push({
-        value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-        label: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
-      })
-    }
-    return months
-  }
-
-  const monthOptions = getMonthOptions()
-  const currentMonthValue = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
-  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthValue)
+  // date range filter: opens on the current month, Clear Filters = all time
+  const [startDate, setStartDate] = useState<string>(() => currentMonthRange().from)
+  const [endDate, setEndDate] = useState<string>(() => currentMonthRange().to)
 
   // summary cards
   const totalWaste = wasteClassification.reduce((sum, w) => sum + (w.estimated_volume || 0), 0)
@@ -195,13 +184,19 @@ export default function Analytics() {
   const currentUser = getUser()
   const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Admin'
 
+  const printTitle = "Waste Classification Analytics"
+  const printColumns = ["ID", "Node", "Location", "Dominant Type", "Recyclable", "Biodegradable", "Residual", "Special Waste", "Confidence", "Est. Volume", "Timestamp"]
+
   const handlePrint = () => {
-    printReport()
+    exportOrPrint({
+      table: { title: printTitle, columns: printColumns, rows: printRows },
+      onError: () => addToast("Failed to export. Please try again.", "error"),
+    })
   }
 
   useEffect(() => {
     wasteCache.refetch()
-  }, [selectedMonth])
+  }, [startDate, endDate])
 
   useEffect(() => {
     barangaysCache.refetch()
@@ -213,8 +208,9 @@ export default function Analytics() {
 useWebSocket({
     path: "/ws/waste-classification/",
     onMessage: (newWaste) => {
-      const wasteMonth = newWaste.timestamp.slice(0, 7) // "YYYY-MM"
-      if (wasteMonth === selectedMonth) {
+      const wasteDate = newWaste.timestamp.slice(0, 10) // "YYYY-MM-DD"
+      const inRange = (!startDate || wasteDate >= startDate) && (!endDate || wasteDate <= endDate)
+      if (inRange) {
         wasteCache.setData(prev => [newWaste, ...prev])
       }
     },
@@ -231,18 +227,12 @@ useWebSocket({
             <p className='font-bold text-base'>Overview</p>
           </div>
           <div className="flex gap-2">
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="cursor-pointer px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent position="popper" className='min-w-0 !max-h-70 overflow-y-auto'>
-                {monthOptions.map(m => (
-                  <SelectItem key={m.value} className="p-2 py-1 cursor-pointer text-[#122A48]" value={m.value}>
-                    {m.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <DateRangeFilter
+              from={startDate}
+              to={endDate}
+              onChange={(from, to) => { setStartDate(from); setEndDate(to) }}
+              align="right"
+            />
 
             <Button onClick={handlePrint} className="bg-[#2fd45b] hover:bg-[#28b54e] cursor-pointer">
               <FileDown size={16} className="mr-1" />
@@ -468,8 +458,8 @@ useWebSocket({
       <Toast toasts={toasts} onRemove={removeToast} />
 
       <PrintReport
-        reportTitle="Waste Classification Analytics"
-        columns={["ID", "Node", "Location", "Dominant Type", "Recyclable", "Biodegradable", "Residual", "Special Waste", "Confidence", "Est. Volume", "Timestamp"]}
+        reportTitle={printTitle}
+        columns={printColumns}
         rows={printRows}
         generatedBy={generatedBy}
       />

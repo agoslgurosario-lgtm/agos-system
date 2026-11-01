@@ -21,6 +21,7 @@ PUSH_ALERT_TYPES = {
     'Waste_Type_Approved': ('Waste type approved', 'silent'),
     'Report_Due_Soon':     ('Report due soon', 'info'),
     'Report_Overdue':      ('Report overdue', 'warning'),
+    'Node_Inspection_Request': ('Device inspection requested', 'warning'),
     'Node_Offline':        ('Device offline', 'warning'),
     'Low_Battery':         ('Device battery low', 'info'),
     'Weak_Signal':         ('Device signal weak', 'info'),
@@ -112,6 +113,11 @@ def notify_alert(alert):
         else:
             todo = "You have no verified reports yet. Complete and verify your reports, then submit."
         body = f"Your report for {label} {when}. {todo}"
+    elif alert.alert_type == 'Node_Inspection_Request':
+        node = payload.get('node_name') or 'A device'
+        body = f"{node}: the admin asked you to inspect this device. Reason: {ctx.get('reason', 'Needs checking')}."
+        if ctx.get('note'):
+            body += f" {ctx['note']}"
     elif alert.alert_type in HEALTH_PUSH_HINT:
         node = payload.get('node_name') or 'A device'
         body = f"{node}: {HEALTH_PUSH_HINT[alert.alert_type]}"

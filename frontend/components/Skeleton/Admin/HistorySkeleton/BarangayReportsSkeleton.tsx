@@ -11,6 +11,8 @@ import { useState } from "react"
 
 import { useFillRows } from "@/components/hooks/useFillRows"
 
+import { DateRangeFilter } from "@/components/DateRangeFilter"
+
 export function BarangayReportsSkeleton() {
   const [filterBarangay, setFilterBarangay] = useState<string>("All")
   const [selectedMonth, setSelectedMonth] = useState<string>("current")
@@ -59,6 +61,8 @@ export function BarangayReportsSkeleton() {
               <SelectItem value="All" className="p-2 text-xs">All periods</SelectItem>
             </SelectContent>
           </Select>
+
+          <DateRangeFilter from="" to="" onChange={() => {}} disabled width="w-[210px]" />
 
           <Select value={selectedTimeliness} onValueChange={setSelectedTimeliniess}>
             <SelectTrigger className="cursor-pointer text-xs px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">

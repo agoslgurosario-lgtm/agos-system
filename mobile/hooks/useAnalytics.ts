@@ -4,6 +4,7 @@ import { WasteClassification } from "../types/analytics";
 
 import { useLiveSocket } from "../lib/useLiveSocket";
 import { useAuth } from "../lib/AuthContext";
+import { currentMonthRange, rangeQuery, inRange } from "../lib/dateRange";
 
 export interface AnalyticsNode {
   node_id: number;
@@ -11,7 +12,7 @@ export interface AnalyticsNode {
   location: string;
 }
 
-export function useAnalytics(selectedMonth: string) {
+export function useAnalytics(from: string, to: string) {
   const [classifications, setClassifications] = useState<WasteClassification[]>([]);
   const [liveClassifications, setLiveClassifications] = useState<WasteClassification[]>([]);
   const [nodes, setNodes] = useState<AnalyticsNode[]>([]);
@@ -25,17 +26,17 @@ export function useAnalytics(selectedMonth: string) {
     isRefresh ? setRefreshing(true) : setLoading(true);
     setError(false);
     try {
-      const currentMonth = `${new Date().getFullYear()}-${String(
-        new Date().getMonth() + 1
-      ).padStart(2, "0")}`;
+      // the detections list always shows this month, whatever range the charts use
+      const thisMonth = currentMonthRange();
+      const rangeIsThisMonth = from === thisMonth.from && to === thisMonth.to;
 
       const requests = [
-        api.get(`/api/waste-classifications/?month=${selectedMonth}`),
+        api.get(`/api/waste-classifications/?${rangeQuery(from, to)}`),
         api.get(`/api/sensor-nodes/`),
       ];
 
-      if (selectedMonth !== currentMonth) {
-        requests.push(api.get(`/api/waste-classifications/?month=${currentMonth}`));
+      if (!rangeIsThisMonth) {
+        requests.push(api.get(`/api/waste-classifications/?${rangeQuery(thisMonth.from, thisMonth.to)}`));
       }
 
       const [classificationData, nodeData, liveData] = await Promise.all(requests);
@@ -47,14 +48,14 @@ export function useAnalytics(selectedMonth: string) {
         location: n.hotspot_details?.name ?? n.node_name,
       })));
       setLiveClassifications(
-        selectedMonth === currentMonth ? classificationData ?? [] : liveData ?? []
+        rangeIsThisMonth ? classificationData ?? [] : liveData ?? []
       );
     } catch {
       setError(true);
     } finally {
       isRefresh ? setRefreshing(false) : setLoading(false);
     }
-  }, [selectedMonth]);
+  }, [from, to]);
 
   useEffect(() => {
     fetchAll();
@@ -71,11 +72,9 @@ export function useAnalytics(selectedMonth: string) {
         return;
       }
 
-      const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
-
       setLiveClassifications((prev) => [incoming, ...prev]);
 
-      if (selectedMonth === currentMonth) {
+      if (inRange(incoming.timestamp, from, to)) {
         setClassifications((prev) => [incoming, ...prev]);
       }
     },

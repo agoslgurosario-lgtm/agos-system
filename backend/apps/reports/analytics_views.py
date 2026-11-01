@@ -13,6 +13,8 @@ from .models import CanalMonitoringReport, PeriodSubmission
 from .periods import period_for, period_label, period_status, recent_periods
 from .submission_views import compute_totals
 
+from agos_backend.date_range import get_date_range
+
 
 def _int(v):
     try:
@@ -21,8 +23,11 @@ def _int(v):
         return None
 
 
-def _window(month, period):
-    """(first day, last day) the filters cover, or None for everything. Raises ValueError if bad."""
+def _window(month, period, start=None, end=None):
+    """(first day, last day) the filters cover, or None for everything. Raises ValueError if bad.
+    A date range (start and/or end) wins over the period and the month."""
+    if start or end:
+        return start or date(2000, 1, 1), end or timezone.localdate()
     if period and period != 'All':
         s, e, _ = period_for(date.fromisoformat(period))
         return s, e
@@ -110,11 +115,15 @@ def _by_peak(rows):
     return sorted(rows, key=lambda r: (r['peak_clog_pct'] is None, -(r['peak_clog_pct'] or 0)))
 
 
-def _trend(barangay, purok, node, window, count=6):
-    """The last 6 periods up to the selected one, so periods can be compared with each other."""
+def _trend(barangay, purok, node, window, count=6, ranged=False):
+    """The last 6 periods up to the selected one, so periods can be compared with each other.
+    With a date range it shows the periods inside the range instead (the latest 24 at most)."""
     anchor = min(window[1], timezone.localdate()) if window else timezone.localdate()
+    periods = recent_periods(24 if ranged else count, anchor)
+    if ranged:
+        periods = [p for p in periods if p[1] >= window[0]]   # only periods that touch the range
     rows = []
-    for s, e, _ in reversed(recent_periods(count, anchor)):
+    for s, e, _ in reversed(periods):
         totals = compute_totals(list(_reports(barangay, purok, node, (s, e))))
         rows.append({
             'period_start': s, 'label': period_label(s, e),
@@ -170,8 +179,10 @@ class ReportAnalyticsView(APIView):
 
     def get(self, request):
         p = request.query_params
+        start, end = get_date_range(request)
+        ranged = start is not None or end is not None
         try:
-            window = _window(p.get('month'), p.get('period'))
+            window = _window(p.get('month'), p.get('period'), start, end)
         except ValueError:
             return Response({'detail': 'Invalid month or period.'}, status=400)
         barangay, purok, node = _int(p.get('barangay')), _int(p.get('purok')), _int(p.get('node'))
@@ -218,7 +229,7 @@ class ReportAnalyticsView(APIView):
         sources = Counter(r.condition_source for r in reports)
         submissions = on_time + late
         return Response({
-            'filters': {'month': p.get('month'), 'period': p.get('period'),
+            'filters': {'month': p.get('month'), 'period': p.get('period'), 'from': start, 'to': end,
                         'barangay': barangay, 'purok': purok, 'node': node},
             'cards': {
                 'report_count': totals['report_count'],
@@ -233,7 +244,7 @@ class ReportAnalyticsView(APIView):
             'waste_comparison': _waste_comparison(reports, barangay, purok, node),
             'purok_comparison': purok_comparison,
             'top_nodes': top_nodes,
-            'trend': _trend(barangay, purok, node, window, min(max(_int(p.get('periods')) or 6, 1), 24)),
+            'trend': _trend(barangay, purok, node, window, min(max(_int(p.get('periods')) or 6, 1), 24), ranged),
         })
 
 

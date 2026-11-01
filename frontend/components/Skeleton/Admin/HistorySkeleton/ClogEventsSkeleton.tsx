@@ -11,11 +11,15 @@ import { useState } from "react"
 
 import { useFillRows } from "@/components/hooks/useFillRows"
 
+import { DateRangeFilter } from "@/components/DateRangeFilter"
+import { currentMonthRange } from "@/lib/dateRange"
+
+
 export function ClogEventsSkeleton() {
   const [barangay, setBarangay] = useState<string>("All Barangay")
   const [severity, setSeverity] = useState<string>("All Severity")
   const [status, setStatus] = useState<string>("All Status")
-  const [selectedMonth, setSelectedMonth] = useState<string>("All Months")
+  const [range] = useState(() => currentMonthRange())
 
   const { panelRef, tableWrapRef, rows } = useFillRows({
     rowHeight: 52,
@@ -60,14 +64,7 @@ export function ClogEventsSkeleton() {
             </SelectContent>
           </Select>
 
-          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="text-xs cursor-pointer px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectItem className="text-xs p-2" value="All Months">All Months</SelectItem>
-            </SelectContent>
-          </Select>
+          <DateRangeFilter from={range.from} to={range.to} onChange={() => {}} disabled />
         </div>
 
         <div>

@@ -2,10 +2,12 @@
 
 // icons
 import { FaPlus } from "react-icons/fa"
-import { Target, Map, SquarePen, Trash2, X, Check, Navigation, MapPin, MapPinPlus, MapPinPen, CircleOff, MapPinCheck, ChevronDown, ChevronUp, MoreVertical, BadgeCheck } from "lucide-react"
+import { Target, Map, SquarePen, Trash2, X, Check, Navigation, MapPin, MapPinPlus, MapPinPen, CircleOff, MapPinCheck, ChevronDown, ChevronUp, MoreVertical, BadgeCheck, History, FileDown } from "lucide-react"
 
 // react
 import { useState, useEffect, useCallback, useRef, Fragment } from "react"
+import { DateRangeFilter } from "@/components/DateRangeFilter"
+import { rangeQuery } from "@/lib/dateRange"
 
 // shadcn
 import { Input } from "@/components/ui/input"
@@ -29,7 +31,10 @@ import { PurokSelect } from "@/components/PurokSelect"
 // lib
 import { DIALOG_COLOR } from "@/lib/constant"
 import { api } from "@/lib/api"
-import { fetchWithAuth } from "@/lib/auth"
+import { fetchWithAuth, getUser } from "@/lib/auth"
+import { PrintReport } from "@/components/PrintReport/PrintReport"
+import { exportOrPrint } from "@/lib/exportOrPrint"
+import { remarksText } from "@/lib/historyRemarks"
 import { usePageCache } from "@/components/hooks/usePageCache"
 import { sameText, sameNum } from "@/lib/formDiff"
 import { fetchBarangayBoundaryById } from "@/lib/barangayBoundary"
@@ -195,6 +200,12 @@ export default function HotspotManagement() {
   const [formDialog, setFormDialog] = useState<DialogState>({ open: false, hotspot: null })
   const [viewBoundary, setViewBoundary] = useState<any>(null)
   const [viewMapDialog, setViewMapDialog] = useState<DialogState>({ open: false, hotspot: null })
+  const [historyDialog, setHistoryDialog] = useState<DialogState>({ open: false, hotspot: null })
+  const [historyRows, setHistoryRows] = useState<any[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState(false)
+  const [historyFrom, setHistoryFrom] = useState('')
+  const [historyTo, setHistoryTo] = useState('')
 
   useEffect(() => {
     const b = viewMapDialog.hotspot?.barangay_details
@@ -537,6 +548,46 @@ export default function HotspotManagement() {
     setActionResult(null)
   }
 
+  useEffect(() => {
+    if (!historyDialog.open || !historyDialog.hotspot) {
+      setHistoryRows([])
+      setHistoryError(false)
+      setHistoryFrom('')
+      setHistoryTo('')
+      return
+    }
+    let cancelled = false
+    const hotspotId = historyDialog.hotspot.hotspot_id
+
+    const loadHistory = async () => {
+      setHistoryLoading(true)
+      setHistoryError(false)
+      try {
+        const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/hotspots/${hotspotId}/assignment-history/${historyFrom || historyTo ? `?${rangeQuery(historyFrom, historyTo)}` : ''}`)
+        if (!res.ok) throw new Error()
+        const data = await res.json()
+        if (!cancelled) setHistoryRows(data.results ?? data)
+      } catch {
+        if (!cancelled) setHistoryError(true)
+      } finally {
+        if (!cancelled) setHistoryLoading(false)
+      }
+    }
+    loadHistory()
+    return () => { cancelled = true }
+  }, [historyDialog.open, historyDialog.hotspot, historyFrom, historyTo])
+
+  const currentUser = getUser()
+  const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'MENRO'
+
+  const historyPrintRows = historyRows.map(h => [
+    h.node_name || '—',
+    new Date(h.started_at).toLocaleDateString(),
+    h.ended_at ? new Date(h.ended_at).toLocaleDateString() : 'Current',
+    h.end_reason || '—',
+    remarksText(h),
+  ])
+
   // selected barangay object for map center fallback
   const selectedBarangay = allBarangays.find(b => String(b.barangay_id) === barangay)
   const selectedBarangayName = selectedBarangay?.barangay_name
@@ -697,6 +748,12 @@ export default function HotspotManagement() {
                                                     right: window.innerWidth - (document.getElementById(`menu-btn-${hotspot.hotspot_id}`)?.getBoundingClientRect().right ?? 0),
                                                   }}
                                                 >
+                                                  <button
+                                                    onClick={() => { setOpenMenuId(null); setHistoryDialog({ open: true, hotspot }) }}
+                                                    className="flex items-center gap-2 w-full px-3 py-2.5 text-left text-xs text-[#1565BC] hover:bg-[#DBEAFE] cursor-pointer"
+                                                  >
+                                                    <History size={14} /> View History
+                                                  </button>
                                                   <button
                                                     onClick={() => { setOpenMenuId(null); setFormDialog({ open: true, hotspot }) }}
                                                     className="flex items-center gap-2 w-full px-3 py-2.5 text-left text-xs text-[#1565BC] hover:bg-[#DBEAFE] cursor-pointer"
@@ -1272,6 +1329,93 @@ export default function HotspotManagement() {
       />
 
       <Toast toasts={toasts} onRemove={removeToast} />
+
+      <Dialog open={historyDialog.open}>
+        <DialogContent className="[&>button]:hidden p-0 text-[#122A48] rounded-lg border border-[#C6C6C8] min-w-80 md:min-w-[700px] max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <div className="flex justify-between items-center p-2 md:p-3 -mb-4">
+              <div className="flex flex-col">
+                <p className="font-bold text-sm md:text-base">{historyDialog.hotspot?.name}</p>
+                <p className="text-[11px] text-[#727272]">Node Assignment History</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={() => exportOrPrint({
+                    table: {
+                      title: `${historyDialog.hotspot?.name ?? 'Hotspot'} — Assignment History`,
+                      columns: ["Node", "From", "To", "Reason", "Remarks"],
+                      rows: historyPrintRows,
+                    },
+                    onError: () => addToast("Failed to export history. Please try again.", "error"),
+                  })}
+                  disabled={historyLoading || historyError || historyRows.length === 0}
+                  className="cursor-pointer bg-[#2fd45b] hover:bg-[#28b54e] text-white text-xs"
+                >
+                  <FileDown size={14} className="mr-1" />
+                  Export
+                </Button>
+                <button className="cursor-pointer" onClick={() => setHistoryDialog({ open: false, hotspot: null })}>
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          </DialogHeader>
+          <DialogTitle className="sr-only">Node Assignment History</DialogTitle>
+
+          <div className="flex items-center p-2 md:p-3 border-b border-[#C6C6C8]">
+            <DateRangeFilter from={historyFrom} to={historyTo} onChange={(f, t) => { setHistoryFrom(f); setHistoryTo(t) }} width="w-[210px]" />
+          </div>
+
+          <Table>
+            <TableHeader className="bg-[#e8eef1b4] border border-[#CFD8DC]">
+              <TableRow>
+                <TableHead className="font-semibold text-center text-xs text-[#727272]">NODE</TableHead>
+                <TableHead className="font-semibold text-center text-xs text-[#727272]">FROM</TableHead>
+                <TableHead className="font-semibold text-center text-xs text-[#727272]">TO</TableHead>
+                <TableHead className="font-semibold text-center text-xs text-[#727272]">REASON</TableHead>
+                <TableHead className="font-semibold text-center text-xs text-[#727272]">REMARKS</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {historyError ? (
+                <TableRow><TableCell colSpan={5} className="text-center py-10"><p className="text-[#D81010] font-semibold text-sm">Failed to load assignment history.</p></TableCell></TableRow>
+              ) : historyLoading ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-10">
+                    <div className="flex flex-col items-center gap-2">
+                      <SpinnerIcon size={24} />
+                      <p className="text-[#727272] text-sm">Loading assignment history...</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : historyRows.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center py-10"><p className="text-[#727272] text-sm">No nodes have been assigned to this hotspot yet.</p></TableCell></TableRow>
+              ) : (
+                historyRows.map(h => (
+                  <TableRow key={h.history_id} className="border-b border-[#C6C6C8] text-xs">
+                    <TableCell className="text-center h-11">{h.node_name || '—'}</TableCell>
+                    <TableCell className="text-center h-11">{new Date(h.started_at).toLocaleDateString()}</TableCell>
+                    <TableCell className="text-center h-11">
+                      {h.ended_at ? new Date(h.ended_at).toLocaleDateString() : (
+                        <span className="inline-block px-2 py-0.5 rounded-full bg-[#B2FBC173] text-[#2C7B3C] text-[11px] font-medium">Current</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center h-11">{h.end_reason || '—'}</TableCell>
+                    <TableCell className="text-left h-11 max-w-[220px] whitespace-normal break-words">{remarksText(h)}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </DialogContent>
+      </Dialog>
+
+      <PrintReport
+        reportTitle={`${historyDialog.hotspot?.name ?? 'Hotspot'} — Assignment History`}
+        columns={["Node", "From", "To", "Reason", "Remarks"]}
+        rows={historyPrintRows}
+        generatedBy={generatedBy}
+      />
     </>
   )
 }

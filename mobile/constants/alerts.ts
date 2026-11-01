@@ -39,6 +39,7 @@ export const ALERT_META: Record<AlertType, { label: string; icon: keyof typeof I
   Sensor_Failure: { label: "Sensor Failure", icon: "alert-circle-outline",     tier: null },
   Report_Due_Soon: { label: "Report Due Soon", icon: "calendar-outline", tier: null },
   Report_Overdue:  { label: "Report Overdue",  icon: "alarm-outline",    tier: null },
+  Node_Inspection_Request: { label: "Device Inspection Requested", icon: "construct-outline", tier: null },
 };
 
 export const ALERT_STYLE: Record<AlertType, { indicator: string; badgeBg: string; badgeText: string}> ={
@@ -78,6 +79,7 @@ export const ALERT_STYLE: Record<AlertType, { indicator: string; badgeBg: string
   Sensor_Failure: { indicator: "#582579", badgeBg: "bg-[#F0E6F7]", badgeText: "text-[#582579]" },
   Report_Due_Soon: { indicator: "#0E7490", badgeBg: "bg-[#CFFAFE]", badgeText: "text-[#0E7490]" },
   Report_Overdue:  { indicator: "#E65100", badgeBg: "bg-[#FFF0D6]", badgeText: "text-[#E65100]" },
+  Node_Inspection_Request: { indicator: "#C2410C", badgeBg: "bg-[#FFEDD5]", badgeText: "text-[#C2410C]" },
 };
 
 export const WATER_SEVERITY_STYLE: Record<WaterSeverity, { badgeBg: string; badgeText: string; color: string }> = {
@@ -108,6 +110,7 @@ export const APP_ALERT_TYPES: AlertType[] = [
   "Sensor_Failure",
   "Report_Due_Soon",
   "Report_Overdue",
+  "Node_Inspection_Request",
 ];
 
 export const HEALTH_ALERT_TYPES: AlertType[] = ["Node_Offline", "Low_Battery", "Weak_Signal", "Sensor_Failure"];

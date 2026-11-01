@@ -20,6 +20,7 @@ from apps.audit_logs.utils import log_action
 from django.utils import timezone
 from .services import assign_node, release_node, sync_assignment_change, previous_unassigned_hotspot_id
 from rest_framework.exceptions import ValidationError
+from agos_backend.date_range import has_date_range, filter_by_date_range, filter_overlapping_date_range
 
 
 def barangay_health_scope(qs, user):
@@ -719,7 +720,9 @@ class MaintenanceLogListView(generics.ListAPIView):
     def get_queryset(self):
         qs = MaintenanceLog.objects.select_related('node', 'marked_by').order_by('-started_at')
         month = self.request.query_params.get('month')  # expects 'YYYY-MM'
-        if month:
+        if has_date_range(self.request):
+            qs = filter_by_date_range(qs, 'started_at', self.request)
+        elif month:
             try:
                 year, mon = month.split('-')
                 qs = qs.filter(started_at__year=int(year), started_at__month=int(mon))
@@ -786,6 +789,7 @@ class NodeAssignmentHistoryView(generics.ListAPIView):
         elif reason:
             qs = qs.filter(end_reason=reason)
 
+        qs = filter_overlapping_date_range(qs, 'started_at', 'ended_at', self.request)
         return qs
 
     def paginate_queryset(self, queryset):

@@ -1,14 +1,16 @@
 import { useState, useEffect } from "react";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { AlertTypeFilter, DateFilter } from "../../hooks/useAlerts";
+import { AlertTypeFilter } from "../../hooks/useAlerts";
+import DateRangeFields from "../common/DateRangeFields";
 
 interface Props {
   visible: boolean;
   onClose: () => void;
   selectedType: AlertTypeFilter;
-  selectedDate: DateFilter;
-  onApply: (type: AlertTypeFilter, date: DateFilter) => void;
+  selectedFrom: string;
+  selectedTo: string;
+  onApply: (type: AlertTypeFilter, from: string, to: string) => void;
 }
 
 const TYPE_GROUPS: { title: string; options: { value: AlertTypeFilter; label: string }[] }[] = [
@@ -31,6 +33,7 @@ const TYPE_GROUPS: { title: string; options: { value: AlertTypeFilter; label: st
       { value: "Low_Battery", label: "Low Battery" },
       { value: "Weak_Signal", label: "Weak Signal" },
       { value: "Sensor_Failure", label: "Sensor Failure" },
+      { value: "Node_Inspection_Request", label: "Inspection Request" },
     ],
   },
   {
@@ -47,12 +50,6 @@ const TYPE_GROUPS: { title: string; options: { value: AlertTypeFilter; label: st
       { value: "Waste_Type_Approved", label: "Approved" },
     ],
   },
-];
-
-const DATE_OPTIONS: { value: DateFilter; label: string }[] = [
-  { value: "Today", label: "Today" },
-  { value: "7Days", label: "Last 7 days" },
-  { value: "30Days", label: "Last 30 days" },
 ];
 
 function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
@@ -74,18 +71,21 @@ export default function FilterSheet({
   visible,
   onClose,
   selectedType,
-  selectedDate,
+  selectedFrom,
+  selectedTo,
   onApply,
 }: Props) {
   const [localType, setLocalType] = useState(selectedType);
-  const [localDate, setLocalDate] = useState(selectedDate);
+  const [localFrom, setLocalFrom] = useState(selectedFrom);
+  const [localTo, setLocalTo] = useState(selectedTo);
 
   useEffect(() => {
     if (visible) {
       setLocalType(selectedType);
-      setLocalDate(selectedDate);
+      setLocalFrom(selectedFrom);
+      setLocalTo(selectedTo);
     }
-  }, [visible, selectedType, selectedDate]);
+  }, [visible, selectedType, selectedFrom, selectedTo]);
 
   return (
     <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -130,23 +130,14 @@ export default function FilterSheet({
             ))}
 
             <Text className="text-[11px] font-bold text-slate-400 uppercase mt-4 mb-2">Date Range</Text>
-            <View className="flex-row flex-wrap">
-              {DATE_OPTIONS.map((opt) => (
-                <Chip
-                  key={opt.value}
-                  label={opt.label}
-                  selected={localDate === opt.value}
-                  onPress={() => setLocalDate(opt.value)}
-                />
-              ))}
-            </View>
+            <DateRangeFields from={localFrom} to={localTo} onChange={(from, to) => { setLocalFrom(from); setLocalTo(to); }} />
           </ScrollView>
 
           {/* Apply (fixed) */}
           <Pressable
             className="w-full bg-[#122A48] rounded-lg py-3.5 items-center mt-4"
             onPress={() => {
-              onApply(localType, localDate);
+              onApply(localType, localFrom, localTo);
               onClose();
             }}
           >

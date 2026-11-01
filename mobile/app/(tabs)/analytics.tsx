@@ -7,30 +7,17 @@ import AlertBellButton from "@/components/alerts/AlertBellButton";
 import DetectionRow from "../../components/analytics/DetectionRow";
 import WasteProgress from "../../components/analytics/WasteProgress";
 import WasteVolumeCard from "../../components/analytics/WasteVolumeCard";
-import MonthSelector from "../../components/analytics/MonthSelector";
+import DateRangeFilter from "../../components/common/DateRangeFilter";
+import { currentMonthRange } from "../../lib/dateRange";
 
 import { useAnalytics } from "../../hooks/useAnalytics";
 import { buildWasteVolumes, buildComposition, buildDetections } from "../../lib/analytics";
 import { pickWeightUnit } from "../../lib/formatWeight";
 
-function currentMonthValue() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function monthLabel(value: string) {
-  const [year, month] = value.split("-");
-  return new Date(Number(year), Number(month) - 1, 1).toLocaleString("default", {
-    month: "long",
-    year: "numeric",
-  });
-}
-
 export default function AnalyticsScreen() {
-  const [selectedMonth, setSelectedMonth] = useState(currentMonthValue());
-  const [monthPickerVisible, setMonthPickerVisible] = useState(false);
+  const [range, setRange] = useState(currentMonthRange());
 
-  const { classifications, liveClassifications, nodes, loading, refreshing, error, refetch } = useAnalytics(selectedMonth);
+  const { classifications, liveClassifications, nodes, loading, refreshing, error, refetch } = useAnalytics(range.from, range.to);
   
   const wasteVolumes = useMemo(() => buildWasteVolumes(classifications), [classifications]);
   const volumeUnit = pickWeightUnit(wasteVolumes.map((v) => v.value));
@@ -60,15 +47,10 @@ export default function AnalyticsScreen() {
           </View>
         </View>
 
-        {/* Month label */}
-        <Pressable
-          onPress={() => setMonthPickerVisible(true)}
-          className="self-center mb-4 px-4 py-2 rounded-full bg-white border border-slate-300"
-        >
-          <Text className="text-[12px] font-medium text-slate-600">
-            {monthLabel(selectedMonth)}
-          </Text>
-        </Pressable>
+        {/* Date range */}
+        <View className="items-center mb-4">
+          <DateRangeFilter from={range.from} to={range.to} onChange={(from, to) => setRange({ from, to })} />
+        </View>
 
         {error && (
           <View className="items-center py-10">
@@ -168,12 +150,6 @@ export default function AnalyticsScreen() {
         )}
       </ScrollView>
 
-      <MonthSelector
-        visible={monthPickerVisible}
-        onClose={() => setMonthPickerVisible(false)}
-        selectedMonth={selectedMonth}
-        onSelect={setSelectedMonth}
-      />
     </SafeAreaView>
   );
 }

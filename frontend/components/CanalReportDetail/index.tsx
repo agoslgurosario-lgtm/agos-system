@@ -30,6 +30,9 @@ import {
 import type { CanalMonitoringReport, ReportMedia, ReportPurokRow, ReportNodeSummary } from "@/types/report"
 import { printReport } from "@/lib/printReport"
 import { getUser } from "@/lib/auth"
+import { openPdf } from "@/lib/openPdf"
+import { isIOSDevice } from "@/lib/device"
+
 
 type Props = {
   id: string | null
@@ -161,6 +164,16 @@ function SensorDataSection({ summaries }: { summaries: ReportNodeSummary[] }) {
 function ReportDocument({ report, signatoryNames }: { report: CanalMonitoringReport; signatoryNames: Record<string, string> }) {
   const barangayName = report.barangay_details?.barangay_name ?? "—"
   const cleanup = isCleanupReport(report)
+
+  const nodeSummaries = report.node_summaries ?? []
+  const peakWaterPct = nodeSummaries.reduce<number | null>(
+    (max, s) => (s.peak_water_level_pct == null ? max : Math.max(max ?? 0, s.peak_water_level_pct)),
+    null
+  )
+  const peakClogPct = nodeSummaries.reduce<number | null>(
+    (max, s) => (s.peak_clog_pct == null ? max : Math.max(max ?? 0, s.peak_clog_pct)),
+    null
+  )
   const { counted, total } = cleanupCoverage(report)
 
   const hasOldOther = Number(report.waste_other_kg ?? 0) > 0 || !!report.waste_other_label
@@ -239,10 +252,26 @@ function ReportDocument({ report, signatoryNames }: { report: CanalMonitoringRep
         }
       />
       <div className="grid grid-cols-3 gap-x-8 gap-y-3">
-        <Field label="Overall Water Level">{report.overall_water_level && WATER_LEVEL_LABEL[report.overall_water_level]}</Field>
+        <Field label="Overall Water Level">
+          {report.overall_water_level && WATER_LEVEL_LABEL[report.overall_water_level]}
+          {peakWaterPct != null && (
+            <span className="font-normal text-[#727272]"> · peak {Math.round(peakWaterPct)}% of depth</span>
+          )}
+        </Field>
         <Field label="Overall Water Flow Condition">{report.overall_water_flow_condition && WATER_FLOW_LABEL[report.overall_water_flow_condition]}</Field>
-        <Field label="Overall Obstruction Coverage">{report.overall_obstruction_coverage && OBSTRUCTION_LABEL[report.overall_obstruction_coverage]}</Field>
+        <Field label="Overall Obstruction Coverage">
+          {report.overall_obstruction_coverage && OBSTRUCTION_LABEL[report.overall_obstruction_coverage]}
+          {peakClogPct != null && (
+            <span className="font-normal text-[#727272]"> · peak clog {Math.round(peakClogPct)}%</span>
+          )}
+        </Field>
       </div>
+
+      <p className="text-xs text-[#727272] mt-2">
+        How to read this: water level is how high the water is compared with the canal depth.
+        Obstruction is how much of the canal is blocked. High water together with high
+        obstruction usually means a blockage is backing the water up.
+      </p>
 
       {cleanup && (
         <>
@@ -444,6 +473,15 @@ export default function CanalReportDetail({ id, backHref }: Props) {
 const currentUser = getUser()
 const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Admin'
 
+const handleExport = async () => {
+  if (!report) return
+  try {
+    await openPdf(`/api/canal-reports/${report.report_id}/export/`)
+  } catch {
+    addToast("Failed to export the report. Please try again.", "error")
+  }
+}
+
   if (loading) {
     return (
       <div className="hidden md:flex flex-col items-center justify-center h-150">
@@ -491,7 +529,7 @@ const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_
             </div>
           </div>
           <Button
-            onClick={() => setPrintRequested(true)}
+            onClick={() => (isIOSDevice() ? handleExport() : setPrintRequested(true))}
             className="cursor-pointer bg-[#2fd45b] hover:bg-[#28b54e] text-white"
           >
             <FileDown size={16} className="mr-1" />

@@ -215,6 +215,16 @@ export default function ViewReportScreen() {
     ...(report.custom_waste ?? []).map((c) => ({ label: c.waste_type_name, kg: c.weight_kg })),
   ];
 
+  const summaries = report.node_summaries ?? [];
+  const peakWaterPct = summaries.reduce<number | null>(
+    (max, s) => (s.peak_water_level_pct == null ? max : Math.max(max ?? 0, s.peak_water_level_pct)),
+    null
+  );
+  const peakClogPct = summaries.reduce<number | null>(
+    (max, s) => (s.peak_clog_pct == null ? max : Math.max(max ?? 0, s.peak_clog_pct)),
+    null
+  );
+
   const photosBy = (category: string) => report.media.filter((m) => m.media_category === category);
   const photoGroups = [
     { label: "Before Cleanup", items: photosBy("Before_Clearing") },
@@ -318,13 +328,26 @@ export default function ViewReportScreen() {
           {/* OVERALL CANAL CONDITION */}
           <SectionHeader icon="waves" title="OVERALL CANAL CONDITION" />
           <View className="flex-row">
-            <DetailLabelValue label="WATER LEVEL" value={optionLabel(WATER_LEVEL_OPTIONS, report.overall_water_level)} />
+            <DetailLabelValue
+              label="WATER LEVEL"
+              value={`${optionLabel(WATER_LEVEL_OPTIONS, report.overall_water_level)}${
+                peakWaterPct != null ? ` · peak ${Math.round(peakWaterPct)}% of depth` : ""
+              }`}
+            />
             <DetailLabelValue
               label="OBSTRUCTION"
-              value={optionLabel(OBSTRUCTION_COVERAGE_OPTIONS, report.overall_obstruction_coverage)}
+              value={`${optionLabel(OBSTRUCTION_COVERAGE_OPTIONS, report.overall_obstruction_coverage)}${
+                peakClogPct != null ? ` · peak clog ${Math.round(peakClogPct)}%` : ""
+              }`}
             />
           </View>
           <DetailLabelValue label="WATER FLOW" value={optionLabel(WATER_FLOW_OPTIONS, report.overall_water_flow_condition)} />
+
+          <Text className="mb-2 text-[11px] text-[#64748b]">
+            How to read this: water level is how high the water is compared with the canal depth.
+            Obstruction is how much of the canal is blocked. High water together with high
+            obstruction usually means a blockage is backing the water up.
+          </Text>
 
           {report.condition_source === "Manual" && (
             <Text className="mb-2 text-[11px] text-[#94a3b8]">

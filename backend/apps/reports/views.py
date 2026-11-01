@@ -239,6 +239,10 @@ class CanalMonitoringReportExportView(APIView):
 
         submitted = timezone.localtime(report.submitted_at or report.created_at)
 
+        node_summaries = list(report.node_summaries.all()) if report.report_scope != 'Barangay' else []
+        water_peaks = [s.peak_water_level_pct for s in node_summaries if s.peak_water_level_pct is not None]
+        clog_peaks = [s.peak_clog_pct for s in node_summaries if s.peak_clog_pct is not None]
+
         context = {
             "logo_data_uri": get_logo_data_uri(),
             "report": report,
@@ -253,6 +257,8 @@ class CanalMonitoringReportExportView(APIView):
             "signatory_rows": _signatory_rows(report),
             "is_cleanup": report.report_scope == 'Barangay',
             "purok_table": _purok_table(report) if report.report_scope == 'Barangay' else [],
+            "peak_water_pct": max(water_peaks) if water_peaks else None,
+            "peak_clog_pct": max(clog_peaks) if clog_peaks else None,
         }
         context["counted_puroks"] = sum(1 for r in context["purok_table"] if r["included"])
 

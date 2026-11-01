@@ -18,6 +18,7 @@ from datetime import timedelta
 from django.db import transaction
 from django.utils.dateparse import parse_datetime
 from apps.reports.models import CanalMonitoringReport
+from agos_backend.date_range import has_date_range, filter_by_date_range
 
 
 class ClogEventListView(generics.ListCreateAPIView):
@@ -42,7 +43,9 @@ class ClogEventListView(generics.ListCreateAPIView):
             'node__barangay', 'node__hotspot', 'classification__reading'
         )
 
-        if month_param == 'All':
+        if has_date_range(self.request):
+            qs = filter_by_date_range(qs, 'detected_at', self.request)
+        elif month_param == 'All':
             pass
         elif month_param:
             try:

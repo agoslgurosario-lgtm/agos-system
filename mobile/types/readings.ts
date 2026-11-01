@@ -15,6 +15,7 @@ export interface SensorReading {
   clog_status: ReadingStatus | null
   overall_status: ReadingStatus | null
   clog_pct: number | null
+  estimated_weight?: number | null
   timestamp: string
 }
 

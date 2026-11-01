@@ -12,6 +12,7 @@ import { ClogEventsSkeleton } from "@/components/Skeleton/Admin/HistorySkeleton/
 import { useFillRows } from "@/components/hooks/useFillRows"
 import { PrintReport } from "@/components/PrintReport/PrintReport"
 import { SpinnerIcon } from "@/components/SpinnerIcon"
+import { DateRangeFilter } from "@/components/DateRangeFilter"
 
 // react
 import { useState, useEffect, useCallback } from "react"
@@ -31,10 +32,11 @@ import { fetchWithAuth } from "@/lib/auth"
 // lib
 import { usePageCache } from "@/components/hooks/usePageCache"
 import { useWebSocket } from "@/lib/hooks/useWebSocket"
-import { printReport } from "@/lib/printReport"
+import { exportOrPrint } from "@/lib/exportOrPrint"
 import { getUser } from "@/lib/auth"
 import { forHistory, barangayLabel, type BarangayLike } from "@/lib/barangayFilters"
 import { clogSeverityLabel } from '@/lib/clogSeverity'
+import { currentMonthRange, rangeQuery } from "@/lib/dateRange"
 
 
 type Clogs = {
@@ -107,8 +109,8 @@ const CATEGORY_LABELS: Record<string, string> = {
 }
 
 // fetch raw data
-const fetchClogsRaw = async (month: string): Promise<Clogs[]> => {
-  const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/clog-events/?month=${month}`)
+const fetchClogsRaw = async (from: string, to: string): Promise<Clogs[]> => {
+  const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/clog-events/?${rangeQuery(from, to)}`)
   if (!res.ok) throw new Error()
   const data = await res.json()
   return data.results ?? data
@@ -123,19 +125,9 @@ const fetchBarangaysRaw = async (): Promise<BarangayLike[]> => {
 
 
 export default function ClogEvents() {
-  const [selectedMonth, setSelectedMonth] = useState<string>(
-    `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
-  )
-  const monthOptions = (() => {
-    const year = new Date().getFullYear()
-    return Array.from({ length: 12 }, (_, m) => {
-      const d = new Date(year, m, 1)
-      return {
-        value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-        label: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
-      }
-    })
-  })()
+  // date range filter: opens on the current month, Clear Filters = all time
+  const [startDate, setStartDate] = useState<string>(() => currentMonthRange().from)
+  const [endDate, setEndDate] = useState<string>(() => currentMonthRange().to)
 
   // filter states
   const [search, setSearch] = useState<string>('')
@@ -144,7 +136,7 @@ export default function ClogEvents() {
   const [status, setStatus] = useState<string>('All Status')
 
   // table state
-  const clogsCache = usePageCache('clogs:events', () => fetchClogsRaw(selectedMonth), [] as Clogs[], { autoFetch: false })
+  const clogsCache = usePageCache('clogs:events', () => fetchClogsRaw(startDate, endDate), [] as Clogs[], { autoFetch: false })
   const barangaysCache = usePageCache('clogEvents:barangays', fetchBarangaysRaw, [] as BarangayLike[], { autoFetch: false })
 
   const clogs = clogsCache.data
@@ -158,13 +150,12 @@ export default function ClogEvents() {
 
   const { toasts, addToast, removeToast } = useToast()
 
-  function getFilteredClogs(clogs: Clogs[], severity: string, barangay: string, status: string, month: string, search: string) {
+  function getFilteredClogs(clogs: Clogs[], severity: string, barangay: string, status: string, search: string) {
     const q = search.toLowerCase()
     return clogs
       .filter(b => severity === "All Severity" || b.severity === severity)
       .filter(b => barangay === "All Barangay" || b.barangay_details?.barangay_name === barangay)
       .filter(b => status === "All Status" || b.status === status)
-      .filter(b => month === "All" || b.detected_at?.startsWith(month))
       .filter(b =>
         [b.node_details?.node_name, b.barangay_details?.barangay_name, b.severity]
           .some(field => field?.toLowerCase().includes(q))
@@ -172,7 +163,7 @@ export default function ClogEvents() {
     .sort((a, b) => b.event_id - a.event_id)
   }
 
-  const filtered = getFilteredClogs(clogs, severity, barangay, status, selectedMonth, search)
+  const filtered = getFilteredClogs(clogs, severity, barangay, status, search)
 
   const { panelRef, tableWrapRef, rows } = useFillRows({
     rowHeight: 52,
@@ -205,15 +196,7 @@ export default function ClogEvents() {
     return `${hrs}h ${mins}m`
   }
 
-  const monthlyCompleted = cardScopedClogs.filter(n => {
-    if (!isCleared(n) || !n.resolved_at) return false
-    if (selectedMonth === 'All') {
-      const now = new Date()
-      const resolvedDate = new Date(n.resolved_at)
-      return resolvedDate.getMonth() === now.getMonth() && resolvedDate.getFullYear() === now.getFullYear()
-    }
-    return n.resolved_at.startsWith(selectedMonth)
-  }).length
+  const completedCount = cardScopedClogs.filter(n => isCleared(n) && n.resolved_at).length
 
   const fetchMedia = async () => {
     if (!selectedClog) {
@@ -241,7 +224,7 @@ export default function ClogEvents() {
     setCurrentPage(1)
   }, [])
 
-  useEffect(() => { refetchAll() }, [selectedMonth])
+  useEffect(() => { refetchAll() }, [startDate, endDate])
 
   usePolling(refetchAll, 120000)
 
@@ -260,8 +243,14 @@ export default function ClogEvents() {
   const currentUser = getUser()
   const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Admin'
 
+  const printTitle = "Clog Events"
+  const printColumns = ["ID", "Severity", "Detected At", "Resolved At", "Location", "Water Level", "Water Flow", "Status", "Reason"]
+
   const handlePrint = () => {
-    printReport()
+    exportOrPrint({
+      table: { title: printTitle, columns: printColumns, rows: printRows },
+      onError: () => addToast("Failed to export. Please try again.", "error"),
+    })
   }
 
   useWebSocket({
@@ -323,19 +312,11 @@ export default function ClogEvents() {
               </SelectContent>
             </Select>
 
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="text-xs cursor-pointer px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent position="popper" className="text-xs min-w-0 !max-h-70 overflow-y-auto">
-                <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="All">All Months</SelectItem>
-                {monthOptions.map(m => (
-                  <SelectItem key={m.value} className="text-xs cursor-pointer p-2 text-[#122A48]" value={m.value}>
-                    {m.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <DateRangeFilter
+              from={startDate}
+              to={endDate}
+              onChange={(from, to) => { setStartDate(from); setEndDate(to) }}
+            />
           </div>
 
           <div>
@@ -353,7 +334,7 @@ export default function ClogEvents() {
             { icon: <Radar size={20} color="#2C7B3C" />, bg: "bg-[#B2FBC1]", count: total,label: "Total Clog Events" },
             { icon: <ArchiveRestore size={20} color="#FF9705" />, bg: "bg-[#F0FBB2]", count: cleared,  label: "Cleared Events"},
             { icon: <Clock3 size={20} color="#582579" />, bg: "bg-[#E5EAFF]", count: formatDuration(avgResolutionMinutes), label: "Average Resolution Time" },
-            { icon: <ClipboardCheck size={20} color="#A21111" />, bg: "bg-[#D8101059]", count: monthlyCompleted,  label: "Monthly Completed Events" },
+            { icon: <ClipboardCheck size={20} color="#A21111" />, bg: "bg-[#D8101059]", count: completedCount,  label: "Completed Events" },
           ].map(card => (
             <div key={card.label} className="rounded-lg border-2 border-[#C6C6C8] h-17 min-[2560px]:h-20 min-[3840px]:h-24 w-full flex items-center p-3 gap-3 relative bg-[#FAFCFD] shadow-[0_5px_4px_-4px_rgba(0,0,0,0.2)]">
               <div className={`${card.bg} rounded-lg p-2`}>{card.icon}</div>
@@ -603,8 +584,8 @@ export default function ClogEvents() {
         <Toast toasts={toasts} onRemove={removeToast} />
         
         <PrintReport
-          reportTitle="Clog Events"
-          columns={["ID", "Severity", "Detected At", "Resolved At", "Location", "Water Level", "Water Flow", "Status", "Reason"]}
+          reportTitle={printTitle}
+          columns={printColumns}
           rows={printRows}
           generatedBy={generatedBy}
         />

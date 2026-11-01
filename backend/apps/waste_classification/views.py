@@ -11,6 +11,7 @@ from apps.users.authentication import CookieJWTAuthentication
 import sys
 import os
 from apps.audit_logs.utils import log_action
+from agos_backend.date_range import has_date_range, filter_by_date_range
 
 
 class WasteClassificationListView(generics.ListCreateAPIView):
@@ -29,7 +30,9 @@ class WasteClassificationListView(generics.ListCreateAPIView):
         month_param = self.request.query_params.get('month')
         qs = WasteClassification.objects.select_related('node', 'node__barangay', 'node__hotspot')
 
-        if month_param == 'All':
+        if has_date_range(self.request):
+            qs = filter_by_date_range(qs, 'timestamp', self.request)
+        elif month_param == 'All':
             pass  # no month filter — return everything
         elif month_param:
             try:

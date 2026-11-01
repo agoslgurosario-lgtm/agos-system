@@ -31,6 +31,7 @@ const SEVERITY_MAP: Record<string, 'critical' | 'warning' | 'info'> = {
   Waste_Type_Approved: 'info',
   Report_Due_Soon: 'info',
   Report_Overdue: 'warning',
+  Node_Inspection_Request: 'warning',
 }
 
 const SILENT_ALERT_TYPES = new Set(['Waste_Type_Approved', 'Waste_Type_Rejected'])

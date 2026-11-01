@@ -10,6 +10,7 @@ import { ReopenedNotice } from '../components/clogs/ReopenedNotice'
 
 import { useLiveSocket } from '../lib/useLiveSocket'
 import { ClogEvent } from '../types/clog-events'
+import { formatWeight } from '../lib/formatWeight'
 
 
 function formatDate(iso?: string | null) {
@@ -176,6 +177,28 @@ export default function ClogDetails() {
                 <Text className="text-[11px] text-[#64748B] font-medium">Classification</Text>
                 <Text className="text-xs font-extrabold text-[#122A48] mt-0.5" numberOfLines={1}>
                   {selectedEvent.classification_details?.dominant_waste_type ?? '—'}
+                </Text>
+              </View>
+            </View>
+
+            <View className="w-[48%] bg-white rounded-2xl p-3 flex-row items-center gap-2.5 border border-[#F1F5F9]"
+              style={{
+                elevation: 2,
+                shadowColor: '#000',
+                shadowOpacity: 0.06,
+                shadowRadius: 4,
+                shadowOffset: { width: 0, height: 2 },
+              }}
+            >
+              <View className="w-9 h-9 rounded-xl bg-[#E0F2FE] items-center justify-center">
+                <MaterialCommunityIcons name="weight-kilogram" size={20} color="#1565BC" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-[11px] text-[#64748B] font-medium">Estimated Weight (AI)</Text>
+                <Text className="text-xs font-extrabold text-[#122A48] mt-0.5" numberOfLines={1}>
+                {(selectedEvent.classification_details?.estimated_volume ?? 0) > 0
+                  ? `~ ${formatWeight(selectedEvent.classification_details?.estimated_volume)}`
+                  : '0 g'}
                 </Text>
               </View>
             </View>

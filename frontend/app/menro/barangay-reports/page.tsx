@@ -9,11 +9,13 @@ import {
   SEVERITY_STYLE, SEVERITY_LABEL,
   formatDate, filedByName, buildMonthOptions,
   reportDate, monthOf, periodMatches, buildPeriodOptions, purokLabel,
-  ON_TIME_STYLE, LATE_STYLE, submissionStatus,
+  ON_TIME_STYLE, LATE_STYLE, submissionStatus, inDateRange
 } from "@/lib/reportOptions"
 import { printReport } from "@/lib/printReport"
 import { getUser } from "@/lib/auth"
 import { barangayLabel } from "@/lib/barangayFilters"
+import { openPdf } from "@/lib/openPdf"
+import { isIOSDevice } from "@/lib/device"
 
 // shadcn
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, } from "@/components/ui/table"
@@ -35,6 +37,7 @@ import { SpinnerIcon } from "@/components/SpinnerIcon"
 import StyledBadge from "@/components/StyledBadge"
 import { PrintCanalReport } from "@/components/PrintReport/PrintCanalReport"
 import { PendingWasteTypes } from "@/components/PendingWasteTypes"
+import { DateRangeFilter } from "@/components/DateRangeFilter"
 
 // types
 import type { CanalMonitoringReport, ReportBarangay, ReportSeverity } from "@/types/report"
@@ -85,6 +88,11 @@ export default function BarangayReports() {
 
   const [selectedPeriod, setSelectedPeriod] = useState<string>("All")
 
+  // date range: when set, it replaces the month and period filters
+  const [startDate, setStartDate] = useState<string>('')
+  const [endDate, setEndDate] = useState<string>('')
+  const rangeActive = startDate !== '' || endDate !== ''
+
   const monthOptions = buildMonthOptions(reports)
   const periodOptions = buildPeriodOptions(selectedMonth)
   
@@ -94,8 +102,9 @@ export default function BarangayReports() {
   }
 
   const filteredReports = reports
-    .filter(r => selectedMonth === "All" || monthOf(r) === selectedMonth)
-    .filter(r => periodMatches(r, selectedPeriod))
+    // a date range replaces the month and period filters
+    .filter(r => rangeActive ? inDateRange(r, startDate, endDate) : (selectedMonth === "All" || monthOf(r) === selectedMonth))
+    .filter(r => rangeActive || periodMatches(r, selectedPeriod))
     .filter(r => filterBarangay === "All" || String(r.barangay_details?.barangay_id) === filterBarangay)
     .filter(r => filterSeverity === "All" || r.severity === filterSeverity)
     .filter(r => filterTimeliness === "All" || submissionStatus(r) === filterTimeliness)
@@ -174,8 +183,15 @@ export default function BarangayReports() {
   const currentUser = getUser()
   const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Admin'
 
-  if (loading) return <BarangayReportsSkeleton/>
+  const handleExportReport = async (report: CanalMonitoringReport) => {
+    try {
+      await openPdf(`/api/canal-reports/${report.report_id}/export/`)
+    } catch {
+      addToast("Failed to export the report. Please try again.", "error")
+    }
+  }
 
+  if (loading) return <BarangayReportsSkeleton/>
 
   return (
     <>
@@ -186,7 +202,7 @@ export default function BarangayReports() {
           <div className="flex gap-3">
 
             {/* month filter */}
-            <Select value={selectedMonth} onValueChange={handleMonthChange}>
+            <Select value={selectedMonth} onValueChange={handleMonthChange} disabled={rangeActive}>
               <SelectTrigger className="cursor-pointer px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                 <SelectValue />
               </SelectTrigger>
@@ -201,7 +217,7 @@ export default function BarangayReports() {
             </Select>
 
             {/* period filter (only inside a single month) */}
-            <Select value={selectedPeriod} onValueChange={setSelectedPeriod} disabled={selectedMonth === "All"}>
+            <Select value={selectedPeriod} onValueChange={setSelectedPeriod} disabled={rangeActive || selectedMonth === "All"}>
               <SelectTrigger className="cursor-pointer px-3 py-3 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
                 <SelectValue />
               </SelectTrigger>
@@ -213,6 +229,14 @@ export default function BarangayReports() {
                 ))}
               </SelectContent>
             </Select>
+
+            {/* date range (overrides month and period) */}
+            <DateRangeFilter
+              from={startDate}
+              to={endDate}
+              onChange={(from, to) => { setStartDate(from); setEndDate(to) }}
+              width="w-[210px]"
+            />
 
             {/* barangay filter (all barangay regardless if they are registered or not) */}
             <Select value={filterBarangay} onValueChange={setFilterBarangay}>
@@ -316,7 +340,7 @@ export default function BarangayReports() {
                           </Button>
 
                           <Button
-                            onClick={() => setPrintingReport(report)}
+                            onClick={() => (isIOSDevice() ? handleExportReport(report) : setPrintingReport(report))}
                             className="text-xs bg-[#2fd45b] hover:bg-[#28b54e] cursor-pointer"
                           >
                             <FileDown size={16} className="mr-1" />

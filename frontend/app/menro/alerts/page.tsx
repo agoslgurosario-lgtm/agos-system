@@ -14,6 +14,8 @@ import { usePagination } from "@/components/hooks/usePagination"
 import { ALERT_META, ContextRow } from "@/components/Alerts/AlertCard"
 import { ALERT_STYLE } from "@/lib/constant"
 import { SearchFilter } from "@/components/SearchFilter"
+import { DateRangeFilter } from "@/components/DateRangeFilter"
+import { rangeQuery, toISODate } from "@/lib/dateRange"
 import { AlertsSkeleton } from "@/components/Skeleton/Menro/AlertsSkeleton"
 import { usePageCache } from "@/components/hooks/usePageCache"
 import { useFillRows } from "@/components/hooks/useFillRows"
@@ -57,20 +59,6 @@ const ALERT_TYPES = [
 // always scoped to the MENRO-allowed alert types — barangay/specific-type narrowing happens client-side
 const menroTypes = ALERT_TYPES.filter(t => t.value !== 'All Alert').map(t => t.value)
 
-const fetchAlertsForWindow = (window: string) => async (): Promise<Alert[]> => {
-  const params = new URLSearchParams()
-  params.append('alert_type', menroTypes.join(','))
-  params.append('date', window)
-  const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/alerts/?${params.toString()}`)
-  if (!res.ok) throw new Error()
-  const data = await res.json()
-  return data.results ?? data
-}
-
-const fetchAlertsTodayRaw = fetchAlertsForWindow('Today')
-const fetchAlerts7DaysRaw = fetchAlertsForWindow('7Days')
-const fetchAlerts30DaysRaw = fetchAlertsForWindow('30Days')
-
 const fetchBarangaysRaw = async (): Promise<Barangay[]> => {
   const data = await api.get('/api/barangays/')
   return data.results ?? data
@@ -82,17 +70,28 @@ export default function Alerts() {
   const [search, setSearch] = useState<string>('')
   const [barangay, setBarangay] = useState<string>('All Barangay')
   const [alertType, setAlertType] = useState<string>('All Alert')
-  const [dateFilter, setDateFilter] = useState<string>('Today')
+  // date range: opens on today; clearing it goes back to today instead of loading every alert
+  const [startDate, setStartDate] = useState<string>(() => toISODate(new Date()))
+  const [endDate, setEndDate] = useState<string>(() => toISODate(new Date()))
 
-  const alertsToday = usePageCache('menroAlerts:today', fetchAlertsTodayRaw, [] as Alert[], { autoFetch: false })
-  const alerts7Days = usePageCache('menroAlerts:7days', fetchAlerts7DaysRaw, [] as Alert[], { autoFetch: false })
-  const alerts30Days = usePageCache('menroAlerts:30days', fetchAlerts30DaysRaw, [] as Alert[], { autoFetch: false })
+  const handleRangeChange = (from: string, to: string) => {
+    const today = toISODate(new Date())
+    setStartDate(from || to ? from : today)
+    setEndDate(from || to ? to : today)
+  }
+
+  const fetchAlertsRaw = async (): Promise<Alert[]> => {
+    const res = await fetchWithAuth(
+      `${process.env.NEXT_PUBLIC_API_URL}/api/alerts/?${rangeQuery(startDate, endDate)}&alert_type=${encodeURIComponent(menroTypes.join(','))}`
+    )
+    if (!res.ok) throw new Error()
+    const data = await res.json()
+    return data.results ?? data
+  }
+
+  // cached per range, so going back to a range already loaded this session is instant
+  const activeAlerts = usePageCache(`menroAlerts:${startDate}:${endDate}`, fetchAlertsRaw, [] as Alert[], { autoFetch: false })
   const barangaysCache = usePageCache('menroAlerts:barangays', fetchBarangaysRaw, [] as Barangay[], { autoFetch: false })
-
-  const activeAlerts =
-    dateFilter === 'Today' ? alertsToday :
-    dateFilter === '7Days' ? alerts7Days :
-    alerts30Days
 
   const alerts = activeAlerts.data
   const barangays = barangaysCache.data
@@ -127,7 +126,7 @@ export default function Alerts() {
 
   useEffect(() => {
     activeAlerts.refetch()
-  }, [dateFilter])
+  }, [startDate, endDate])
 
   useEffect(() => {
     barangaysCache.refetch()
@@ -135,7 +134,7 @@ export default function Alerts() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [search, barangay, alertType, dateFilter])
+  }, [search, barangay, alertType, startDate, endDate])
 
   const handleRowClick = async (alert: Alert) => {
     setSelectedAlert(alert)
@@ -156,6 +155,9 @@ export default function Alerts() {
     path: "/ws/alerts/",
     onMessage: (newAlert) => {
       if (!MENRO_ALLOWED.has(newAlert.alert_type)) return
+      // only alerts that fall inside the selected range belong on screen
+      const alertDate = toISODate(new Date(newAlert.timestamp))
+      if ((startDate && alertDate < startDate) || (endDate && alertDate > endDate)) return
       activeAlerts.setData(prev => [newAlert, ...prev])
     },
   })
@@ -187,17 +189,8 @@ return (
                 </SelectContent>
               </Select>
 
-              {/* date filter */}
-              <Select value={dateFilter} onValueChange={setDateFilter}>
-                <SelectTrigger className="text-xs px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent position="popper" className='min-w-0'>
-                  <SelectItem className="p-2 text-xs text-[#122A48]" value="Today">Today</SelectItem>
-                  <SelectItem className="p-2 text-xs text-[#122A48]" value="7Days">Last 7 days</SelectItem>
-                  <SelectItem className="p-2 text-xs text-[#122A48]" value="30Days">Last 30 days</SelectItem>
-                </SelectContent>
-              </Select>
+              {/* date range filter */}
+              <DateRangeFilter from={startDate} to={endDate} onChange={handleRangeChange} align="right" width="w-[210px]" />
             </div>
         </div>
 

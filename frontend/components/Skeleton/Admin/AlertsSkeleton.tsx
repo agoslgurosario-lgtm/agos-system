@@ -1,5 +1,7 @@
 "use client"
 
+import { DateRangeFilter } from "@/components/DateRangeFilter"
+import { toISODate } from "@/lib/dateRange"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
@@ -17,7 +19,7 @@ const ALERT_TYPES = [
 
 export function AlertsSkeleton() {
   const [barangay, setBarangay] = useState('All Barangay')
-  const [dateFilter, setDateFilter] = useState('Today')
+  const today = toISODate(new Date())
 
   const { panelRef, tableWrapRef, rows } = useFillRows({
     rowHeight: 50.5,
@@ -44,14 +46,7 @@ export function AlertsSkeleton() {
             </SelectContent>
           </Select>
 
-          <Select value={dateFilter} onValueChange={setDateFilter}>
-            <SelectTrigger className="cursor-pointer text-xs px-3 py-4 bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper" className='min-w-0'>
-              <SelectItem className="p-2 text-xs text-[#122A48]" value="Today">Today</SelectItem>
-            </SelectContent>
-          </Select>
+          <DateRangeFilter from={today} to={today} onChange={() => {}} disabled align="right" width="w-[210px]" />
         </div>
       </div>
 

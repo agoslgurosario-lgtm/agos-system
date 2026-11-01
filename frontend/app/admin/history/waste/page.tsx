@@ -11,14 +11,16 @@ import { WasteSkeleton } from "@/components/Skeleton/Admin/HistorySkeleton/Waste
 import { useFillRows } from "@/components/hooks/useFillRows"
 import { SpinnerIcon } from "@/components/SpinnerIcon"
 import { PrintReport } from "@/components/PrintReport/PrintReport"
+import { DateRangeFilter } from "@/components/DateRangeFilter"
 
 // lib
 import { useWebSocket } from "@/lib/hooks/useWebSocket"
 import { usePageCache } from "@/components/hooks/usePageCache"
-import { printReport } from "@/lib/printReport"
+import { exportOrPrint } from "@/lib/exportOrPrint"
 import { getUser } from "@/lib/auth"
 import { forHistory, barangayLabel, type BarangayLike } from "@/lib/barangayFilters"
 import { formatWeight, formatWeightIn, pickWeightUnit } from "@/lib/formatWeight"
+import { currentMonthRange, rangeQuery } from "@/lib/dateRange"
 
 // react
 import { useEffect, useState, useCallback } from "react"
@@ -57,8 +59,8 @@ type WasteClassification = {
 }
 
 // fetch raw data
-const fetchWasteRaw = async (month: string): Promise<WasteClassification[]> => {
-  const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/waste-classifications/?month=${month}`)
+const fetchWasteRaw = async (from: string, to: string): Promise<WasteClassification[]> => {
+  const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/waste-classifications/?${rangeQuery(from, to)}`)
   if (!res.ok) throw new Error()
   const data = await res.json()
   return data.results ?? data
@@ -80,19 +82,9 @@ const fetchSensorNodesRaw = async () => {
 
 
 export default function Waste() {
-  const [selectedMonth, setSelectedMonth] = useState<string>(
-    `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
-  )
-  const monthOptions = (() => {
-    const year = new Date().getFullYear()
-    return Array.from({ length: 12 }, (_, m) => {
-      const d = new Date(year, m, 1)
-      return {
-        value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-        label: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
-      }
-    })
-  })()
+  // date range filter: opens on the current month, Clear Filters = all time
+  const [startDate, setStartDate] = useState<string>(() => currentMonthRange().from)
+  const [endDate, setEndDate] = useState<string>(() => currentMonthRange().to)
 
   // filter states
   const [search, setSearch] = useState<string>('')
@@ -101,7 +93,7 @@ export default function Waste() {
   const [sensorNode, setSensorNode] = useState<string>('All Nodes')
 
   // waste classification state
-  const wasteCache = usePageCache('waste:classifications', () => fetchWasteRaw(selectedMonth), [] as WasteClassification[], { autoFetch: false })
+  const wasteCache = usePageCache('waste:classifications', () => fetchWasteRaw(startDate, endDate), [] as WasteClassification[], { autoFetch: false })
   const barangaysCache = usePageCache('waste:barangays', fetchBarangaysRaw, [] as BarangayLike[], { autoFetch: false })
   const sensorNodesCache = usePageCache('waste:sensorNodes', fetchSensorNodesRaw, [] as { node_id: number; node_name: string }[], { autoFetch: false })
 
@@ -115,13 +107,12 @@ export default function Waste() {
   const [exporting, setExporting] = useState(false)
   const { toasts, addToast, removeToast } = useToast()
 
-  function getFilteredWaste(waste: WasteClassification[], barangay: string, dominant_waste: string, node: string, month: string, search: string) {
+  function getFilteredWaste(waste: WasteClassification[], barangay: string, dominant_waste: string, node: string, search: string) {
     const q = search.toLowerCase()
     return waste
       .filter(b => barangay === "All Barangay" || b.node_details?.barangay_details?.barangay_name === barangay)
       .filter(b => dominant_waste === "All Waste" || b.dominant_waste_type === dominant_waste)
       .filter(b => node === "All Nodes" || b.node_details?.node_name === node)
-      .filter(b => month === "All" || b.timestamp?.startsWith(month))
       .filter(b =>
         [b.node_details?.node_name, b.node_details?.barangay_details?.barangay_name, b.dominant_waste_type]
           .some(field => field?.toLowerCase().includes(q))
@@ -129,7 +120,7 @@ export default function Waste() {
       .sort((a, b) => b.classification_id - a.classification_id)
     }
   
-    const filtered = getFilteredWaste(wasteClassification, barangayFilterOpt, dominantWaste, sensorNode, selectedMonth, search)
+    const filtered = getFilteredWaste(wasteClassification, barangayFilterOpt, dominantWaste, sensorNode, search)
 
     const { panelRef, tableWrapRef, rows } = useFillRows({
       rowHeight: 52,
@@ -158,7 +149,7 @@ export default function Waste() {
     ])
   }, [])
 
-  useEffect(() => { refetchAll() }, [selectedMonth])
+  useEffect(() => { refetchAll() }, [startDate, endDate])
 
   usePolling(refetchAll, 120000)
 
@@ -179,8 +170,14 @@ export default function Waste() {
   const currentUser = getUser()
   const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Admin'
 
+  const printTitle = "Waste Classification"
+  const printColumns = ["ID", "Node", "Location", "Dominant Type", "Recyclable", "Biodegradable", "Residual", "Special Waste", "Confidence", "Est. Volume", "Timestamp"]
+
   const handlePrint = () => {
-    printReport()
+    exportOrPrint({
+      table: { title: printTitle, columns: printColumns, rows: printRows },
+      onError: () => addToast("Failed to export. Please try again.", "error"),
+    })
   }
 
   useWebSocket({
@@ -250,19 +247,11 @@ export default function Waste() {
               </SelectContent>
             </Select>
 
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="text-xs cursor-pointer px-3 py-[16px] bg-white border-2 border-[#C6C6C8] text-[#122A48] rounded-lg font-medium">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent position="popper" className="text-xs min-w-0 !max-h-70 overflow-y-auto">
-                <SelectItem className="text-xs cursor-pointer p-2 text-[#122A48]" value="All">All Months</SelectItem>
-                {monthOptions.map(m => (
-                  <SelectItem key={m.value} className="text-xs cursor-pointer p-2 text-[#122A48]" value={m.value}>
-                    {m.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <DateRangeFilter
+              from={startDate}
+              to={endDate}
+              onChange={(from, to) => { setStartDate(from); setEndDate(to) }}
+            />
           </div>
 
           <div>
@@ -508,8 +497,8 @@ export default function Waste() {
         <Toast toasts={toasts} onRemove={removeToast} />
 
         <PrintReport
-          reportTitle="Waste Classification"
-          columns={["ID", "Node", "Location", "Dominant Type", "Recyclable", "Biodegradable", "Residual", "Special Waste", "Confidence", "Est. Volume", "Timestamp"]}
+          reportTitle={printTitle}
+          columns={printColumns}
           rows={printRows}
           generatedBy={generatedBy}
         />
