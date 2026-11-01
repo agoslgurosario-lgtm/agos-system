@@ -6,7 +6,7 @@ import PreviousNextButtons from "./PreviousNextButtons"
 interface ExtraSection {
   label?: string
   description: string
-  imageUrl?: string
+  imageUrl?: string | string[]
 }
 
 interface StepDetailProps {
@@ -14,7 +14,7 @@ interface StepDetailProps {
   totalSteps: number
   title: string
   description: string
-  imageUrl?: string
+  imageUrl?: string | string[]
   whyItMatters: string
   extraSections?: ExtraSection[]
   onPrevious: () => void
@@ -23,6 +23,8 @@ interface StepDetailProps {
   hasNext: boolean
   nextLabel?: string
 }
+
+const toArray = (v?: string | string[]) => (Array.isArray(v) ? v : v ? [v] : [])
 
 function ExpandLabel() {
   return (
@@ -46,6 +48,39 @@ function ExpandLabel() {
     </span>
   )
 }
+function ImageGrid({
+  urls,
+  alt,
+  onOpen,
+  tour,
+}: {
+  urls: string[]
+  alt: string
+  onOpen: (src: string, alt: string) => void
+  tour?: boolean
+}) {
+  return (
+    <div
+      {...(tour ? { "data-tour": "step-image" } : {})}
+      className="mb-5 grid gap-3"
+      style={{ gridTemplateColumns: `repeat(${urls.length}, minmax(0, 1fr))` }}
+    >
+      {urls.map((src, i) => (
+        <div key={src} className="group">
+          <button
+            type="button"
+            onClick={() => onOpen(src, urls.length > 1 ? `${alt} (${i + 1})` : alt)}
+            className="relative block w-full cursor-pointer overflow-hidden rounded-lg border border-gray-200"
+          >
+            <img src={src} alt={alt} className="block h-auto w-full" />
+            <span className="pointer-events-none absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/20" />
+            <ExpandLabel />
+          </button>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export default function StepDetail({
   stepIndex,
@@ -62,6 +97,8 @@ export default function StepDetail({
   nextLabel,
 }: StepDetailProps) {
   const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null)
+
+  const mainImages = toArray(imageUrl)
 
   return (
     <>
@@ -84,24 +121,14 @@ export default function StepDetail({
         <p className="text-xs text-gray-500 mt-1 mb-4 whitespace-pre-line">{description}</p>
       </div>
 
-      {/* Main Step Image */}
-      {imageUrl ? (
-        <div className="group mb-5">
-          <button
-            type="button"
-            data-tour="step-image"
-            onClick={() => setLightboxImage({ src: imageUrl, alt: title })}
-            className="relative block w-full cursor-pointer overflow-hidden rounded-lg border border-gray-200"
-          >
-            <img
-              src={imageUrl}
-              alt={title}
-              className="block h-auto w-full"
-            />
-            <span className="pointer-events-none absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/20" />
-            <ExpandLabel />
-          </button>
-        </div>
+      {/* Main Step Image(s) */}
+      {mainImages.length > 0 ? (
+        <ImageGrid
+          urls={mainImages}
+          alt={title}
+          tour
+          onOpen={(src, alt) => setLightboxImage({ src, alt })}
+        />
       ) : (
         <div data-tour="step-image" className="bg-gray-100 rounded-lg h-64 flex items-center justify-center text-gray-400 text-sm mb-5">
           Screenshot placeholder
@@ -109,43 +136,32 @@ export default function StepDetail({
       )}
 
       {/* Extra Sections Images */}
-      {extraSections?.map((section, i) => (
-        <div key={i}>
-          {section.label && (
-            <h2 className="text-sm font-semibold text-gray-900">{section.label}</h2>
-          )}
-          <p className="text-xs text-gray-500 mt-1 mb-4 whitespace-pre-line">
-            {section.description}
-          </p>
+      {extraSections?.map((section, i) => {
+        const sectionImages = toArray(section.imageUrl)
 
-          {section.imageUrl ? (
-            <div className="group mb-5">
-              <button
-                type="button"
-                onClick={() =>
-                  setLightboxImage({
-                    src: section.imageUrl!,
-                    alt: section.label || "Section image",
-                  })
-                }
-                className="relative block w-full cursor-pointer overflow-hidden rounded-lg border border-gray-200"
-              >
-                <img
-                  src={section.imageUrl}
-                  alt={section.label || "Section image"}
-                  className="block h-auto w-full"
-                />
-                <span className="pointer-events-none absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/20" />
-                <ExpandLabel />
-              </button>
-            </div>
-          ) : (
-            <div className="bg-gray-100 rounded-lg h-64 flex items-center justify-center text-gray-400 text-sm mb-5">
-              Screenshot placeholder
-            </div>
-          )}
-        </div>
-      ))}
+        return (
+          <div key={i}>
+            {section.label && (
+              <h2 className="text-sm font-semibold text-gray-900">{section.label}</h2>
+            )}
+            <p className="text-xs text-gray-500 mt-1 mb-4 whitespace-pre-line">
+              {section.description}
+            </p>
+
+            {sectionImages.length > 0 ? (
+              <ImageGrid
+                urls={sectionImages}
+                alt={section.label || "Section image"}
+                onOpen={(src, alt) => setLightboxImage({ src, alt })}
+              />
+            ) : (
+              <div className="bg-gray-100 rounded-lg h-64 flex items-center justify-center text-gray-400 text-sm mb-5">
+                Screenshot placeholder
+              </div>
+            )}
+          </div>
+        )
+      })}
 
       <div data-tour="step-why">
         <h3 className="text-sm font-semibold text-gray-900 mb-1">Why is this important?</h3>
