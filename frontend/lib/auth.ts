@@ -52,11 +52,17 @@ export const getUserRole = (): string | null => {
 }
 
 export async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
+  // a FormData body (photo upload) needs the browser to set its own multipart Content-Type
+  const jsonHeader: Record<string, string> =
+    typeof FormData !== 'undefined' && options.body instanceof FormData
+      ? {}
+      : { 'Content-Type': 'application/json' }
+
   const res = await fetch(url, {
     ...options,
     credentials: 'include',
     headers: {
-      'Content-Type': 'application/json',
+      ...jsonHeader,
       ...CLIENT_HEADER,
       ...options.headers,
     },
@@ -77,7 +83,7 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}): Pro
         ...options,
         credentials: 'include',
         headers: {
-          'Content-Type': 'application/json',
+          ...jsonHeader,
           ...options.headers,
         },
       })

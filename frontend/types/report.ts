@@ -4,6 +4,14 @@ export type ObstructionCoverage = 'Under_25' | '25_50' | '50_75' | 'Over_75'
 export type WaterFlowCondition = 'Normal' | 'Reduced' | 'Blocked'
 export type MediaCategory = 'Before_Clearing' | 'After_Clearing' | 'Additional_Evidence'
 
+export type ReportStatus =
+  | 'Draft'
+  | 'Awaiting_Post_Report'
+  | 'Ready_To_Verify'
+  | 'Verified'
+  | 'Submitted'
+  | 'Voided'
+
 export type ReportBarangay = {
   barangay_id: number
   barangay_name: string
@@ -64,6 +72,7 @@ export type ReportSubmissionInfo = {
 export type CanalMonitoringReport = {
   report_id: number
   is_submitted: boolean
+  status: ReportStatus
 
   barangay: number
   purok: number | null
@@ -113,6 +122,11 @@ export type CanalMonitoringReport = {
   media: ReportMedia[]
 
   signatory_snapshot: Record<string, string> | null
+  verified_by_name?: string | null
+  verified_at?: string | null
+  void_reason?: string | null
+  // snapshot when submitted, otherwise the barangay's current Active signatories (detail endpoint only)
+  signatories?: Record<string, string>
 }
 
 export type ReportPurokRow = {
@@ -134,4 +148,22 @@ export type ReportCustomWaste = {
   waste_type_name: string
   waste_type_status: 'Pending' | 'Approved' | 'Rejected'
   weight_kg: number
+}
+
+export type CustomWasteType = {
+  waste_type_id: number
+  name: string
+  status: 'Pending' | 'Approved' | 'Rejected'
+}
+
+// one purok from GET /api/canal-reports/cleanup-preview/
+export type CleanupPreviewPurok = {
+  purok: number
+  node_names: string[]
+  has_sensor_data: boolean
+  reading_count: number
+  peak_clog_pct: number | null
+  overall_water_level: WaterLevel | null
+  overall_obstruction_coverage: ObstructionCoverage | null
+  overall_water_flow_condition: WaterFlowCondition | null
 }

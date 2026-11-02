@@ -4,6 +4,7 @@ from .models import CanalMonitoringReport, ReportMedia, CustomWasteType, ReportC
 from apps.barangay.serializers import BarangaySerializer
 from apps.users.serializers import UserSerializer
 from .periods import period_label
+from apps.signatories.models import Signatory
 
 
 class ReportMediaSerializer(serializers.ModelSerializer):
@@ -52,6 +53,20 @@ class CanalMonitoringReportSerializer(serializers.ModelSerializer):
     purok_rows = ReportPurokRowSerializer(many=True, read_only=True)
     submission_info = serializers.SerializerMethodField()
     earlier_voided = serializers.SerializerMethodField()
+    signatories = serializers.SerializerMethodField()
+
+    def get_signatories(self, obj):
+        """{position: name} to print on the report. A submitted report keeps the snapshot taken
+        at submit time; anything else shows the barangay's current Active signatories, so the
+        barangay account can see them without being allowed to read the signatories endpoint."""
+        if obj.signatory_snapshot:
+            return obj.signatory_snapshot
+        if self.parent is not None:  # one of many in a list: skip the extra query per row
+            return {}
+        return {
+            s.position: s.name
+            for s in Signatory.objects.filter(barangay_id=obj.barangay_id, status='Active')
+        }
 
     def get_earlier_voided(self, obj):
         """Earlier reports for the same clog event that the barangay voided (this one is a redo)."""

@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from .models import Signatory, POSITION_CHOICES
 from .serializers import SignatorySerializer
 from apps.barangay.models import Barangay
-from apps.users.permissions import IsAdmin, IsAdminOrMENRO
+from apps.users.permissions import IsAdmin, IsAdminOrMENROOrBarangay
 from apps.audit_logs.utils import log_action
 
 HISTORY_LIMIT = 3
@@ -26,11 +26,15 @@ class SignatoryListView(APIView):
         # anyone who can view or print a report may read the signatories;
         # only admins can add or change them
         if self.request.method == 'GET':
-            return [IsAdminOrMENRO()]
+            return [IsAdminOrMENROOrBarangay()]
         return [IsAdmin()]
 
     def get(self, request):
-      barangay_id = request.query_params.get('barangay')
+      # a barangay user can only read their own barangay, whatever the URL says
+      if request.user.user_role == 'Barangay':
+          barangay_id = request.user.barangay_id
+      else:
+          barangay_id = request.query_params.get('barangay')
       if not barangay_id:
           return Response({'detail': 'barangay query param is required.'}, status=400)
 

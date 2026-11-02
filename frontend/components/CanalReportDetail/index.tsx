@@ -6,7 +6,7 @@ import Image from "next/image"
 import RosLogo from "@/public/ROS-logo.jpg"
 
 // icons
-import { ArrowLeft, FileText, Image as ImageIcon, FileDown, Expand } from "lucide-react"
+import { ArrowLeft, FileText, Image as ImageIcon, FileDown, Expand, ShieldCheck, Pencil, FileX } from "lucide-react"
 
 // shadcn
 import { Button } from "@/components/ui/button"
@@ -18,9 +18,14 @@ import { Toast } from "@/components/Toast"
 import { useToast } from "@/components/hooks/useToast"
 import StyledBadge from "../StyledBadge"
 import { PrintCanalReport, SIGNATORY_POSITIONS } from "@/components/PrintReport/PrintCanalReport"
+import { ConfirmModal } from "@/components/CanalReports/ConfirmModal"
+import { NoticeModal } from "@/components/CanalReports/NoticeModal"
+import { VoidReportModal } from "@/components/CanalReports/VoidReportModal"
+import { IncompleteReportModal } from "@/components/CanalReports/IncompleteReportModal"
+import { ROUTES } from "@/lib/canalReportRoutes"
 
 // lib
-import { fetchWithAuth } from "@/lib/auth"
+import { fetchWithAuth, setSuppressInactiveRedirect } from "@/lib/auth"
 import {
   SEVERITY_STYLE, SEVERITY_LABEL,
   WATER_LEVEL_LABEL, OBSTRUCTION_LABEL, WATER_FLOW_LABEL,
@@ -38,6 +43,18 @@ type Props = {
   id: string | null
   backHref: string
 }
+
+// names for the `missing` list the backend sends back from /verify/
+const MISSING_LABELS: Record<string, string> = {
+  assigned_personnel: "Assigned personnel",
+  date_responded: "Date / time of the cleanup",
+  action_taken: "Action taken",
+  waste_collected_amount: "Waste collected",
+  before_photos: "Before Cleanup photo",
+  after_photos: "After Cleanup photo",
+}
+const missingLabel = (k: string) =>
+  MISSING_LABELS[k] ?? k.replace(/_/g, " ").replace(/^./, c => c.toUpperCase())
 
 const PHOTO_GROUPS: { category: ReportMedia["media_category"]; label: string }[] = [
   { category: "Before_Clearing", label: "Before Cleanup" },
@@ -391,6 +408,14 @@ export default function CanalReportDetail({ id, backHref }: Props) {
   const [printRequested, setPrintRequested] = useState(false)
   const [signatoryNames, setSignatoryNames] = useState<Record<string, string>>({})
 
+  // verify / void (barangay only)
+  const [verifyOpen, setVerifyOpen] = useState(false)
+  const [verifiedNotice, setVerifiedNotice] = useState(false)
+  const [voidOpen, setVoidOpen] = useState(false)
+  const [voidedNotice, setVoidedNotice] = useState<{ eventReopened: boolean } | null>(null)
+  const [missingFields, setMissingFields] = useState<string[] | null>(null)
+  const [acting, setActing] = useState(false)
+
   const fetchReport = async (isRetry = false) => {
     if (!id) {
       setFetchError(true)
@@ -416,9 +441,12 @@ export default function CanalReportDetail({ id, backHref }: Props) {
 
   const resolveSignatories = async (r: CanalMonitoringReport): Promise<Record<string, string>> => {
     if (r.signatory_snapshot) return r.signatory_snapshot
+    if (r.signatories && Object.keys(r.signatories).length > 0) return r.signatories
     const barangayId = r.barangay_details?.barangay_id
     if (!barangayId) return {}
     try {
+      // a 403 on this optional lookup must not log the user out (barangay accounts may not be allowed to read signatories)
+      setSuppressInactiveRedirect(true)
       const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/signatories/?barangay=${barangayId}`)
       if (!res.ok) return {}
       const slots = await res.json()
@@ -427,6 +455,8 @@ export default function CanalReportDetail({ id, backHref }: Props) {
       return names
     } catch {
       return {}
+    } finally {
+      setSuppressInactiveRedirect(false)
     }
   }
 
@@ -482,6 +512,49 @@ const handleExport = async () => {
   }
 }
 
+  const API = process.env.NEXT_PUBLIC_API_URL
+
+  const onVerify = async () => {
+    if (!report) return
+    setActing(true)
+    try {
+      const res = await fetchWithAuth(`${API}/api/canal-reports/${report.report_id}/verify/`, { method: "POST" })
+      const data = await res.json().catch(() => null)
+      setVerifyOpen(false)
+      if (!res.ok) {
+        if (Array.isArray(data?.missing) && data.missing.length) setMissingFields(data.missing.map(missingLabel))
+        else addToast(data?.detail || "Failed to verify the report. Please try again.", "error")
+        return
+      }
+      setReport(data)
+      setVerifiedNotice(true)
+    } catch {
+      setVerifyOpen(false)
+      addToast("Failed to verify the report. Please try again.", "error")
+    } finally { setActing(false) }
+  }
+
+  const onVoid = async (reason: string) => {
+    if (!report) return
+    setActing(true)
+    try {
+      const res = await fetchWithAuth(`${API}/api/canal-reports/${report.report_id}/void/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        addToast(data?.detail || "Failed to void the report. Please try again.", "error")
+        return
+      }
+      setVoidOpen(false)
+      setVoidedNotice({ eventReopened: !!data?.event_reopened })
+    } catch {
+      addToast("Failed to void the report. Please try again.", "error")
+    } finally { setActing(false) }
+  }
+
   if (loading) {
     return (
       <div className="hidden md:flex flex-col items-center justify-center h-150">
@@ -511,6 +584,13 @@ const handleExport = async () => {
     )
   }
 
+  // only the barangay's own pages get actions; the admin / MENRO view stays read-only
+  const isBarangay = backHref.startsWith("/barangay")
+  const editable = !report.is_submitted && (report.status === "Draft" || report.status === "Ready_To_Verify")
+  const canVerify = isBarangay && !report.is_submitted && report.status === "Ready_To_Verify"
+  const canEdit = isBarangay && editable
+  const canVoid = isBarangay && !report.is_submitted && report.status !== "Submitted" && report.status !== "Voided"
+
   return (
     <>
       <div className="hidden md:flex flex-col">
@@ -528,14 +608,44 @@ const handleExport = async () => {
               {!isCleanupReport(report) && report.severity && <StyledBadge text={SEVERITY_LABEL[report.severity]} style={SEVERITY_STYLE[report.severity]} />}
             </div>
           </div>
-          <Button
-            onClick={() => (isIOSDevice() ? handleExport() : setPrintRequested(true))}
-            className="cursor-pointer bg-[#2fd45b] hover:bg-[#28b54e] text-white"
-          >
-            <FileDown size={16} className="mr-1" />
-            Export
-          </Button>
+          <div className="flex items-center gap-2">
+            {canVerify && (
+              <Button onClick={() => setVerifyOpen(true)} className="cursor-pointer bg-[#16a34a] hover:bg-[#15803d] text-white">
+                <ShieldCheck size={16} className="mr-1" />
+                Verify Report
+              </Button>
+            )}
+            {canEdit && (
+              <Button variant="outline" onClick={() => router.push(ROUTES.form(report.report_id))} className="cursor-pointer border-[#cbd5e1] text-[#475569]">
+                <Pencil size={16} className="mr-1" />
+                Edit
+              </Button>
+            )}
+            {canVoid && (
+              <Button variant="outline" onClick={() => setVoidOpen(true)} className="cursor-pointer border-[#fca5a5] text-[#dc2626] hover:bg-[#fef2f2]">
+                <FileX size={16} className="mr-1" />
+                Void report
+              </Button>
+            )}
+            <Button
+              onClick={() => (isIOSDevice() ? handleExport() : setPrintRequested(true))}
+              className="cursor-pointer bg-[#2fd45b] hover:bg-[#28b54e] text-white"
+            >
+              <FileDown size={16} className="mr-1" />
+              Export
+            </Button>
+          </div>
         </div>
+
+        {/* verified: locked, waiting for the next submission */}
+        {isBarangay && report.status === "Verified" && (
+          <div className="mb-4 rounded-lg border border-[#DDD6FE] bg-[#EDE9FE] px-4 py-3 text-[#5B21B6]">
+            <p className="text-sm font-bold">
+              Verified by {report.verified_by_name || "—"} on {formatDateTime(report.verified_at ?? null)}
+            </p>
+            <p className="text-xs">This report is locked and will be included in your next submission to MENRO.</p>
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex gap-2 mb-4">
@@ -563,6 +673,46 @@ const handleExport = async () => {
           <PhotosPanel media={report.media} onOpen={setPreviewUrl} />
         )}
       </div>
+
+      {/* verify */}
+      <ConfirmModal
+        open={verifyOpen}
+        title="Verify this report?"
+        message="By verifying, you confirm the details are correct. The report will be locked and included in your next submission to MENRO. You can't edit it afterwards."
+        icon={<ShieldCheck size={24} color="#16a34a" />}
+        confirmLabel="Verify"
+        loading={acting}
+        onClose={() => setVerifyOpen(false)}
+        onConfirm={onVerify}
+      />
+      <NoticeModal
+        open={verifiedNotice}
+        title="Report verified"
+        message="The report is locked and will be included in your next submission to MENRO."
+        icon={<ShieldCheck size={24} color="#16a34a" />}
+        iconBg="#dcfce7"
+        buttonLabel="OK"
+        onClose={() => setVerifiedNotice(false)}
+      />
+      <IncompleteReportModal open={missingFields !== null} missingFields={missingFields ?? []} onClose={() => setMissingFields(null)} />
+
+      {/* void */}
+      <VoidReportModal
+        open={voidOpen}
+        loading={acting}
+        fromClogEvent={!!report.clog_event}
+        onClose={() => setVoidOpen(false)}
+        onConfirm={onVoid}
+      />
+      <NoticeModal
+        open={voidedNotice !== null}
+        title="Report voided"
+        message={`The report was voided and removed from your list.${voidedNotice?.eventReopened ? " The clog event is back to Detected, so you can respond and report on it again." : ""}`}
+        icon={<FileX size={24} color="#dc2626" />}
+        iconBg="#FEE2E2"
+        buttonLabel="OK"
+        onClose={() => { setVoidedNotice(null); router.push(backHref) }}
+      />
 
       {/* Photo preview */}
       <Dialog open={previewUrl !== null} onOpenChange={(open) => { if (!open) setPreviewUrl(null) }}>
