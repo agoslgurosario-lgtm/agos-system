@@ -312,9 +312,15 @@ AWS_S3_FILE_OVERWRITE = False
 SUPABASE_PROJECT_URL = os.getenv('SUPABASE_PROJECT_URL')
 SUPABASE_S3_BACKUP_BUCKET = os.getenv('SUPABASE_S3_BACKUP_BUCKET', 'agos-backups')
 
+# Use Supabase when its keys are present; otherwise keep uploads in the local media/ folder
+if os.getenv('SUPABASE_S3_ACCESS_KEY'):
+    DEFAULT_STORAGE = "agos_backend.storage_backends.SupabasePublicStorage"
+else:
+    DEFAULT_STORAGE = "django.core.files.storage.FileSystemStorage"
+
 STORAGES = {
     "default": {
-        "BACKEND": "agos_backend.storage_backends.SupabasePublicStorage",
+        "BACKEND": DEFAULT_STORAGE,
     },
     "staticfiles": {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
