@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Radar, BatteryMedium, Signal, ScanSearch } from "lucide-react"
+import { Radar, BatteryMedium, Signal, ScanSearch, Loader2 } from "lucide-react"
 import { HealthHistoryTable } from "@/components/HealthHistory"
 import { fetchWithAuth } from "@/lib/auth"
 
@@ -72,18 +72,22 @@ export default function BarangayHealth() {
   ]
 
   return (
-    <div className="flex flex-col min-h-full">
+    <div className="flex flex-col h-full">
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 w-full text-[#122A48]">
         {cards.map(card => (
           <div
             key={card.label}
-            className="rounded-lg border-2 border-[#C6C6C8] h-17 w-full flex items-center p-6 gap-3 bg-[#FAFCFD] shadow-[0_5px_4px_-4px_rgba(0,0,0,0.2)]"
+            className="rounded-lg border-2 border-[#C6C6C8] h-17 min-[2560px]:h-20 min-[3840px]:h-24 w-full flex items-center p-6 gap-3 bg-[#FAFCFD] shadow-[0_5px_4px_-4px_rgba(0,0,0,0.2)]"
           >
-            <div className={`${card.bg} rounded-lg p-2`}>{card.icon}</div>
-            <div className="flex flex-col">
-              <span className="text-xl font-bold leading-tight">{card.value}</span>
-              <p className="text-xs">{card.label}</p>
+            <div className={`${card.bg} rounded-lg p-2 shrink-0`}>{card.icon}</div>
+            <div className="flex flex-col min-w-0">
+              {summary.loading ? (
+                <Loader2 size={20} className="animate-spin text-[#727272]" aria-label="Loading" />
+              ) : (
+                <span className="text-xl min-[2560px]:text-2xl font-bold leading-tight truncate">{card.value}</span>
+              )}
+              <p className="text-xs min-[2560px]:text-sm truncate">{card.label}</p>
             </div>
           </div>
         ))}

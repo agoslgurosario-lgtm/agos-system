@@ -1,16 +1,18 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { Loader2 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TablePagination } from "@/components/TablePagination"
 import { useWebSocket } from "@/lib/hooks/useWebSocket"
+import { useFillRows } from "@/components/hooks/useFillRows"
 import { fetchWithAuth } from "@/lib/auth"
 
 
 type CacheEntry = { logs: HealthLog[]; total: number }
 const historyCache = new Map<string, CacheEntry>()
-const DEFAULT_KEY = `all|all|all|||1`   // barangay|node|status|from|to|page
+
 
 type HealthLog = {
   health_id: number
@@ -33,7 +35,6 @@ type Props = {
 }
 
 
-const PAGE_SIZE = 10
 const ALL = "all"
 
 const STATUS_BADGE: Record<string, string> = {
@@ -48,14 +49,19 @@ const itemClass = "text-xs cursor-pointer p-2 text-[#122A48]"
 const dateClass =
   "h-8 border-2 border-[#C6C6C8] rounded-lg px-2 text-xs outline-none text-[#122A48] cursor-pointer bg-white"
 
+const cell = "text-[#122A48] text-xs min-[2560px]:text-sm"
+
 const batteryPct = (v: number) =>
   Math.min(100, Math.max(0, Math.round(((v - 3.0) / (4.2 - 3.0)) * 100)))
 
 export function HealthHistoryTable({ barangays, nodes }: Props) {
-  const [logs, setLogs] = useState<HealthLog[]>(() => historyCache.get(DEFAULT_KEY)?.logs ?? [])
-  const [total, setTotal] = useState(() => historyCache.get(DEFAULT_KEY)?.total ?? 0)
+  const [logs, setLogs] = useState<HealthLog[]>([])
+  const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(() => !historyCache.has(DEFAULT_KEY))
+  const [loading, setLoading] = useState(true)
+
+  // rows that fit the panel (52 = the h-13 row height, same as clog-events)
+  const { panelRef, tableWrapRef, rows } = useFillRows({ rowHeight: 52, initialRows: 9 })
   const [error, setError] = useState(false)
 
   const [barangay, setBarangay] = useState(ALL)
@@ -66,11 +72,11 @@ export function HealthHistoryTable({ barangays, nodes }: Props) {
 
   const reqRef = useRef(0) // ignore out-of-order responses
 
-  const cacheKey = `${barangay}|${node}|${status}|${from}|${to}|${page}`
+  const cacheKey = `${barangay}|${node}|${status}|${from}|${to}|${page}|${rows}`
 
   useEffect(() => {
     const req = ++reqRef.current
-    const params = new URLSearchParams({ page: String(page), page_size: String(PAGE_SIZE) })
+    const params = new URLSearchParams({ page: String(page), page_size: String(rows) })
     if (barangay !== ALL) params.set("barangay", barangay)
     if (node !== ALL) params.set("node", node)
     if (status !== ALL) params.set("status", status)
@@ -93,7 +99,10 @@ export function HealthHistoryTable({ barangays, nodes }: Props) {
       })
       .catch(() => { if (req === reqRef.current) setError(true) })
       .finally(() => { if (req === reqRef.current) setLoading(false) })
-  }, [page, barangay, node, status, from, to])
+  }, [page, rows, barangay, node, status, from, to])
+
+  // window resized -> page size changed -> start again from page 1
+  useEffect(() => { setPage(1) }, [rows])
 
   // always-fresh copies for the socket handler
   const logsRef = useRef(logs);   logsRef.current = logs
@@ -116,7 +125,7 @@ export function HealthHistoryTable({ barangays, nodes }: Props) {
       setTotal(nextTotal)
       historyCache.clear()
       if (page === 1) {
-        const next = [log, ...logsRef.current].slice(0, PAGE_SIZE)
+        const next = [log, ...logsRef.current].slice(0, rows)
         setLogs(next)
         historyCache.set(cacheKey, { logs: next, total: nextTotal })
       }
@@ -127,7 +136,7 @@ export function HealthHistoryTable({ barangays, nodes }: Props) {
   const onFilter = (setter: (v: string) => void) => (v: string) => { setter(v); setPage(1) }
 
   return (
-    <div className="mt-3 bg-[#FAFCFD] border border-[#00000040] shadow-[0_5px_4px_-4px_rgba(0,0,0,0.2)] rounded-lg flex flex-col mb-3 min-h-[620px]">
+    <div ref={panelRef} className="mt-3 bg-[#FAFCFD] border border-[#00000040] shadow-[0_5px_4px_-4px_rgba(0,0,0,0.2)] rounded-lg flex flex-col flex-1 min-h-[360px]">
       <div className="pl-2 p-1 py-2 flex flex-wrap items-center gap-3 border-b border-[#C6C6C8]">
         <p className="font-bold text-[#122A48] text-sm mr-auto">Sensor Nodes Health History</p>
 
@@ -172,9 +181,9 @@ export function HealthHistoryTable({ barangays, nodes }: Props) {
           onClick={e => e.currentTarget.showPicker?.()} />
       </div>
 
-      <div className="flex-1 flex flex-col">
-        <Table>
-          <TableHeader className="bg-[#e8eef1b4] border border-[#CFD8DC] h-10">
+      <div ref={tableWrapRef}>
+        <Table className="min-w-[760px]">
+          <TableHeader className="bg-[#e8eef1b4] border border-[#CFD8DC] h-12">
             <TableRow>
               {["NODE", "BARANGAY", "STATUS", "BATTERY", "SIGNAL", "SENSOR", "FIRMWARE", "CHECKED AT"].map(h => (
                 <TableHead key={h} className="font-semibold text-left text-xs text-[#727272]">{h}</TableHead>
@@ -184,24 +193,24 @@ export function HealthHistoryTable({ barangays, nodes }: Props) {
           <TableBody>
             {logs.map(l => (
               <TableRow key={l.health_id} className="border-b border-[#C6C6C8] hover:bg-[#f5f5f5]">
-                <TableCell className="text-[#122A48] text-xs h-12">{l.node_details.node_name}</TableCell>
-                <TableCell className="text-[#122A48] text-xs">{l.node_details.barangay_details?.barangay_name ?? "—"}</TableCell>
-                <TableCell className="text-xs">
+                <TableCell className={`${cell} h-13`}>{l.node_details.node_name}</TableCell>
+                <TableCell className={cell}>{l.node_details.barangay_details?.barangay_name ?? "—"}</TableCell>
+                <TableCell className="text-xs min-[2560px]:text-sm">
                   <span className={`inline-flex px-3 py-1 rounded-full text-[11px] font-semibold ${STATUS_BADGE[l.status] ?? ""}`}>
                     {l.status}
                   </span>
                 </TableCell>
-                <TableCell className="text-[#122A48] text-xs">
+                <TableCell className={cell}> 
                   {l.battery_voltage != null ? `${l.battery_voltage.toFixed(2)} V (${batteryPct(l.battery_voltage)}%)` : "—"}
                 </TableCell>
-                <TableCell className="text-[#122A48] text-xs">
+                <TableCell className={cell}> 
                   {l.signal_strength != null ? `${l.signal_strength} dBm` : "—"}
                 </TableCell>
-                <TableCell className="text-[#122A48] text-xs">
+                <TableCell className={cell}> 
                   {l.sensor_continuity == null ? "—" : l.sensor_continuity ? "OK" : "No echo"}
                 </TableCell>
-                <TableCell className="text-[#122A48] text-xs">{l.firmware_version ?? "—"}</TableCell>
-                <TableCell className="text-[#122A48] text-xs">
+                <TableCell className={cell}> {l.firmware_version ?? "—"}</TableCell>
+                <TableCell className={cell}> 
                   {new Date(l.checked_at).toLocaleString("en-PH", {
                     year: "numeric", month: "2-digit", day: "2-digit",
                     hour: "2-digit", minute: "2-digit", hour12: true,
@@ -211,16 +220,20 @@ export function HealthHistoryTable({ barangays, nodes }: Props) {
             ))}
           </TableBody>
         </Table>
-
-        {loading && logs.length === 0 && <p className="text-center text-xs text-[#727272] py-50">Loading…</p>}
-        {error && <p className="text-center text-xs text-[#D81010] py-50">Failed to load health history.</p>}
-        {!loading && !error && logs.length === 0 && (
-          <p className="text-center text-xs text-[#727272] py-50">No health records match these filters.</p>
-        )}
       </div>
 
-      <div className='mt-auto border-t border-[#00000015]'>
-        <TablePagination totalItems={total} itemsPerPage={PAGE_SIZE} currentPage={page} onPageChange={setPage} />
+      {loading && logs.length === 0 && (
+        <div className="flex flex-1 items-center justify-center py-16">
+          <Loader2 size={28} className="animate-spin text-[#727272]" aria-label="Loading" />
+        </div>
+      )}
+      {error && <p className="py-16 text-center text-xs text-[#D81010]">Failed to load health history.</p>}
+      {!loading && !error && logs.length === 0 && (
+        <p className="py-16 text-center text-xs text-[#727272]">No health records match these filters.</p>
+      )}
+
+      <div className="mt-auto">
+        <TablePagination totalItems={total} itemsPerPage={rows} currentPage={page} onPageChange={setPage} />
       </div>
     </div>
   )
