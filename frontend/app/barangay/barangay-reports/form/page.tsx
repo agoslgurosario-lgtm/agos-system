@@ -4,6 +4,11 @@
 // /barangay/barangay-reports/form                -> new report
 // /barangay/barangay-reports/form?report_id=12   -> continue a draft   (?id=12 also works)
 //
+// Post-Report mode (same as the mobile app): a report that was started by responding to a clog event
+// (clog_event is set, status Awaiting_Post_Report / Ready_To_Verify). The response details come from the
+// pre-report, the canal condition comes from the node's sensors (POST /complete-post/), and the
+// barangay only adds the waste breakdown, photos and remarks.
+//
 // How the backend treats a cleanup report:
 //  - it is a whole-barangay report (report_scope = "Barangay"), so there is no purok picker
 //  - the form saves a Draft, then POST /api/canal-reports/{id}/complete/ finishes it
@@ -27,6 +32,8 @@ import { IncompleteSignatoriesModal } from "@/components/CanalReports/Incomplete
 import { NoticeModal } from "@/components/CanalReports/NoticeModal"
 import { IncompleteReportModal } from "@/components/CanalReports/IncompleteReportModal"
 import { ConfirmModal } from "@/components/CanalReports/ConfirmModal"
+import { PostReportSummary, type SystemData } from "@/components/CanalReports/PostReportSummary"
+import { CompletePostModal } from "@/components/CanalReports/CompletePostModal"
 import { AddOtherWasteModal } from "@/components/CanalReports/AddOtherWasteModal"
 import { fetchWithAuth, getUser } from "@/lib/auth"
 import { ROUTES } from "@/lib/canalReportRoutes"
@@ -173,15 +180,43 @@ function CleanupForm() {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [viewing, setViewing] = useState<string | null>(null) // photo shown full size
 
+  // post-report mode (report started from a clog event)
+  const [isPost, setIsPost] = useState(false)
+  const [reportStatus, setReportStatus] = useState("Draft")
+  const [detectedAt, setDetectedAt] = useState<Date | null>(null)
+  const [purokNo, setPurokNo] = useState<number | null>(null)
+  const [severity, setSeverity] = useState<string | null>(null)
+  const [systemData, setSystemData] = useState<SystemData | null>(null)
+  const [systemLoading, setSystemLoading] = useState(false)
+  const [completeOpen, setCompleteOpen] = useState(false)
+  const [postError, setPostError] = useState<string | null>(null)
+
   const applyReport = (r: CanalMonitoringReport) => {
     const x = r as any
-    // a cleanup can be edited while it is a Draft or waiting to be verified, never after
-    if (x.is_submitted || !["Draft", "Ready_To_Verify"].includes(x.status)) {
+    // a report can be edited while it is a Draft, waiting for its post-report, or waiting to be verified, never after
+    if (x.is_submitted || !["Draft", "Awaiting_Post_Report", "Ready_To_Verify"].includes(x.status)) {
       addToast("This report is locked and can no longer be edited.", "error")
       router.push(ROUTES.list)
       return
     }
     if (r.barangay_details?.barangay_name) setBarangayName(r.barangay_details.barangay_name)
+    setReportStatus(x.status)
+
+    // started from a clog event: this is the post-report
+    const post = x.clog_event != null && ["Awaiting_Post_Report", "Ready_To_Verify"].includes(x.status)
+    setIsPost(post)
+    if (post) {
+      setDetectedAt(x.date_observed ? new Date(x.date_observed) : null)
+      setPurokNo(x.purok ?? null)
+      setSeverity(x.severity ?? null)
+      setSystemLoading(true)
+      fetchWithAuth(`${API}/api/canal-reports/${x.report_id}/system-data/`)
+        .then(res => (res.ok ? res.json() : Promise.reject()))
+        .then((d: SystemData) => setSystemData(d))
+        .catch(() => setSystemData(null))
+        .finally(() => setSystemLoading(false))
+    }
+
     const when = x.date_responded ?? r.date_observed
     if (when) setDateResponded(toLocalInput(new Date(when)))
     else setDateResponded(toLocalInput(new Date()))
@@ -229,6 +264,7 @@ function CleanupForm() {
 
   // sensor summary for the 7 days up to the cleanup date (every purok of the barangay is returned)
   useEffect(() => {
+    if (isPost || loadingDraft) return   // a post-report takes its condition from the clog event's sensors
     const d = new Date(dateResponded)
     if (isNaN(d.getTime())) return
     setPreviewLoading(true)
@@ -237,7 +273,7 @@ function CleanupForm() {
       .then(data => setPreview(Array.isArray(data?.puroks) ? data.puroks : []))
       .catch(() => setPreview([]))
       .finally(() => setPreviewLoading(false))
-  }, [dateResponded])
+  }, [dateResponded, isPost, loadingDraft])
 
   // ----- derived -----
   const counted = preview.filter(p => p.has_sensor_data)
@@ -258,13 +294,22 @@ function CleanupForm() {
   const notSaturday = hasDate && picked.getDay() !== 6
   const inFuture = hasDate && picked.getTime() > Date.now() + 5 * 60 * 1000 // the backend allows 5 minutes
 
-  const hasAnyInput =
-    totalKg > 0 || personnel.trim() !== "" || action.trim() !== "" || remarks.trim() !== "" ||
+  const hasAnyInput = isPost
+    ? totalKg > 0 || remarks.trim() !== "" || totalPhotos > 0
+    : totalKg > 0 || personnel.trim() !== "" || action.trim() !== "" || remarks.trim() !== "" ||
     (!fromSensor && (level || obstruction || flow) !== null) || totalPhotos > 0
 
   // mirrors the checks in CanalReportCompleteView / _complete_cleanup
   const validate = () => {
     const missing: string[] = []
+    // post-report: only the waste breakdown and photos are entered here (same checks as the mobile app)
+    if (isPost) {
+      if (totalKg <= 0) missing.push("Waste composition (at least one category)")
+      other.forEach(o => { if (num(o.kg) <= 0) missing.push(`Weight for ${o.name}`) })
+      if (photoCount("Before_Clearing") === 0) missing.push(MISSING_LABELS.before_photos)
+      if (photoCount("After_Clearing") === 0) missing.push(MISSING_LABELS.after_photos)
+      return missing
+    }
     if (!hasDate) missing.push(MISSING_LABELS.date_responded)
     if (!personnel.trim()) missing.push(MISSING_LABELS.assigned_personnel)
     if (!action.trim()) missing.push(MISSING_LABELS.action_taken)
@@ -273,13 +318,28 @@ function CleanupForm() {
       if (!obstruction) missing.push("Overall obstruction")
       if (!flow) missing.push("Overall water flow")
     }
+    if (totalKg <= 0) missing.push("Waste composition (at least one category)")
+    other.forEach(o => { if (num(o.kg) <= 0) missing.push(`Weight for ${o.name}`) })
     if (photoCount("Before_Clearing") === 0) missing.push(MISSING_LABELS.before_photos)
     if (photoCount("After_Clearing") === 0) missing.push(MISSING_LABELS.after_photos)
     return missing
   }
 
   // ----- saving -----
+  // waste, totals and remarks: sent in every mode
+  const wastePayload = () => ({
+    ...Object.fromEntries(WASTE_CATEGORIES.map(f => [f.key, waste[f.key].trim() === "" ? null : num(waste[f.key])])),
+    // the backend reads `custom_waste` as [{ waste_type, weight_kg }] (same as the mobile app)
+    custom_waste: other.filter(o => num(o.kg) > 0).map(o => ({ waste_type: o.waste_type_id, weight_kg: num(o.kg) })),
+    waste_collected_amount: totalKg,
+    waste_collected_unit: "kg",
+    remarks: remarks.trim(),
+  })
+
   const buildPayload = () => {
+    // post-report: the response details, dates and canal condition were already saved by the pre-report and the sensors
+    if (isPost) return wastePayload()
+
     const iso = hasDate ? picked.toISOString() : null
     return {
       report_scope: "Barangay", // whole-barangay cleanup: sent on every save so old drafts are updated too
@@ -288,14 +348,9 @@ function CleanupForm() {
       date_observed: iso, // the backend copies date_responded into this when the report is completed
       // the barangay's own condition is only kept when no purok has sensor data
       ...(fromSensor ? {} : { overall_water_level: level, overall_obstruction_coverage: obstruction, overall_water_flow_condition: flow }),
-      ...Object.fromEntries(WASTE_CATEGORIES.map(f => [f.key, waste[f.key].trim() === "" ? null : num(waste[f.key])])),
-      // TODO: confirm the field name your serializer expects for the other-waste rows
-      custom_waste_input: other.filter(o => num(o.kg) > 0).map(o => ({ waste_type: o.waste_type_id, name: o.name, weight_kg: num(o.kg) })),
+      ...wastePayload(),
       assigned_personnel: personnel.trim() || null,
       action_taken: action.trim() || null,
-      waste_collected_amount: totalKg,
-      waste_collected_unit: "kg",
-      remarks: remarks.trim(),
     }
   }
 
@@ -373,6 +428,35 @@ function CleanupForm() {
     } finally { setSaving(false) }
   }
 
+  // post-report: save the waste and photos, then POST /complete-post/ takes the canal condition from the sensors
+  const onCompletePost = () => {
+    const missing = validate()
+    if (missing.length) setIncomplete(missing)
+    else setCompleteOpen(true)
+  }
+
+  const onConfirmPost = async () => {
+    setSaving(true)
+    try {
+      const id = await saveReport()
+      const res = await fetchWithAuth(`${API}/api/canal-reports/${id}/complete-post/`, { method: "POST" })
+      if (!res.ok) {
+        const data = await readJson(res)
+        setCompleteOpen(false)
+        const extra = Array.isArray(data?.missing) ? `\nMissing: ${data.missing.join(", ")}` : ""
+        const parts = data && typeof data === "object"
+          ? (Object.values(data).flat().filter(v => typeof v === "string") as string[])
+          : []
+        setPostError((typeof data?.detail === "string" ? data.detail : parts.join("\n") || "Couldn't complete the post-report. Please try again.") + extra)
+        return
+      }
+      router.push(ROUTES.view(id)) // review it there, then verify
+    } catch (e: any) {
+      setCompleteOpen(false)
+      setPostError(e?.message || "Couldn't complete the post-report. Please try again.")
+    } finally { setSaving(false) }
+  }
+
   // copy the files out of the input right away: the FileList is emptied when the input is reset
   const pickFiles = (cat: MediaCategory, files: File[]) => {
     if (!files.length) return
@@ -398,11 +482,31 @@ function CleanupForm() {
         <button type="button" onClick={() => router.push(ROUTES.list)} className="cursor-pointer rounded-full p-1.5 hover:bg-[#e8eef1]" aria-label="Back">
           <ArrowLeft size={20} />
         </button>
-        <h1 className="text-base font-bold">Weekly Cleanup Report</h1>
+        <h1 className="text-base font-bold">{isPost ? "Post-Report" : "Weekly Cleanup Report"}</h1>
       </div>
 
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-4">
+          {/* post-report: what was recorded when the event was responded to, and what the sensors say */}
+          {isPost && (
+            <section className="rounded-xl border border-[#00000030] bg-[#FAFCFD] p-5 shadow-[0_2px_4px_rgba(0,0,0,0.05)]">
+              <PostReportSummary
+                barangay={barangayName}
+                purok={purokNo}
+                detectedAt={detectedAt}
+                severity={severity}
+                personnel={personnel}
+                respondedAt={hasDate ? picked : null}
+                action={action}
+                condition={{ waterLevel: level, obstruction, flow }}
+                system={systemData}
+                systemLoading={systemLoading}
+                completed={reportStatus === "Ready_To_Verify"}
+              />
+            </section>
+          )}
+
+          {!isPost && (<>
           {/* cleanup details */}
           <Section icon={<Brush size={14} />} title="Cleanup details">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -469,6 +573,7 @@ function CleanupForm() {
               </div>
             )}
           </Section>
+          </>)}
         </div>
 
         <div className="flex flex-col gap-4">
@@ -508,6 +613,7 @@ function CleanupForm() {
         <div className="flex flex-col gap-4">
           {/* barangay response */}
           <Section icon={<UserCheck size={14} />} title="Barangay response">
+            {!isPost && (<>
             <div>
               <label className={label}>Assigned Personnel <span className="text-[#D81010]">*</span></label>
               <input value={personnel} onChange={e => setPersonnel(e.target.value)} placeholder="Who carried out the cleanup" className={field} />
@@ -516,11 +622,12 @@ function CleanupForm() {
               <label className={label}>Action Taken <span className="text-[#D81010]">*</span></label>
               <textarea rows={3} value={action} onChange={e => setAction(e.target.value)} placeholder="Describe what was done to clear the canal..." className={field} />
             </div>
+            </>)}
             <div>
               <label className={label}>Waste Collected (auto total)</label>
               <div className={locked}><Lock size={14} />{totalKg.toFixed(2)} kg</div>
             </div>
-            <p className="text-xs text-[#727272]">Puroks without sensors aren&apos;t part of the summary above. If you want to report on them, describe their canal condition here, along with anything else worth noting.</p>
+            {!isPost && <p className="text-xs text-[#727272]">Puroks without sensors aren&apos;t part of the summary above. If you want to report on them, describe their canal condition here, along with anything else worth noting.</p>}
             <div>
               <label className={label}>Remarks</label>
               <textarea rows={3} value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="e.g. Purok 5 has no sensor. Canal was mostly clear, only a few leaves." className={field} />
@@ -565,13 +672,14 @@ function CleanupForm() {
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row-reverse sm:justify-start">
-        <Button onClick={onComplete} disabled={saving || noSignatories} className="flex-1 cursor-pointer bg-[#16a34a] font-bold text-white hover:bg-[#15803d] sm:w-60 sm:flex-none">
-          <CheckCircle2 size={16} className="mr-1" /> Complete &amp; Review
+        <Button onClick={isPost ? onCompletePost : onComplete} disabled={saving || (!isPost && noSignatories)} className="flex-1 cursor-pointer bg-[#16a34a] font-bold text-white hover:bg-[#15803d] sm:w-60 sm:flex-none">
+          <CheckCircle2 size={16} className="mr-1" />
+          {reportStatus === "Ready_To_Verify" ? "Save & Review" : isPost ? "Complete Post-Report" : "Complete & Review"}
         </Button>
         <Button variant="outline" onClick={onSaveDraft} disabled={saving} className="flex-1 cursor-pointer border-[#cbd5e1] text-[#475569] sm:w-60 sm:flex-none">
           <Save size={16} className="mr-1" /> {saving ? "Saving..." : "Save Draft"}
         </Button>
-        {!signatories.loading && !signatories.complete && (
+        {!isPost && !signatories.loading && !signatories.complete && (
           <button type="button" onClick={() => setSignatoryOpen(true)}
             className="cursor-pointer text-xs font-semibold text-[#d97706] underline sm:self-center">
             Why can't I complete this?
@@ -594,12 +702,12 @@ function CleanupForm() {
 
       {/* signatories missing, or the check failed */}
       <IncompleteSignatoriesModal
-        open={signatoryOpen && !signatories.error}
+        open={signatoryOpen && !signatories.error && !isPost}
         missingPositions={signatories.missing}
         onClose={() => setSignatoryOpen(false)}
       />
       <NoticeModal
-        open={signatoryOpen && signatories.error}
+        open={signatoryOpen && signatories.error && !isPost}
         title="Couldn't check signatories"
         message="We couldn't check your barangay's signatories, so completing is turned off for now. Please reload the page and try again."
         onClose={() => setSignatoryOpen(false)}
@@ -637,6 +745,23 @@ function CleanupForm() {
         loading={saving}
         onClose={() => setConfirmOpen(false)}
         onConfirm={onConfirm}
+      />
+
+      {/* post-report: confirm, and explain anything the backend refuses */}
+      <CompletePostModal
+        open={completeOpen}
+        loading={saving}
+        wasteKg={totalKg}
+        photoCount={totalPhotos}
+        onClose={() => setCompleteOpen(false)}
+        onConfirm={onConfirmPost}
+      />
+      <NoticeModal
+        open={postError !== null}
+        title="Can't complete yet"
+        message={postError ?? ""}
+        buttonLabel="OK"
+        onClose={() => setPostError(null)}
       />
 
       {/* full-size photo */}

@@ -1,7 +1,7 @@
 "use client"
 
 // icons
-import { FileDown, Radar, ArchiveRestore, Clock3, ClipboardCheck, FileSearch } from "lucide-react"
+import { FileDown, Radar, FileSearch, ClipboardCheck, CheckCircle2, TriangleAlert, History, FileText } from "lucide-react"
 
 // component
 import { SearchFilter } from "@/components/SearchFilter"
@@ -16,9 +16,11 @@ import { DateRangeFilter } from "@/components/DateRangeFilter"
 
 // react
 import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
 
 // shadcn
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, } from "@/components/ui/table"
 
@@ -28,6 +30,8 @@ import { TablePagination } from "@/components/TablePagination";
 
 // auth
 import { fetchWithAuth } from "@/lib/auth"
+import { api } from "@/lib/api"
+import { ROUTES } from "@/lib/canalReportRoutes"
 
 // lib
 import { usePageCache } from "@/components/hooks/usePageCache"
@@ -35,7 +39,7 @@ import { useWebSocket } from "@/lib/hooks/useWebSocket"
 import { exportOrPrint } from "@/lib/exportOrPrint"
 import { getUser } from "@/lib/auth"
 import { clogSeverityLabel } from '@/lib/clogSeverity'
-import { currentMonthRange, rangeQuery } from "@/lib/dateRange"
+import { currentMonthRange, rangeQuery, toISODate } from "@/lib/dateRange"
 
 
 type Clogs = {
@@ -71,6 +75,10 @@ type Clogs = {
     dominant_waste_type: string
   } | null
   auto_cleared: boolean
+  barangay: number | null
+  responded_at: string | null
+  reopened_at?: string | null
+  previous_responded_at?: string | null
   responded_by_details: {
     user_id: number
     first_name: string
@@ -130,7 +138,7 @@ function ClogTimeline({ clog }: { clog: Clogs }) {
       {step === 'responded' && (
         <>
           <Row label="Responded" value="Response team deployed" />
-          {clog.resolved_at && <Row label="Responded At" value={fmtDateTime(clog.resolved_at)} />}
+          {(clog.responded_at ?? clog.resolved_at) && <Row label="Responded At" value={fmtDateTime(clog.responded_at ?? clog.resolved_at)} />}
           {by && <Row label="Responded By" value={`${by.first_name} ${by.last_name}`} />}
         </>
       )}
@@ -159,6 +167,205 @@ function ClogTimeline({ clog }: { clog: Clogs }) {
         </p>
       )}
     </div>
+  )
+}
+
+// ---------- status pill (same colours as the mobile app) ----------
+const STATUS_PILL: Record<string, string> = {
+  Detected:  'bg-[#FEE2E2] text-[#D81010]',
+  Responded: 'bg-[#E0F2FE] text-[#1565BC]',
+  Cleared:   'bg-[#E7F7EE] text-[#1F9D55]',
+}
+const STATUS_DOT: Record<string, string> = {
+  Detected: 'bg-[#D81010]', Responded: 'bg-[#1565BC]', Cleared: 'bg-[#1F9D55]',
+}
+function StatusPill({ status }: { status: string }) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${STATUS_PILL[status] ?? STATUS_PILL.Detected}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[status] ?? STATUS_DOT.Detected}`} />
+      {status}
+    </span>
+  )
+}
+
+// shown on a clog event that came back because its report was voided
+function ReopenedNotice({ status, compact }: { status: string; compact?: boolean }) {
+  if (compact) {
+    return (
+      <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[10px] font-bold text-[#B45309]">
+        <History size={11} /> Re-detected
+      </span>
+    )
+  }
+  return (
+    <div className="mx-4 flex gap-2 rounded-lg border border-[#FDE68A] bg-[#FFFBEB] p-3 text-[11px] leading-4 text-[#92400E]">
+      <History size={15} className="mt-0.5 shrink-0" />
+      <p>
+        {status === 'Detected'
+          ? 'This is not a new clog event. It was detected again because its earlier report was voided. Respond to it again to make a new report.'
+          : 'This clog event was reported again. Its earlier report was voided.'}
+      </p>
+    </div>
+  )
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0')
+const toLocalInput = (d: Date) =>
+  `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`
+const firstError = (v: unknown): string | undefined =>
+  Array.isArray(v) ? String(v[0]) : typeof v === 'string' ? v : undefined
+
+// Pre-report: the response details. Saving it marks the event as responded and starts the report.
+function ResponseDialog({ event, open, onClose, onSaved, onContinue }: {
+  event: Clogs | null
+  open: boolean
+  onClose: () => void
+  onSaved: (event: Clogs) => void
+  onContinue: (reportId: number) => void
+}) {
+  const [when, setWhen] = useState('')
+  const [personnel, setPersonnel] = useState('')
+  const [action, setAction] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [errors, setErrors] = useState<{ when?: string; personnel?: string; action?: string; general?: string }>({})
+  const [reportId, setReportId] = useState<number | null>(null)
+
+  // a fresh form every time it opens (a re-detected event starts at the original response time)
+  useEffect(() => {
+    if (!open || !event) return
+    setPersonnel(''); setAction(''); setErrors({}); setReportId(null); setSaving(false)
+    setWhen(toLocalInput(new Date(event.previous_responded_at ?? Date.now())))
+  }, [open, event?.event_id])
+
+  if (!event) return null
+  const saved = reportId !== null
+  const clearError = (k: 'when' | 'personnel' | 'action') => setErrors(p => ({ ...p, [k]: undefined, general: undefined }))
+
+  const submit = async () => {
+    const e: typeof errors = {}
+    const t = new Date(when).getTime()
+    if (!personnel.trim()) e.personnel = 'List the personnel assigned to the response.'
+    if (!action.trim()) e.action = 'Describe the action to be taken.'
+    if (isNaN(t)) e.when = 'Enter the date and time of the response.'
+    else if (t < new Date(event.detected_at).getTime()) e.when = "The response time can't be before the clog was detected."
+    else if (t > Date.now() + 2 * 60 * 1000) e.when = "The response time can't be in the future."
+    setErrors(e)
+    if (Object.keys(e).length) return
+
+    setSaving(true)
+    try {
+      const res = await api.post(`/api/clog-events/${event.event_id}/respond/`, {
+        assigned_personnel: personnel.trim(),
+        action_taken: action.trim(),
+        responded_at: new Date(when).toISOString(),
+      })
+      onSaved(res.event)
+      setReportId(res.report_id)
+    } catch (err: any) {
+      const fieldMsg = firstError(err?.assigned_personnel) || firstError(err?.action_taken) || firstError(err?.responded_at)
+      setErrors({
+        personnel: firstError(err?.assigned_personnel),
+        action: firstError(err?.action_taken),
+        when: firstError(err?.responded_at),
+        general: err?.error ?? err?.detail ?? (fieldMsg ? undefined : 'Could not save the response. Please try again.'),
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const input = (bad?: string) =>
+    `w-full rounded-lg border-2 bg-white px-3 py-2 text-sm text-[#122A48] outline-none focus:border-[#1565BC] ${bad ? 'border-[#D81010]' : 'border-[#C6C6C8]'}`
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o && !saving) onClose() }}>
+      <DialogContent className="max-w-md rounded-2xl p-5 text-[#122A48]">
+        {saved ? (
+          <>
+            <DialogHeader className="items-center text-center">
+              <div className="mb-1 flex h-14 w-14 items-center justify-center rounded-full bg-[#E7F7EE]">
+                <CheckCircle2 size={30} color="#1F9D55" />
+              </div>
+              <DialogTitle className="text-base font-bold">Response recorded</DialogTitle>
+              <DialogDescription className="text-xs leading-5 text-[#64748B]">
+                The clog event is now marked as responded. Continue to the report now, or come back to it later from this event or the Barangay Reports page.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-2">
+              <Button onClick={() => onContinue(reportId!)} className="w-full cursor-pointer bg-[#1F9D55] py-5 font-bold text-white hover:bg-[#188046]">
+                Continue to Report
+              </Button>
+              <Button variant="outline" onClick={onClose} className="w-full cursor-pointer border-[#E2E8F0] py-5 font-semibold text-[#475569]">
+                Later
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle className="text-base font-bold">Response Details</DialogTitle>
+              <DialogDescription className="text-[11px] leading-4 text-[#94A3B8]">
+                Nothing is saved until you submit. Responding also marks this clog event as cleared.
+              </DialogDescription>
+            </DialogHeader>
+
+            {event.reopened_at && <div className="-mx-4"><ReopenedNotice status="Detected" /></div>}
+
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="mb-1 block text-[11px] font-bold text-[#64748B]">DATE &amp; TIME RESPONDED *</label>
+                <input
+                  type="datetime-local" value={when} disabled={saving}
+                  min={toLocalInput(new Date(event.detected_at))} max={toLocalInput(new Date())}
+                  onChange={e => { setWhen(e.target.value); clearError('when') }}
+                  className={input(errors.when)}
+                />
+                <p className={`mt-1 text-[11px] ${errors.when ? 'text-[#D81010]' : 'text-[#94A3B8]'}`}>
+                  {errors.when ?? (event.reopened_at && event.previous_responded_at
+                    ? 'Starts at your original response time. Change it if that was wrong.'
+                    : 'Change this if you responded earlier than now.')}
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[11px] font-bold text-[#64748B]">ASSIGNED PERSONNEL *</label>
+                <textarea
+                  rows={2} maxLength={500} value={personnel} disabled={saving}
+                  onChange={e => { setPersonnel(e.target.value); clearError('personnel') }}
+                  placeholder="e.g. Juan Dela Cruz, Maria Santos"
+                  className={input(errors.personnel)}
+                />
+                <p className={`mt-1 text-[11px] ${errors.personnel ? 'text-[#D81010]' : 'text-[#94A3B8]'}`}>
+                  {errors.personnel ?? 'Separate names with commas.'}
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[11px] font-bold text-[#64748B]">ACTION TAKEN *</label>
+                <textarea
+                  rows={4} maxLength={2000} value={action} disabled={saving}
+                  onChange={e => { setAction(e.target.value); clearError('action') }}
+                  placeholder="e.g. Manual clearing of plastic waste at the canal inlet"
+                  className={input(errors.action)}
+                />
+                {errors.action && <p className="mt-1 text-[11px] text-[#D81010]">{errors.action}</p>}
+              </div>
+
+              {errors.general && <p className="text-center text-xs font-medium text-[#D81010]">{errors.general}</p>}
+
+              <div className="mt-1 flex gap-3">
+                <Button variant="outline" onClick={onClose} disabled={saving} className="flex-1 cursor-pointer border-[#E2E8F0] font-semibold text-[#475569]">
+                  Cancel
+                </Button>
+                <Button onClick={submit} disabled={saving} className="flex-1 cursor-pointer bg-[#122A48] font-semibold text-white hover:bg-[#0d1f36]">
+                  {saving ? 'Submitting...' : 'Submit Response'}
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -191,6 +398,10 @@ export default function BarangayClogEvents() {
   // selected clog state
   const [selectedClog, setSelectedClog] = useState<Clogs | null>(null)
 
+  const router = useRouter()
+  const [respondOpen, setRespondOpen] = useState(false)
+  const [openingReport, setOpeningReport] = useState(false)
+
   const { toasts, addToast, removeToast } = useToast()
 
   function getFilteredClogs(clogs: Clogs[], severity: string, status: string, search: string) {
@@ -214,30 +425,40 @@ export default function BarangayClogEvents() {
   })
   const { paginated, currentPage, setCurrentPage, totalItems, itemsPerPage } = usePagination(filtered, rows)
 
-  // summary cards — reflect severity/status filters (clogs is already month-scoped via the backend fetch; text search stays table-only)
-  const cardScopedClogs = clogs
-    .filter(n => severity === 'All Severity' || n.severity === severity)
-    .filter(n => status === 'All Status' || n.status === status)
+  // summary cards: same four counts as the mobile app (everything in the selected date range)
+  const totalCount = clogs.length
+  const detectedCount = clogs.filter(n => n.status === 'Detected').length
+  const respondedCount = clogs.filter(n => n.status === 'Responded').length
+  const resolvedCount = clogs.filter(n => n.status === 'Cleared').length
 
-  const isCleared = (n: Clogs) => n.status === 'Cleared' || n.status === 'Responded'
-
-  const total = cardScopedClogs.length
-  const cleared = cardScopedClogs.filter(isCleared).length
-
-  const clearedWithDuration = cardScopedClogs.filter(n => isCleared(n) && n.resolved_at && n.detected_at)
-  const avgResolutionMinutes = clearedWithDuration.length > 0
-    ? clearedWithDuration.reduce((sum, n) => sum + (new Date(n.resolved_at).getTime() - new Date(n.detected_at).getTime()) / 60000, 0) / clearedWithDuration.length
-    : 0
-
-  const formatDuration = (minutes: number) => {
-    if (minutes <= 0) return "—"
-    const hrs = Math.floor(minutes / 60)
-    const mins = Math.round(minutes % 60)
-    if (hrs === 0) return `${mins}m`
-    return `${hrs}h ${mins}m`
+  // the response was saved: show the new status everywhere right away
+  const applyEvent = (updated: Clogs) => {
+    clogsCache.setData(prev => prev.map(c => (c.event_id === updated.event_id ? updated : c)))
+    setSelectedClog(cur => (cur && cur.event_id === updated.event_id ? updated : cur))
   }
 
-  const completedCount = cardScopedClogs.filter(n => isCleared(n) && n.resolved_at).length
+  // "Complete Report": open the report this event already has (never make a second one)
+  const openReportFor = async (event: Clogs) => {
+    setOpeningReport(true)
+    try {
+      const res = await api.get('/api/canal-reports/mine/')
+      const list: { report_id: number; clog_event: number | null; status: string; is_submitted: boolean }[] = res.results ?? res
+      const existing = Array.isArray(list)
+        ? list.find(r => r.clog_event === event.event_id && r.status !== 'Voided')
+        : null
+      if (!existing) {
+        addToast('No report was found for this event yet. Please try again.', 'error')
+      } else if (existing.is_submitted || ['Ready_To_Verify', 'Verified'].includes(existing.status)) {
+        router.push(ROUTES.view(existing.report_id))   // finished: review / verify there
+      } else {
+        router.push(ROUTES.form(existing.report_id))   // still needs the post-report
+      }
+    } catch (err: any) {
+      addToast(err?.detail ?? err?.error ?? 'Could not open the report. Please try again.', 'error')
+    } finally {
+      setOpeningReport(false)
+    }
+  }
 
   const refetchAll = useCallback(async () => {
     await clogsCache.refetch()
@@ -275,8 +496,22 @@ export default function BarangayClogEvents() {
 
   useWebSocket({
     path: "/ws/clog-events/",
-    onMessage: (newClog) => {
-      clogsCache.setData(prev => [newClog, ...prev])
+    onMessage: (incoming: Clogs) => {
+      // only this barangay's events
+      const user = getUser() as { barangay_id?: number | null } | null
+      if (user?.barangay_id != null && incoming.barangay != null && incoming.barangay !== user.barangay_id) return
+
+      clogsCache.setData(prev => {
+        // an update to an event we already have (e.g. it was just responded to): replace it
+        if (prev.some(c => c.event_id === incoming.event_id)) {
+          return prev.map(c => (c.event_id === incoming.event_id ? incoming : c))
+        }
+        // a new event: only add it if it falls inside the selected date range
+        const day = toISODate(new Date(incoming.detected_at))
+        if ((startDate && day < startDate) || (endDate && day > endDate)) return prev
+        return [incoming, ...prev]
+      })
+      setSelectedClog(cur => (cur && cur.event_id === incoming.event_id ? incoming : cur))
     },
   })
 
@@ -285,7 +520,7 @@ export default function BarangayClogEvents() {
 
   return (
     <>
-      <div className="hidden md:flex md:flex-col md:h-full">
+      <div className="hidden md:flex md:flex-col md:min-h-full">
         {/* filter and export container */}
         <div className="flex justify-between w-full">
           {/* filters */}
@@ -335,10 +570,10 @@ export default function BarangayClogEvents() {
         {/* summary cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 w-full text-[#122A48] mt-3">
           {[
-            { icon: <Radar size={20} color="#2C7B3C" />, bg: "bg-[#B2FBC1]", count: total,label: "Total Clog Events" },
-            { icon: <ArchiveRestore size={20} color="#FF9705" />, bg: "bg-[#F0FBB2]", count: cleared,  label: "Cleared Events"},
-            { icon: <Clock3 size={20} color="#582579" />, bg: "bg-[#E5EAFF]", count: formatDuration(avgResolutionMinutes), label: "Average Resolution Time" },
-            { icon: <ClipboardCheck size={20} color="#A21111" />, bg: "bg-[#D8101059]", count: completedCount,  label: "Completed Events" },
+            { icon: <Radar size={20} color="#2C7B3C" />, bg: "bg-[#B2FBC1]", count: totalCount, label: "Total Events" },
+            { icon: <TriangleAlert size={20} color="#D81010" />, bg: "bg-[#FFE5E5]", count: detectedCount, label: "Detected (awaiting response)" },
+            { icon: <ClipboardCheck size={20} color="#1565BC" />, bg: "bg-[#1565BC29]", count: respondedCount, label: "Responded" },
+            { icon: <CheckCircle2 size={20} color="#1F9D55" />, bg: "bg-[#E7F7EE]", count: resolvedCount, label: "Resolved" },
           ].map(card => (
             <div key={card.label} className="rounded-lg border-2 border-[#C6C6C8] h-17 min-[2560px]:h-20 min-[3840px]:h-24 w-full flex items-center p-3 gap-3 relative bg-[#FAFCFD] shadow-[0_5px_4px_-4px_rgba(0,0,0,0.2)]">
               <div className={`${card.bg} rounded-lg p-2`}>{card.icon}</div>
@@ -351,7 +586,7 @@ export default function BarangayClogEvents() {
         </div>
 
         {/* table and preview */}
-        <div className="flex gap-3 mt-3 flex-1 min-h-[520px]">
+        <div className="flex gap-3 mt-3 flex-1 min-h-[900px]">
 
           {/* Table */}
           <div ref={panelRef} className='bg-[#FAFCFD] border border-[#00000040] shadow-[0_5px_4px_-4px_rgba(0,0,0,0.2)] flex-[3] min-w-0 rounded-lg flex flex-col'>
@@ -406,9 +641,10 @@ export default function BarangayClogEvents() {
                       <TableCell className="text-[#122A48] text-left h-13 text-xs">{clog?.reading_details?.water_level ?? '—'} cm</TableCell>
                       <TableCell className="text-[#122A48] text-left h-13 text-xs">~ {clog.reading_details?.water_flow_rate != null ? Number(clog.reading_details.water_flow_rate).toFixed(5) : '—'} m/s</TableCell>
                       <TableCell className="text-[#122A48] text-left h-13 text-xs">
-                        <span className="inline-flex items-center gap-1.5">
-                          {clog.status}
-                        </span>
+                        <div className="flex flex-col items-start">
+                          <StatusPill status={clog.status} />
+                          {clog.reopened_at && clog.status === 'Detected' && <ReopenedNotice status="Detected" compact />}
+                        </div>
                       </TableCell>
                       <TableCell className="text-[#122A48] text-left h-13 text-xs">
                         {clog.clear_reason ? CLEAR_REASON_SHORT[clog.clear_reason] : '—'}
@@ -464,7 +700,8 @@ export default function BarangayClogEvents() {
           </div>
 
         {/* preview of selected clog event */}
-        <div className="border border-[#C6C6C8] rounded-lg bg-[#F8F9FA] flex-1 min-w-[240px]">
+        <div className="relative border border-[#C6C6C8] rounded-lg bg-[#F8F9FA] flex-1 min-w-[240px]">
+          <div className="absolute inset-0 overflow-y-auto pb-4">
           {!selectedClog ? (
             <div className="flex flex-col gap-3 justify-center items-center h-full">
               <FileSearch size={70} className="text-[#1565BC80]"/>
@@ -481,6 +718,33 @@ export default function BarangayClogEvents() {
               </div>
 
               <hr />
+
+              {/* what to do with this event (same steps as the mobile app) */}
+              {(selectedClog.status !== 'Cleared' || selectedClog.responded_at) ? (
+                <div className="px-4">
+                  {selectedClog.status === 'Detected' && (
+                    <Button onClick={() => setRespondOpen(true)} className="w-full cursor-pointer bg-[#122A48] font-semibold text-white hover:bg-[#0d1f36]">
+                      Mark as Responded
+                    </Button>
+                  )}
+                  {(selectedClog.status === 'Responded' || selectedClog.status === 'Cleared') && (
+                    <Button
+                      onClick={() => openReportFor(selectedClog)}
+                      disabled={openingReport}
+                      className="w-full cursor-pointer bg-[#1F9D55] font-bold text-white hover:bg-[#188046]"
+                    >
+                      <FileText size={16} className="mr-1" />
+                      {openingReport ? 'Opening...' : selectedClog.status === 'Responded' ? 'Complete Report' : 'View Report'}
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <p className="px-4 text-center text-[11px] text-[#94A3B8]">
+                  This event cleared on its own, so no response report is needed.
+                </p>
+              )}
+
+              {selectedClog.reopened_at && <ReopenedNotice status={selectedClog.status} />}
 
               <div className="flex gap-3 px-4 justify-between">
                 <div className="flex flex-col gap-3">
@@ -556,9 +820,7 @@ export default function BarangayClogEvents() {
 
                 <div className="flex justify-between text-xs">
                   <p>Status</p>
-                  <p className="flex items-center gap-1.5">
-                    {selectedClog.status}
-                  </p>
+                  <StatusPill status={selectedClog.status} />
                 </div>
 
                 {selectedClog.clear_reason && (() => {
@@ -585,11 +847,20 @@ export default function BarangayClogEvents() {
 
             </div>
           )}
+          </div>
 
         </div>
 
         </div>
         <Toast toasts={toasts} onRemove={removeToast} />
+
+        <ResponseDialog
+          event={selectedClog}
+          open={respondOpen}
+          onClose={() => setRespondOpen(false)}
+          onSaved={applyEvent}
+          onContinue={(reportId) => { setRespondOpen(false); router.push(ROUTES.form(reportId)) }}
+        />
 
         <PrintReport
           reportTitle={printTitle}

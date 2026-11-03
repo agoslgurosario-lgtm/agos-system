@@ -1,382 +1,376 @@
-"use client";
+"use client"
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { ChevronDown, ChevronLeft, ChevronRight, LoaderCircle, Search } from "lucide-react";
+// react
+import { Suspense, useEffect, useMemo, useRef, useState } from "react"
+import { useSearchParams } from "next/navigation"
 
-import AlertModal from "@/components/Alerts/AlertModal";
+// icons
+import { Check, ChevronDown, Siren } from "lucide-react"
 
-import { useAlerts, type AlertTypeFilter, type DateFilter } from "@/lib/hooks/useAlerts";
-import { ALERT_META, ALERT_STYLE } from "@/lib/alerts";
-import { getUser } from "@/lib/auth";
-import type { Alert } from "@/types/alert";
+// shadcn
+import { Button } from "@/components/ui/button"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
-const PAGE_SIZE = 10; // minimum rows per page
-// used to work out how many rows fit on screen (header row, row height, pagination footer, bottom gap)
-const THEAD_H = 40;
-const ROW_H = 45;
-const FOOTER_H = 56;
-const BOTTOM_GAP = 16;
-const ALL_BARANGAYS = "All";
+// auth / lib
+import { api } from "@/lib/api"
+import { getUser } from "@/lib/auth"
+import { useWebSocket } from "@/lib/hooks/useWebSocket"
+import { ALERT_STYLE } from "@/lib/constant"
+import { rangeQuery, toISODate } from "@/lib/dateRange"
+import { usePageCache } from "@/components/hooks/usePageCache"
+import { usePagination } from "@/components/hooks/usePagination"
+import { useFillRows } from "@/components/hooks/useFillRows"
+import { usePolling } from "@/components/hooks/usePolling"
 
-// Same chips as the admin alerts page. Remove any your Barangay users shouldn't see.
-// ("Report Submitted" is intentionally not here, and useAlerts drops those alerts.)
-const TYPE_CHIPS: { value: string; label: string }[] = [
-  { value: "All", label: "All" },
-  { value: "Water_Level_Rising", label: "Water Level Rising" },
-  { value: "Low_Clog_Alert", label: "Low Clog" },
-  { value: "Moderate_Clog_Alert", label: "Moderate Clog" },
-  { value: "Critical_Clog", label: "Critical Clog" },
-  { value: "Node_Offline", label: "Node Offline" },
-  { value: "Low_Battery", label: "Low Battery" },
-  { value: "Weak_Signal", label: "Weak Signal" },
-  { value: "Sensor_Failure", label: "Sensor Failure" },
-];
+import { ALERT_META, type Alert } from "@/components/Alerts/AlertCard"
+import { AlertDetailDialog } from "@/components/Alerts/AlertDetailDialog"
+import { SearchFilter } from "@/components/SearchFilter"
+import { DateRangeFilter } from "@/components/DateRangeFilter"
+import { TablePagination } from "@/components/TablePagination"
+import { SpinnerIcon } from "@/components/SpinnerIcon"
 
-const DATE_OPTIONS: { value: DateFilter; label: string }[] = [
-  { value: "Today", label: "Today" },
-  { value: "7Days", label: "Last 7 days" },
-  { value: "30Days", label: "Last 30 days" },
-];
+type FilterOption = { value: string; label: string; types: string[] | null }
+type FilterGroup = { key: string; label: string; types?: string[] | null; options?: FilterOption[] }
 
-function formatDetectedAt(timestamp: string) {
-  return new Date(timestamp).toLocaleString("en-PH", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
+const FILTER_GROUPS: FilterGroup[] = [
+  { key: "All", label: "All", types: null },
+  { key: "Water_Level_Rising", label: "Water Level Rising", types: ["Water_Level_Rising"] },
+  {
+    key: "Clog", label: "Clog",
+    options: [
+      { value: "Clog:all",            label: "All Clog", types: ["Low_Clog_Alert", "Moderate_Clog_Alert", "Critical_Clog"] },
+      { value: "Low_Clog_Alert",      label: "Low Clog",      types: ["Low_Clog_Alert"] },
+      { value: "Moderate_Clog_Alert", label: "Moderate Clog", types: ["Moderate_Clog_Alert"] },
+      { value: "Critical_Clog",       label: "Critical Clog", types: ["Critical_Clog"] },
+    ],
+  },
+  {
+    key: "NodeHealth", label: "Node Health",
+    options: [
+      { value: "NodeHealth:all", label: "All Node Health", types: ["Node_Offline", "Low_Battery", "Weak_Signal", "Sensor_Failure"] },
+      { value: "Node_Offline",   label: "Node Offline",    types: ["Node_Offline"] },
+      { value: "Low_Battery",    label: "Low Battery",     types: ["Low_Battery"] },
+      { value: "Weak_Signal",    label: "Weak Signal",     types: ["Weak_Signal"] },
+      { value: "Sensor_Failure", label: "Sensor Failure",  types: ["Sensor_Failure"] },
+    ],
+  },
+  {
+    key: "Reports", label: "Reports",
+    options: [
+      { value: "Reports:all",     label: "All Reports", types: ["Report_Due_Soon", "Report_Overdue"] },
+      { value: "Report_Due_Soon", label: "Due Soon",    types: ["Report_Due_Soon"] },
+      { value: "Report_Overdue",  label: "Overdue",     types: ["Report_Overdue"] },
+    ],
+  },
+  {
+    key: "Notices", label: "Notices",
+    options: [
+      { value: "Notices:all",             label: "All Notices",         types: ["Node_Inspection_Request", "Waste_Type_Approved", "Waste_Type_Rejected"] },
+      { value: "Node_Inspection_Request", label: "Inspection Request",  types: ["Node_Inspection_Request"] },
+      { value: "Waste_Type_Approved",     label: "Waste Type Approved", types: ["Waste_Type_Approved"] },
+      { value: "Waste_Type_Rejected",     label: "Waste Type Rejected", types: ["Waste_Type_Rejected"] },
+    ],
+  },
+]
+
+// the alert types a selected filter value stands for (null = everything)
+const typesFor = (value: string): string[] | null => {
+  for (const g of FILTER_GROUPS) {
+    if (g.key === value && !g.options) return g.types ?? null
+    const opt = g.options?.find(o => o.value === value)
+    if (opt) return opt.types
+  }
+  return null
 }
 
-// What the Type column shows. Types missing from ALERT_META (Weak_Signal, Node_Offline, ...)
-// fall back to the chip label, then to the raw type with underscores removed.
-function typeLabel(alertType: string) {
-  return (
-    ALERT_META[alertType as keyof typeof ALERT_META]?.label ??
-    TYPE_CHIPS.find((c) => c.value === alertType)?.label ??
-    alertType.replace(/_/g, " ")
-  );
-}
+const chipClass = (active: boolean) =>
+  `cursor-pointer rounded-full border px-4 py-1.5 text-xs font-medium transition-colors ${
+    active
+      ? "border-[#1565BC] bg-[#1565BC] text-white hover:bg-[#135aa6]"
+      : "border-[#C6C6C8] bg-transparent text-[#122A48] hover:bg-[#c3dffe]"
+  }`
 
-function SelectBox({
-  value,
-  onChange,
-  children,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  children: React.ReactNode;
-}) {
+function FilterDropdown({ group, value, onChange }: { group: FilterGroup; value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const options = group.options ?? []
+  const selected = options.find(o => o.value === value)
+
+  // close when clicking outside
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", onDown)
+    return () => document.removeEventListener("mousedown", onDown)
+  }, [])
+
+  const isAllOption = selected && selected.value === options[0].value
+  const label = selected && !isAllOption ? `${group.label}: ${selected.label}` : group.label
+
   return (
-    <div className="relative">
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="appearance-none rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-8 text-xs font-medium text-slate-700 shadow-sm outline-none focus:border-[#1565C0]"
-      >
-        {children}
-      </select>
-      <ChevronDown
-        size={14}
-        className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500"
-      />
+    <div ref={ref} className="relative">
+      <button type="button" onClick={() => setOpen(o => !o)} className={`${chipClass(!!selected)} flex items-center gap-1.5`}>
+        {label}
+        <ChevronDown size={13} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 z-20 mt-1 min-w-[170px] rounded-lg border border-[#C6C6C8] bg-white p-1 shadow-lg">
+          {options.map(o => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => { onChange(o.value); setOpen(false) }}
+              className={`flex w-full cursor-pointer items-center justify-between gap-3 rounded-md px-2.5 py-2 text-left text-xs text-[#122A48] hover:bg-[#c3dffe] ${
+                o.value === value ? "font-semibold" : ""
+              }`}
+            >
+              {o.label}
+              {o.value === value && <Check size={13} className="text-[#1565BC]" />}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
-  );
+  )
+}
+
+const labelOf = (type: string) => ALERT_META[type]?.label ?? type.replace(/_/g, " ")
+
+const formatDetected = (ts: string) =>
+  new Date(ts).toLocaleString("en-PH", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })
+
+const fetchAlertsRange = async (from: string, to: string): Promise<Alert[]> => {
+  const list: Alert[] = []
+  let endpoint: string | null = `/api/alerts/?${rangeQuery(from, to)}&page_size=100`
+  for (let i = 0; endpoint && i < 50; i++) {
+    const data = await api.get(endpoint)
+    if (Array.isArray(data)) { list.push(...data); break }
+    list.push(...(data.results ?? []))
+    if (data.next) {
+      const next = new URL(data.next, window.location.origin)
+      endpoint = next.pathname + next.search
+    } else {
+      endpoint = null
+    }
+  }
+  return list.filter(a => a.alert_type !== "Report_Submitted")
 }
 
 function AlertsContent() {
-  const [alertType, setAlertType] = useState<string>("All");
-  const [dateFilter, setDateFilter] = useState<DateFilter>("Today");
-  const [barangay, setBarangay] = useState(ALL_BARANGAYS);
-  const [query, setQuery] = useState("");
-  const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
-  const [page, setPage] = useState(1);
+  // filter states
+  const [search, setSearch] = useState("")
+  const [chip, setChip] = useState("All")
+  // date range: opens on today; clearing it goes back to today instead of loading every alert
+  const [startDate, setStartDate] = useState(() => toISODate(new Date()))
+  const [endDate, setEndDate] = useState(() => toISODate(new Date()))
 
-  const {
-    alerts: allAlerts,
-    loading,
-    refreshing,
-    error,
-    refetch,
-    markAsRead,
-  } = useAlerts(alertType as AlertTypeFilter, dateFilter);
+  const handleRangeChange = (from: string, to: string) => {
+    const today = toISODate(new Date())
+    setStartDate(from || to ? from : today)
+    setEndDate(from || to ? to : today)
+  }
 
-  // Barangay users only see their own barangay's alerts. Admin/MENRO have no barangay, so see all.
-  // Read in an effect so the server render and first client render match.
-  type Scope = { id: number | null; name: string | null } | null;
-  const [scope, setScope] = useState<Scope>(null);
-  useEffect(() => {
-    const u = getUser() as {
-      user_role?: string;
-      barangay_id?: number | null;
-      barangay_details?: { barangay_name?: string } | null;
-    } | null;
-    if (u && (u.user_role === "Barangay" || u.barangay_id != null)) {
-      setScope({ id: u.barangay_id ?? null, name: u.barangay_details?.barangay_name ?? null });
-    }
-  }, []);
+  // cached per range
+  const alertsCache = usePageCache(
+    `barangayAlerts:${startDate}:${endDate}`,
+    () => fetchAlertsRange(startDate, endDate),
+    [] as Alert[],
+    { autoFetch: false }
+  )
+  const alerts = alertsCache.data
+  const loading = alertsCache.loading
+  const fetchError = alertsCache.error
 
-  const alerts = useMemo(() => {
-    if (!scope) return allAlerts;
-    // match by id when the alert has one, otherwise by name; anything we can't match is hidden
-    return allAlerts.filter((a) =>
-      a.barangay_id != null && scope.id != null
-        ? a.barangay_id === scope.id
-        : !!scope.name && a.barangay_name === scope.name
-    );
-  }, [allAlerts, scope]);
+  const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null)
+  const [dialogOpen, setDialogOpen] = useState(false)
 
-  const alertId = useSearchParams().get("alertId");
-  const openedRef = useRef<string | null>(null);
+  const filteredAlerts = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const types = typesFor(chip)
+    return alerts.filter(a => {
+      if (types && !types.includes(a.alert_type)) return false
+      if (q && !(
+        labelOf(a.alert_type).toLowerCase().includes(q) ||
+        a.alert_type.replace(/_/g, " ").toLowerCase().includes(q) ||
+        a.node_name?.toLowerCase().includes(q) ||
+        a.barangay_name?.toLowerCase().includes(q)
+      )) return false
+      return true
+    })
+  }, [alerts, search, chip])
+
+  const { panelRef, tableWrapRef, rows } = useFillRows({ rowHeight: 49.3, initialRows: 9, deps: [loading] })
+  const { currentPage, setCurrentPage, totalPages, paginated, totalItems, itemsPerPage } = usePagination(filteredAlerts, rows)
+
+  useEffect(() => { setCurrentPage(1) }, [search, chip, startDate, endDate])
+  useEffect(() => { alertsCache.refetch() }, [startDate, endDate])
+  usePolling(async () => { await alertsCache.refetch() }, 30000)
+
+  const markRead = async (alert: Alert) => {
+    if (alert.is_read) return
+    try {
+      await api.post(`/api/alerts/${alert.alert_id}/read/`, {})
+      alertsCache.setData(prev => prev.map(a => a.alert_id === alert.alert_id ? { ...a, is_read: true } : a))
+    } catch {}
+  }
 
   const handleRowClick = (alert: Alert) => {
-    setSelectedAlert(alert);
-    if (!alert.is_read) markAsRead(alert.alert_id);
-  };
+    setSelectedAlert(alert)
+    setDialogOpen(true)
+    markRead(alert)
+  }
 
-  // open a specific alert when linked from a notification (?alertId=123)
+  // open a specific alert when linked from a notification
+  const alertId = useSearchParams().get("alertId")
+  const openedRef = useRef<string | null>(null)
   useEffect(() => {
-    if (!alertId || loading || openedRef.current === alertId) return;
-    const match = alerts.find((a) => String(a.alert_id) === alertId);
+    if (!alertId || loading || openedRef.current === alertId) return
+    const match = alerts.find(a => String(a.alert_id) === alertId)
     if (match) {
-      openedRef.current = alertId;
-      handleRowClick(match);
+      openedRef.current = alertId
+      handleRowClick(match)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [alertId, loading, alerts]);
+  }, [alertId, loading, alerts])
 
-  // Barangay options come from the data itself. Barangay-role users only receive
-  // their own barangay's alerts, so the dropdown hides itself for them.
-  const barangayOptions = useMemo(() => {
-    const names = new Set<string>();
-    alerts.forEach((a) => a.barangay_name && names.add(a.barangay_name));
-    return Array.from(names).sort();
-  }, [alerts]);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return alerts.filter((a) => {
-      if (barangay !== ALL_BARANGAYS && a.barangay_name !== barangay) return false;
-      if (!q) return true;
-      return [
-        a.node_name,
-        a.barangay_name,
-        typeLabel(a.alert_type),
-        a.alert_type.replace(/_/g, " "), // "weak signal", "low clog alert", ...
-        formatDetectedAt(a.timestamp),
-      ]
-        .filter(Boolean)
-        .some((v) => String(v).toLowerCase().includes(q));
-    });
-  }, [alerts, query, barangay]);
-
-  // Show as many rows as fit the screen so the table fills the card (never fewer than PAGE_SIZE)
-  const tableWrapRef = useRef<HTMLDivElement>(null);
-  const [pageSize, setPageSize] = useState(PAGE_SIZE);
-
-  useEffect(() => {
-    const calc = () => {
-      const el = tableWrapRef.current;
-      if (!el) return;
-      const available =
-        window.innerHeight - el.getBoundingClientRect().top - THEAD_H - FOOTER_H - BOTTOM_GAP;
-      setPageSize(Math.max(PAGE_SIZE, Math.floor(available / ROW_H)));
-    };
-    calc();
-    window.addEventListener("resize", calc);
-    return () => window.removeEventListener("resize", calc);
-  }, []);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const rows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filtered.slice(start, start + pageSize);
-  }, [filtered, page, pageSize]);
-
-  // if the list shrinks (filters, live updates), never stay on a page that no longer exists
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
-
-  const busy = loading || refreshing;
+  // live alerts: only this barangay's, and only ones inside the selected range
+  useWebSocket({
+    path: "/ws/alerts/",
+    onMessage: (incoming: Alert & { barangay_id?: number | null }) => {
+      if (incoming.alert_type === "Report_Submitted") return
+      const user = getUser() as { barangay_id?: number | null } | null
+      if (incoming.barangay_id != null && user?.barangay_id != null && incoming.barangay_id !== user.barangay_id) return
+      const day = toISODate(new Date(incoming.timestamp))
+      if ((startDate && day < startDate) || (endDate && day > endDate)) return
+      alertsCache.setData(prev => prev.some(a => a.alert_id === incoming.alert_id) ? prev : [incoming, ...prev])
+    },
+  })
 
   return (
-    // no padding of its own: the layout already pads the page, like the admin alerts page
-    <div className="flex min-h-full flex-col gap-3">
-      {/* Search + filters */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="relative w-full max-w-[400px]">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setPage(1);
-            }}
-            placeholder="Search notification…"
-            className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm shadow-sm outline-none focus:border-[#1565C0]"
-          />
+    <>
+      <div className="flex h-full flex-col">
+        {/* filter container */}
+        <div className="flex justify-between">
+          <SearchFilter value={search} onChange={setSearch} placeholder="Search notification..." height="h-9" width="w-100" />
+          <DateRangeFilter from={startDate} to={endDate} onChange={handleRangeChange} align="right" width="w-[210px]" />
         </div>
 
-        <div className="flex items-center gap-2">
-          {barangayOptions.length > 1 && (
-            <SelectBox
-              value={barangay}
-              onChange={(v) => {
-                setBarangay(v);
-                setPage(1);
-              }}
-            >
-              <option value={ALL_BARANGAYS}>All Barangay</option>
-              {barangayOptions.map((b) => (
-                <option key={b} value={b}>
-                  {b}
-                </option>
-              ))}
-            </SelectBox>
+        {/* notif list container */}
+        <div ref={panelRef} className="mt-2 flex min-h-[604px] flex-1 flex-col rounded-lg bg-[#F8F9FA] shadow-[0_0_8px_rgba(0,0,0,0.15)]">
+          <div className="flex w-full flex-wrap items-center justify-between gap-2 p-3">
+            <p className="font-semibold text-[#122A48]">Notifications</p>
+            <div className="flex flex-wrap gap-2">
+              {FILTER_GROUPS.map(g =>
+                g.options ? (
+                  <FilterDropdown key={g.key} group={g} value={chip} onChange={setChip} />
+                ) : (
+                  <Button key={g.key} onClick={() => setChip(g.key)} className={chipClass(chip === g.key)}>
+                    {g.label}
+                  </Button>
+                )
+              )}
+            </div>
+          </div>
+
+          <hr />
+
+          {/* alert table */}
+          <div ref={tableWrapRef}>
+            <Table>
+              <TableHeader className="h-12 border border-[#CFD8DC] bg-[#e8eef1b4]">
+                <TableRow>
+                  <TableHead className="text-left text-xs font-semibold text-[#727272]">NODE</TableHead>
+                  <TableHead className="text-left text-xs font-semibold text-[#727272]">TYPE</TableHead>
+                  <TableHead className="text-left text-xs font-semibold text-[#727272]">BARANGAY</TableHead>
+                  <TableHead className="text-left text-xs font-semibold text-[#727272]">DETECTED</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {!loading && !fetchError && paginated.map(alert => {
+                  const style = ALERT_STYLE[alert.alert_type] ?? ALERT_STYLE.default
+                  return (
+                    <TableRow
+                      key={alert.alert_id}
+                      onClick={() => handleRowClick(alert)}
+                      className={`cursor-pointer border-b border-[#C6C6C8] hover:bg-[#f5f5f5] ${alert.is_read ? "opacity-60" : ""}`}
+                    >
+                      <TableCell className="h-[49.3px] text-left text-xs text-[#122A48]">{alert.node_name ?? "—"}</TableCell>
+                      <TableCell className="h-[49.3px] text-left text-xs">
+                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-semibold ${style.icon}`}>
+                          {labelOf(alert.alert_type)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="h-[49.3px] text-left text-xs text-[#122A48]">{alert.barangay_name ?? "—"}</TableCell>
+                      <TableCell className="h-[49.3px] text-left text-xs text-[#122A48]">{formatDetected(alert.timestamp)}</TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* loading */}
+          {loading && !fetchError && (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3">
+              <SpinnerIcon size={32} color="#1565BC" />
+              <p className="text-sm text-[#727272]">Loading alerts...</p>
+            </div>
           )}
 
-          <SelectBox
-            value={dateFilter}
-            onChange={(v) => {
-              setDateFilter(v as DateFilter);
-              setPage(1);
-            }}
-          >
-            {DATE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </SelectBox>
+          {/* error */}
+          {fetchError && (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3">
+              {alertsCache.retrying ? (
+                <div className="flex flex-col items-center gap-3">
+                  <SpinnerIcon size={32} color="#D81010" />
+                  <p className="text-sm font-semibold text-[#D81010]">Retrying...</p>
+                </div>
+              ) : (
+                <>
+                  <div className="text-center text-[#D81010]">
+                    <p className="font-semibold">Failed to load alerts</p>
+                    <p className="text-sm">Please try again later</p>
+                  </div>
+                  <Button
+                    onClick={() => alertsCache.refetch()}
+                    className="cursor-pointer rounded-lg border border-[#D81010] bg-transparent px-3 py-2 text-sm text-[#D81010] hover:bg-gray-100"
+                  >
+                    Retry
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* empty */}
+          {!loading && !fetchError && filteredAlerts.length === 0 && (
+            <div className="flex flex-1 flex-col items-center justify-center gap-1">
+              <div className="my-2 rounded-full bg-[#E5E5E6] p-4">
+                <Siren size={30} color="#727272" />
+              </div>
+              <p className="text-sm font-bold text-[#122A48]">No alerts found</p>
+              <p className="text-xs text-[#727272]">No alerts match this date range or filter.</p>
+            </div>
+          )}
+
+          {/* pagination */}
+          <div className="mt-auto">
+            {!loading && !fetchError && filteredAlerts.length > 0 && (
+              <TablePagination
+                totalItems={totalItems}
+                itemsPerPage={itemsPerPage}
+                currentPage={currentPage}
+                onPageChange={setCurrentPage}
+              />
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Notifications card */}
-      <section className="flex flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-4 py-3">
-          <h2 className="mr-2 text-base font-bold text-[#122A48]">Notifications</h2>
-          {/* chips sit on the right, same as the admin alerts page */}
-          <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
-            {TYPE_CHIPS.map((chip) => (
-              <button
-                key={chip.value}
-                onClick={() => {
-                  setAlertType(chip.value);
-                  setPage(1);
-                }}
-                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                  alertType === chip.value
-                    ? "border-[#1565C0] bg-[#1565C0] text-white"
-                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                {chip.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div ref={tableWrapRef} className="flex flex-1 flex-col overflow-x-auto">
-          <table className="w-full table-fixed text-left text-xs">
-            <thead className="bg-slate-100 text-[11px] uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="w-[14%] px-4 py-3 font-semibold">Node</th>
-                <th className="w-[26%] px-4 py-3 font-semibold">Type</th>
-                <th className="w-[30%] px-4 py-3 font-semibold">Barangay</th>
-                <th className="w-[30%] px-4 py-3 font-semibold">Detected</th>
-              </tr>
-            </thead>
-            <tbody>
-              {!busy &&
-                !error &&
-                rows.map((a) => {
-                  const style = ALERT_STYLE[a.alert_type];
-                  return (
-                    <tr
-                      key={a.alert_id}
-                      onClick={() => handleRowClick(a)}
-                      className="cursor-pointer border-t border-slate-200 text-slate-700 hover:bg-slate-50"
-                    >
-                      <td className={`px-4 py-3.5 ${a.is_read ? "" : "font-semibold"}`}>
-                        {a.node_name ?? "—"}
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${style?.badgeBg} ${style?.badgeText}`}
-                        >
-                          {typeLabel(a.alert_type)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3.5">{a.barangay_name ?? "—"}</td>
-                      <td className="px-4 py-3.5">{formatDetectedAt(a.timestamp)}</td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
-
-          {busy && !error && (
-            <div className="flex flex-1 flex-col items-center justify-center gap-2 p-10 text-sm text-slate-600">
-              <LoaderCircle className="animate-spin text-[#2F6FED]" />
-              Loading...
-            </div>
-          )}
-
-          {error && (
-            <div className="flex flex-1 flex-col items-center justify-center py-10">
-              <p className="mb-3 text-sm font-semibold text-[#D81010]">
-                Failed to load alerts. Please try again.
-              </p>
-              <button
-                onClick={() => refetch()}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600"
-              >
-                Retry
-              </button>
-            </div>
-          )}
-
-          {!busy && !error && filtered.length === 0 && (
-            <div className="flex flex-1 items-center justify-center py-10">
-              <p className="text-center text-sm text-slate-500">No alerts found.</p>
-            </div>
-          )}
-        </div>
-
-        {/* "Page 1 of N" + Previous / Next, same footer as the Waste Classification page */}
-        {!busy && !error && filtered.length > 0 && (
-          <div className="mt-auto flex items-center justify-between border-t border-slate-200 px-3 py-3">
-            <p className="text-xs text-[#727272]">
-              Page {page} of {totalPages}
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-[#122A48] hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 disabled:hover:bg-white"
-              >
-                <ChevronLeft size={14} />
-                Previous
-              </button>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-[#122A48] hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 disabled:hover:bg-white"
-              >
-                Next
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-        )}
-      </section>
-
-      <AlertModal alert={selectedAlert} onClose={() => setSelectedAlert(null)} />
-    </div>
-  );
+      <AlertDetailDialog alert={selectedAlert} open={dialogOpen} onOpenChange={setDialogOpen} />
+    </>
+  )
 }
 
 export default function AlertsPage() {
@@ -384,5 +378,5 @@ export default function AlertsPage() {
     <Suspense>
       <AlertsContent />
     </Suspense>
-  );
+  )
 }

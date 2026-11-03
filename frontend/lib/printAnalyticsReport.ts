@@ -7,7 +7,8 @@ export interface AnalyticsReportData {
   to: string; // "YYYY-MM-DD"
   generatedBy: string;
   composition: WasteCompositionItem[];
-  barangays: TopBarangay[];
+  /** per-barangay breakdown; leave out on single-barangay pages */
+  barangays?: TopBarangay[];
   records: WasteClassification[];
 }
 
@@ -74,7 +75,7 @@ function table(
   </table>`;
 }
 
-function buildHtml({ from, to, generatedBy, composition, barangays, records }: AnalyticsReportData) {
+function buildHtml({ from, to, generatedBy, composition, barangays = [], records }: AnalyticsReportData) {
   const period = from === to ? dayLabel(from) : `${dayLabel(from)} – ${dayLabel(to)}`;
   const generatedAt = new Date().toLocaleString("en-PH", DATE_TIME);
   const logo = `${window.location.origin}/ROS-logo.jpg`;
@@ -209,9 +210,7 @@ function buildHtml({ from, to, generatedBy, composition, barangays, records }: A
     <h2>Classified Waste Type</h2>
     ${compositionTable}
 
-    <h2>Barangays with Waste Data</h2>
-    ${barangayTable}
-
+    ${barangays.length ? `<h2>Barangays with Waste Data</h2>\n    ${barangayTable}\n` : ""}
     <h2>Waste Classification Records</h2>
     ${recordTable}
   </td></tr></tbody>
@@ -221,12 +220,6 @@ function buildHtml({ from, to, generatedBy, composition, barangays, records }: A
 </html>`;
 }
 
-/**
- * Opens the browser print dialog with the analytics report, styled like the
- * admin reports (municipality letterhead, navy tables).
- * It prints from a hidden iframe, so the app's layout and global print CSS
- * can't blank it out. Choose "Save as PDF" as the destination to download it.
- */
 export function printAnalyticsReport(data: AnalyticsReportData) {
   const iframe = document.createElement("iframe");
   iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";

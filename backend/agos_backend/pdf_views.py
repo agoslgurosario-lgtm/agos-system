@@ -4,7 +4,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.users.permissions import IsAdminOrMENRO
+from apps.users.permissions import IsAdminOrMENROOrBarangay
 from agos_backend.pdf_utils import render_to_pdf
 
 MAX_ROWS = 20000
@@ -20,7 +20,7 @@ class TablePdfExportView(APIView):
     Renders the table a page already shows into the standard AGOS report PDF. iPhone and
     iPad Safari ignore window.print(), so the web app sends the same rows it would print.
     """
-    permission_classes = [IsAdminOrMENRO]
+    permission_classes = [IsAdminOrMENROOrBarangay]   # barangay pages export on iPhone/iPad too
 
     def post(self, request):
         data = request.data

@@ -1,13 +1,13 @@
 "use client"
 
-import { X, FileText } from "lucide-react"
+import { X, FileText, Activity } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { ALERT_STYLE } from "@/lib/constant"
 import { getUserRole } from "@/lib/auth"
-import { ALERT_META, ContextRow, type Alert } from "@/components/Alerts/AlertCard"
+import { ALERT_META, ContextRow, NO_NODE_ALERTS, type Alert } from "@/components/Alerts/AlertCard"
 
 interface AlertDetailDialogProps {
   alert: Alert | null
@@ -26,6 +26,15 @@ export function AlertDetailDialog({ alert, open, onOpenChange }: AlertDetailDial
 
   const isReport = alert.alert_type === "Report_Submitted"
   const reportId = isReport ? (alert.alert_context as { report_id?: number }).report_id : undefined
+
+  const noNode = NO_NODE_ALERTS.includes(alert.alert_type)
+  const isReminder = alert.alert_type === "Report_Due_Soon" || alert.alert_type === "Report_Overdue"
+  const isInspection = alert.alert_type === "Node_Inspection_Request"
+
+  const goTo = (path: string) => {
+    onOpenChange(false)
+    router.push(path)
+  }
 
   const handleViewReport = () => {
     if (!reportId) return
@@ -58,7 +67,7 @@ export function AlertDetailDialog({ alert, open, onOpenChange }: AlertDetailDial
         <hr />
 
         <div className="flex flex-col gap-2 text-sm">
-          {!isReport && (
+          {!isReport && !noNode && (
             <div className="flex justify-between">
               <p className="text-[#727272]">Node</p>
               <p className="font-medium">{alert.node_name ?? "—"}</p>
@@ -89,6 +98,26 @@ export function AlertDetailDialog({ alert, open, onOpenChange }: AlertDetailDial
             >
               <FileText size={14} className="mr-1.5" />
               View Report
+            </Button>
+          )}
+
+          {isReminder && (
+            <Button
+              onClick={() => goTo("/barangay/barangay-reports")}
+              className="mt-2 w-full bg-[#1565BC] hover:bg-[#124f96] cursor-pointer"
+            >
+              <FileText size={14} className="mr-1.5" />
+              Go to Reports
+            </Button>
+          )}
+
+          {isInspection && (
+            <Button
+              onClick={() => goTo("/barangay/health")}
+              className="mt-2 w-full bg-[#1565BC] hover:bg-[#124f96] cursor-pointer"
+            >
+              <Activity size={14} className="mr-1.5" />
+              Go to Node Health
             </Button>
           )}
         </div>

@@ -53,8 +53,11 @@ import { isIOSDevice } from "@/lib/device"
 import type { CanalMonitoringReport } from "@/types/report"
 
 const sortKey = (r: CanalMonitoringReport) => new Date(reportDate(r)).getTime()
-// any report that has moved past Draft can be exported (a draft may not have its date yet)
-const canExport = (r: CanalMonitoringReport) => r.status !== "Draft"
+// same rule as the mobile app: a report is "in progress" until it is completed (Draft, or waiting for its post-report)
+const isInProgress = (r: CanalMonitoringReport) =>
+  !r.is_submitted && !["Ready_To_Verify", "Verified"].includes(r.status)
+// only completed reports can be exported (an in-progress one may not have its date yet)
+const canExport = (r: CanalMonitoringReport) => !isInProgress(r)
 
 const fetchReportsRaw = async (): Promise<CanalMonitoringReport[]> => {
   const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/canal-reports/`)
@@ -69,6 +72,8 @@ export default function MyBarangayReports() {
   // filter states
   const [search, setSearch] = useState<string>("")
   const [filterTimeliness, setFilterTimeliness] = useState<string>("All")
+  const [filterSeverity, setFilterSeverity] = useState<string>("All")
+  const [filterStatus, setFilterStatus] = useState<string>("All")
 
   // date range (empty = show every report)
   const [startDate, setStartDate] = useState<string>("")
@@ -90,6 +95,8 @@ export default function MyBarangayReports() {
   const q = search.toLowerCase()
   const filtered = scopedReports
     .filter(r => filterTimeliness === "All" || submissionStatus(r) === filterTimeliness)
+    .filter(r => filterSeverity === "All" || r.severity === filterSeverity)
+    .filter(r => filterStatus === "All" || r.status === filterStatus)
     .filter(r =>
       [purokLabel(r), filedByName(r), r.assigned_personnel].some(field => field?.toLowerCase().includes(q))
     )
@@ -97,6 +104,8 @@ export default function MyBarangayReports() {
 
   const { panelRef, tableWrapRef, rows } = useFillRows({ rowHeight: 56, initialRows: 5, deps: [loading] })
   const { paginated, currentPage, setCurrentPage, totalItems, itemsPerPage } = usePagination(filtered, rows)
+
+  useEffect(() => { setCurrentPage(1) }, [search, filterTimeliness, filterSeverity, filterStatus, startDate, endDate])
 
   // summary cards
   const totalReports = scopedReports.length
@@ -222,6 +231,28 @@ export default function MyBarangayReports() {
             </SelectContent>
           </Select>
 
+          {/* severity */}
+          <Select value={filterSeverity} onValueChange={setFilterSeverity}>
+            <SelectTrigger className={selectTrigger}><SelectValue /></SelectTrigger>
+            <SelectContent position="popper" className="cursor-pointer text-xs min-w-0">
+              <SelectItem className={selectItem} value="All">All Severity</SelectItem>
+              {(Object.keys(SEVERITY_LABEL) as (keyof typeof SEVERITY_LABEL)[]).map(sev => (
+                <SelectItem key={sev} className={selectItem} value={sev}>{SEVERITY_LABEL[sev]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* report status */}
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className={selectTrigger}><SelectValue /></SelectTrigger>
+            <SelectContent position="popper" className="cursor-pointer text-xs min-w-0">
+              <SelectItem className={selectItem} value="All">All Status</SelectItem>
+              {Object.entries(STATUS_STYLE).filter(([key]) => key !== "Voided").map(([key, st]) => (
+                <SelectItem key={key} className={selectItem} value={key}>{st.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           <Button onClick={() => router.push(ROUTES.form())} className="ml-auto cursor-pointer bg-[#16a34a] font-bold text-white hover:bg-[#15803d]">
             <Plus size={16} className="mr-1" />
             Add report
@@ -247,10 +278,12 @@ export default function MyBarangayReports() {
           <PerformanceCard />
         </div>
 
-        <h2 className="mb-1 text-base font-bold text-[#122A48]">Recent Reports</h2>
-
         {/* table */}
         <div ref={panelRef} className="flex-1 min-h-[412px] mt-2 bg-[#FAFCFD] border border-[#00000040] shadow-[0_5px_4px_-4px_rgba(0,0,0,0.2)] rounded-lg flex flex-col">
+          <div className="w-full p-2">
+            <p className="text-sm font-bold text-[#122A48]">Recent Reports</p>
+          </div>
+
           <div ref={tableWrapRef}>
             <Table>
               <TableHeader className="bg-[#e8eef1b4] border border-[#CFD8DC] h-12 rounded-lg">
@@ -272,7 +305,7 @@ export default function MyBarangayReports() {
                   return (
                     <TableRow key={report.report_id} className="border-b border-[#C6C6C8] text-xs">
                       <TableCell className={td}>
-                        <p>{report.status === "Draft" && !report.date_responded && !report.date_observed ? "No date yet" : formatDate(reportDate(report))}</p>
+                        <p>{isInProgress(report) && !report.date_responded && !report.date_observed ? "No date yet" : formatDate(reportDate(report))}</p>
                       </TableCell>
                       <TableCell className={td}>
                         {report.submission_info ? (
@@ -302,7 +335,7 @@ export default function MyBarangayReports() {
                       </TableCell>
                       <TableCell className={td}>{filedByName(report)}</TableCell>
                       <TableCell className="flex gap-3">
-                        {report.status === "Draft" ? (
+                        {isInProgress(report) ? (
                           <Button
                             onClick={() => router.push(ROUTES.form(report.report_id))}
                             className="text-xs bg-[#16a34a] hover:bg-[#15803d] text-white cursor-pointer"
@@ -317,7 +350,7 @@ export default function MyBarangayReports() {
                               className="text-xs border border-[#1565BC80] bg-[#CDE3DE45] hover:bg-[#b8d5cf45] text-[#122A48] cursor-pointer"
                             >
                               <Eye size={16} className="mr-1" />
-                              View
+                              {report.status === "Ready_To_Verify" ? "Review & verify" : "View"}
                             </Button>
                             {canExport(report) && (
                               <Button

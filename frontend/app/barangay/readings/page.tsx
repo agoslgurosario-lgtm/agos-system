@@ -1,1434 +1,584 @@
-"use client";
+"use client"
 
-import { useEffect, useState, type ReactNode } from "react";
-import { Poppins } from "next/font/google";
-import {FileDown} from "lucide-react";
+// react
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
-const poppins = Poppins({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
+// icons
+import { FileDown, History, RadioTower, Wifi, WifiOff, X } from "lucide-react"
 
-/* ---------- Types ---------- */
+// shadcn
+import { Button } from "@/components/ui/button"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
-type Status = "normal" | "warning" | "critical";
-type StatusFilter = Status | "all";
-type ConnFilter = "all" | "online" | "offline";
+// auth / lib
+import { api } from "@/lib/api"
+import { fetchWithAuth, getUser } from "@/lib/auth"
+import { useWebSocket } from "@/lib/hooks/useWebSocket"
+import { isIOSDevice } from "@/lib/device"
+import { openTablePdf, type PdfTable } from "@/lib/openPdf"
+import { printReport } from "@/lib/printReport"
+import { usePageCache } from "@/components/hooks/usePageCache"
+import { usePolling } from "@/components/hooks/usePolling"
+import { usePagination } from "@/components/hooks/usePagination"
+import { useFillRows } from "@/components/hooks/useFillRows"
+import { useToast } from "@/components/hooks/useToast"
 
-interface Reading {
-  id: string;
-  recordedAt: string;
-  waterLevelCm: number;
-  waterFlowMs: number;
-  clogPercentage: number;
-  waterLevelStatus: Status;
-  clogStatus: Status;
-  status: Status;
+// components
+import StatCard from "@/components/Analytics/StatCard"
+import { SearchFilter } from "@/components/SearchFilter"
+import { DateRangeFilter } from "@/components/DateRangeFilter"
+import { TablePagination } from "@/components/TablePagination"
+import { PrintReport } from "@/components/PrintReport/PrintReport"
+import { SpinnerIcon } from "@/components/SpinnerIcon"
+import { Toast } from "@/components/Toast"
+
+// ---------- types (only what this page reads) ----------
+type SensorNode = {
+  node_id: number
+  node_name: string
+  availability_status: string
+  status: string
+  is_online: boolean
+  is_force_sleeping: boolean
+  water_level: number | null
+  last_reading_at: string | null
+  barangay_details?: { barangay_name: string } | null
 }
 
-interface HealthCheck {
-  id: string;
-  checkedAt: string;
-  batteryVolts: number;
-  batteryPercent: number;
-  signalDbm: number;
-  waterSensor: "OK" | "Fault";
-  firmware: string;
-  status: Status;
+type SensorReading = {
+  reading_id: number
+  timestamp: string
+  reading_status: string
+  clog_status: string | null
+  overall_status: string | null
+  water_level: number | null
+  water_flow_rate: number | null
+  clog_pct: number | null
+  node_details: { hotspot_details?: { name: string } | null } | null
 }
 
-interface SensorNode {
-  id: string;
-  name: string;
-  zone: string;
-  readings: Reading[];
-  health: HealthCheck[];
+const API = process.env.NEXT_PUBLIC_API_URL
+const HISTORY_PAGE_SIZE = 10
+
+// ---------- helpers ----------
+const isNodeOnline = (n: SensorNode) => n.is_online && !n.is_force_sleeping
+
+const formatWhen = (ts: string) =>
+  new Date(ts).toLocaleString("en-PH", {
+    month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true,
+  })
+
+const statusBadgeClass = (s?: string | null) =>
+  s === "Critical" ? "bg-[#FFE5E5] text-[#D81010]" :
+  s === "Warning"  ? "bg-[#F4E4A7] text-[#E4B600]" :
+  "bg-[#B2FBC173] text-[#2C7B3C]"
+
+const fetchNodes = async (): Promise<SensorNode[]> => {
+  const res = await fetchWithAuth(`${API}/api/sensor-nodes/`)
+  if (!res.ok) throw new Error()
+  const data = await res.json()
+  return data.results ?? data
 }
 
-interface DateRange {
-  from: string;
-  to: string;
+// The readings list is already limited to this barangay by the backend: it only returns readings
+// recorded while the node was assigned here (not what it read in other barangays).
+type HistoryFilters = { status: string; from: string; to: string }
+
+const readingsPath = (nodeId: number, f: HistoryFilters, page: number, pageSize: number) => {
+  const params = new URLSearchParams({ node: String(nodeId), page: String(page), page_size: String(pageSize) })
+  if (f.status !== "All Status") params.set("severity", f.status)
+  if (f.from) params.set("from", f.from)
+  if (f.to) params.set("to", f.to)
+  return `/api/sensor-readings/?${params.toString()}`
 }
 
-/* ---------- Sample data ---------- */
-
-const at = (value: string) =>
-  new Date(`${value}:00+08:00`).toISOString();
-
-const GAPS = [
-  98, 121, 87, 143, 76, 110, 132, 95, 118, 84, 127, 104, 91, 138, 79, 115,
-  101, 89, 124, 106, 93, 135, 82, 119, 97, 112, 86, 129,
-];
-
-function sampleReadings(): Reading[] {
-  const out: Reading[] = [];
-  let time = new Date("2026-10-06T21:32:00+08:00").getTime();
-
-  for (let i = 0; i < 29; i++) {
-    const critical = i < 19;
-    const k = critical ? Math.max(0, i - 7) : i - 19;
-    const status: Status = critical ? "critical" : "warning";
-
-    out.push({
-      id: `r-${i}`,
-      recordedAt: new Date(time).toISOString(),
-      waterLevelCm: critical ? 45 - k * 0.3 : 38 - k * 1.1,
-      waterFlowMs: critical ? 0.0001 : 0.0001 + k * 0.00003,
-      clogPercentage: critical ? 85 - k * 0.4 : 78 - k * 2.4,
-      waterLevelStatus: status,
-      clogStatus: status,
-      status,
-    });
-
-    time -= GAPS[i % GAPS.length] * 60000;
+// every page of the filtered history, for the export
+const fetchAllReadings = async (nodeId: number, f: HistoryFilters): Promise<SensorReading[]> => {
+  const all: SensorReading[] = []
+  let endpoint: string | null = readingsPath(nodeId, f, 1, 100)
+  for (let i = 0; endpoint && i < 200; i++) {
+    const data = await api.get(endpoint)
+    all.push(...(data.results ?? data))
+    if (data.next) {
+      const next = new URL(data.next, window.location.origin)
+      endpoint = next.pathname + next.search
+    } else {
+      endpoint = null
+    }
   }
-
-  return out;
+  return all
 }
 
-function check(
-  id: string,
-  when: string,
-  volts: number,
-  percent: number,
-  dbm: number
-): HealthCheck {
-  const low = dbm < -90 || percent < 20;
+const HISTORY_COLUMNS = ["Timestamp", "Hotspot Name", "Water Level", "Flow Rate", "Clog %", "Water Status", "Clog Status", "Overall Status"]
 
-  return {
-    id,
-    checkedAt: at(when),
-    batteryVolts: volts,
-    batteryPercent: percent,
-    signalDbm: dbm,
-    waterSensor: "OK",
-    firmware: "1.0.0",
-    status: low ? "warning" : "normal",
-  };
-}
+const readingRow = (r: SensorReading) => [
+  formatWhen(r.timestamp),
+  r.node_details?.hotspot_details?.name ?? "—",
+  r.water_level != null ? `${r.water_level} cm` : "—",
+  r.water_flow_rate != null ? `${Number(r.water_flow_rate).toFixed(5)} m/s` : "—",
+  r.clog_pct != null ? `${r.clog_pct} %` : "—",
+  r.reading_status,
+  r.clog_status ?? "—",
+  r.overall_status ?? r.reading_status,
+]
 
-const SAMPLE_NODES: SensorNode[] = [
-  {
-    id: "SN-1",
-    name: "CN-Poblacion West-1",
-    zone: "Poblacion West",
-    readings: [],
-    health: [check("h1-0", "2026-10-02T16:40", 3.31, 14, -93)],
-  },
-  {
-    id: "SN-2",
-    name: "CN-Poblacion West-2",
-    zone: "Poblacion West",
-    readings: sampleReadings(),
-    health: [
-      check("h2-0", "2026-10-01T12:17", 3.7, 58, -77),
-      check("h2-1", "2026-10-01T11:56", 3.7, 58, -75),
-      check("h2-2", "2026-10-01T11:36", 3.7, 58, -77),
-      check("h2-3", "2026-10-01T11:16", 3.71, 59, -79),
-      check("h2-4", "2026-10-01T10:56", 3.71, 59, -93),
-      check("h2-5", "2026-10-01T10:36", 3.72, 60, -76),
-      check("h2-6", "2026-10-01T10:16", 3.72, 60, -74),
-    ],
-  },
-  {
-    id: "SN-7",
-    name: "CN-Poblacion West-6",
-    zone: "Poblacion West",
-    readings: [],
-    health: [],
-  },
-];
+export default function BarangayReadingsPage() {
+  const { toasts, addToast, removeToast } = useToast()
 
-/* ---------- Formatting helpers ---------- */
+  // ---------- nodes ----------
+  const nodesCache = usePageCache("barangayReadings:nodes", fetchNodes, [] as SensorNode[], { autoFetch: false })
+  const nodes = nodesCache.data
+  const loading = nodesCache.loading
+  const fetchError = nodesCache.error
 
-const TZ = "Asia/Manila";
+  useEffect(() => { nodesCache.refetch() }, [])
+  usePolling(async () => { await nodesCache.refetch() }, 30000)
 
-const STATUS_STYLE: Record<
-  Status,
-  { label: string; pill: string }
-> = {
-  normal: {
-    label: "Normal",
-    pill: "bg-emerald-100 text-emerald-700",
-  },
-  warning: {
-    label: "Warning",
-    pill: "bg-amber-100 text-amber-700",
-  },
-  critical: {
-    label: "Critical",
-    pill: "bg-red-100 text-red-700",
-  },
-};
+  // keep the latest water level / last reading / online state live
+  useWebSocket({
+    path: "/ws/sensor-readings/",
+    onMessage: (reading) => {
+      const id = reading?.node_details?.node_id
+      if (id == null) return
+      nodesCache.setData(prev => prev.map(n =>
+        n.node_id === id
+          ? { ...n, water_level: reading.water_level, last_reading_at: reading.timestamp ?? n.last_reading_at, is_online: true }
+          : n
+      ))
+    },
+  })
 
-const FILTERS: StatusFilter[] = [
-  "all",
-  "normal",
-  "warning",
-  "critical",
-];
+  // ---------- summary cards ----------
+  const total   = nodes.length
+  const online  = nodes.filter(isNodeOnline).length
+  const offline = total - online
 
-const READING_HEADERS = [
-  "Timestamp",
-  "Water Level",
-  "Flow Rate",
-  "Clog %",
-  "Water Status",
-  "Clog Status",
-  "Overall Status",
-];
+  // ---------- table ----------
+  const [search, setSearch] = useState("")
+  const [statusFilter, setStatusFilter] = useState("All Status")
 
-const HEALTH_HEADERS = [
-  "Timestamp",
-  "Battery",
-  "Signal",
-  "Sensor",
-  "Firmware",
-  "Status",
-];
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return nodes
+      .filter(n => !q || n.node_name.toLowerCase().includes(q))
+      .filter(n =>
+        statusFilter === "All Status" ? true :
+        statusFilter === "Online" ? isNodeOnline(n) : !isNodeOnline(n)
+      )
+      .sort((a, b) => a.node_id - b.node_id)
+  }, [nodes, search, statusFilter])
 
-const dateTimeFmt = new Intl.DateTimeFormat("en-US", {
-  timeZone: TZ,
-  year: "numeric",
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-});
+  const { panelRef, tableWrapRef, rows } = useFillRows({ rowHeight: 56, initialRows: 4, deps: [loading] })
+  const { paginated, currentPage, setCurrentPage, totalItems, itemsPerPage } = usePagination(filtered, rows)
+  useEffect(() => { setCurrentPage(1) }, [search, statusFilter])
 
-const datePartsFmt = new Intl.DateTimeFormat("en-US", {
-  timeZone: TZ,
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
+  // ---------- history dialog ----------
+  const [historyNode, setHistoryNode] = useState<SensorNode | null>(null)
+  const [hStatus, setHStatus] = useState("All Status")
+  const [hFrom, setHFrom] = useState("")
+  const [hTo, setHTo] = useState("")
+  const [hPage, setHPage] = useState(1)
+  const [hRows, setHRows] = useState<SensorReading[]>([])
+  const [hCount, setHCount] = useState(0)
+  const [hLoading, setHLoading] = useState(false)
+  const [hError, setHError] = useState(false)
+  const [hTick, setHTick] = useState(0)
+  const [exporting, setExporting] = useState(false)
+  const reqRef = useRef(0)
 
-const dateLabelFmt = new Intl.DateTimeFormat("en-US", {
-  timeZone: TZ,
-  year: "numeric",
-  month: "short",
-  day: "numeric",
-});
-
-function fmt(iso: string) {
-  return dateTimeFmt.format(new Date(iso));
-}
-
-function dateKey(iso: string) {
-  const parts = Object.fromEntries(
-    datePartsFmt
-      .formatToParts(new Date(iso))
-      .map((part) => [part.type, part.value])
-  );
-
-  return `${parts.year}-${parts.month}-${parts.day}`;
-}
-
-function dateLabel(value: string) {
-  return dateLabelFmt.format(
-    new Date(`${value}T00:00:00+08:00`)
-  );
-}
-
-function getInitialDateRange(): DateRange {
-  const today = dateKey(new Date().toISOString());
-
-  return {
-    from: `${today.slice(0, 7)}-01`,
-    to: today,
-  };
-}
-
-function inDateRange(iso: string, range: DateRange) {
-  const value = dateKey(iso);
-
-  return (
-    (!range.from || value >= range.from) &&
-    (!range.to || value <= range.to)
-  );
-}
-
-function dateRangeLabel(range: DateRange) {
-  if (range.from && range.to) {
-    return range.from === range.to
-      ? dateLabel(range.from)
-      : `${dateLabel(range.from)} – ${dateLabel(range.to)}`;
+  const openHistory = (node: SensorNode) => {
+    setHStatus("All Status"); setHFrom(""); setHTo(""); setHPage(1); setHRows([]); setHCount(0)
+    setHistoryNode(node)
   }
+  const closeHistory = () => setHistoryNode(null)
 
-  if (range.from) {
-    return `dates from ${dateLabel(range.from)}`;
-  }
-
-  if (range.to) {
-    return `dates through ${dateLabel(range.to)}`;
-  }
-
-  return "all dates";
-}
-
-function exportRangeKey(range: DateRange) {
-  return `${range.from || "start"}-to-${range.to || "latest"}`;
-}
-
-function ago(iso: string, now: number) {
-  const minutes = Math.floor(
-    (now - new Date(iso).getTime()) / 60000
-  );
-
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes} min ago`;
-
-  const hours = Math.floor(minutes / 60);
-
-  if (hours < 24) {
-    return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
-  }
-
-  const days = Math.floor(hours / 24);
-
-  return `${days} ${days === 1 ? "day" : "days"} ago`;
-}
-
-function countBy(
-  items: { status: Status }[]
-): Record<StatusFilter, number> {
-  const counts: Record<StatusFilter, number> = {
-    all: items.length,
-    normal: 0,
-    warning: 0,
-    critical: 0,
-  };
-
-  items.forEach((item) => {
-    counts[item.status] += 1;
-  });
-
-  return counts;
-}
-
-function isOnline(node: SensorNode, now: number | null) {
-  const latest = node.readings[0];
-
-  if (now === null || !latest) return false;
-
-  const elapsed = now - new Date(latest.recordedAt).getTime();
-
-  return elapsed >= 0 && elapsed < 3600000;
-}
-
-function downloadCsv(
-  filename: string,
-  rows: (string | number)[][]
-) {
-  const csv = rows
-    .map((row) =>
-      row
-        .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
-        .join(",")
-    )
-    .join("\r\n");
-
-  const blob = new Blob(["\uFEFF", csv], {
-    type: "text/csv;charset=utf-8;",
-  });
-
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-
-  anchor.href = url;
-  anchor.download = filename;
-
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-/* ---------- Icons ---------- */
-
-const svgProps = {
-  xmlns: "http://www.w3.org/2000/svg",
-  width: 16,
-  height: 16,
-  viewBox: "0 0 24 24",
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 2,
-  strokeLinecap: "round" as const,
-  strokeLinejoin: "round" as const,
-  "aria-hidden": true,
-};
-
-function SignalIcon() {
-  return (
-    <svg {...svgProps}>
-      <path d="M2 20h.01" />
-      <path d="M7 20v-4" />
-      <path d="M12 20v-8" />
-      <path d="M17 20V8" />
-      <path d="M22 4v16" />
-    </svg>
-  );
-}
-
-function HistoryIcon() {
-  return (
-    <svg {...svgProps} width={14} height={14}>
-      <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
-      <path d="M3 3v5h5" />
-      <path d="M12 7v5l3 2" />
-    </svg>
-  );
-}
-
-function SearchIcon() {
-  return (
-    <svg {...svgProps} width={15} height={15}>
-      <circle cx="11" cy="11" r="7" />
-      <path d="m20 20-3.5-3.5" />
-    </svg>
-  );
-}
-
-function DownloadIcon() {
-  return (
-    <svg {...svgProps} width={14} height={14}>
-      <path d="M12 4v11" />
-      <path d="m7 11 5 5 5-5" />
-      <path d="M5 20h14" />
-    </svg>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg
-      {...svgProps}
-      width={20}
-      height={20}
-      strokeWidth={1.8}
-    >
-      <path d="M6 6l12 12M18 6 6 18" />
-    </svg>
-  );
-}
-
-function CheckCircleIcon() {
-  return (
-    <svg {...svgProps} width={18} height={18}>
-      <circle cx="12" cy="12" r="9" />
-      <path d="m8 12 3 3 5-6" />
-    </svg>
-  );
-}
-
-function OffIcon() {
-  return (
-    <svg {...svgProps} width={18} height={18}>
-      <circle cx="12" cy="12" r="9" />
-      <path d="m9 9 6 6M15 9l-6 6" />
-    </svg>
-  );
-}
-
-/* ---------- Shared pieces ---------- */
-
-const SELECT =
-  "h-9 rounded-lg bg-white px-3 text-[13px] font-medium text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#1565c0]";
-
-const TH =
-  "whitespace-nowrap bg-slate-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500";
-
-const TD = "whitespace-nowrap px-4 py-3 align-middle";
-
-function Pill({ status }: { status: Status }) {
-  return (
-    <span
-      className={`inline-flex shrink-0 rounded-full px-3 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[status].pill}`}
-    >
-      {STATUS_STYLE[status].label}
-    </span>
-  );
-}
-
-function ConnState({ online }: { online: boolean }) {
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-0.5 text-[11px] font-semibold ${
-        online
-          ? "bg-emerald-100 text-emerald-700"
-          : "bg-slate-100 text-slate-500"
-      }`}
-    >
-      <span
-        className={`h-1.5 w-1.5 rounded-full ${
-          online ? "bg-emerald-500" : "bg-slate-400"
-        }`}
-      />
-
-      {online ? "Online" : "Offline"}
-    </span>
-  );
-}
-
-function StatusSelect({
-  label,
-  allLabel,
-  value,
-  counts,
-  onChange,
-  className = SELECT,
-}: {
-  label: string;
-  allLabel: string;
-  value: StatusFilter;
-  counts?: Record<StatusFilter, number>;
-  onChange: (value: StatusFilter) => void;
-  className?: string;
-}) {
-  return (
-    <select
-      aria-label={label}
-      value={value}
-      onChange={(event) =>
-        onChange(event.target.value as StatusFilter)
-      }
-      className={className}
-    >
-      {FILTERS.map((filter) => (
-        <option key={filter} value={filter}>
-          {filter === "all"
-            ? allLabel
-            : STATUS_STYLE[filter].label}
-          {counts ? ` (${counts[filter]})` : ""}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-function DateRangeFilter({
-  range,
-  onChange,
-}: {
-  range: DateRange;
-  onChange: (range: DateRange) => void;
-}) {
-  const wrapperClass =
-    "inline-flex h-9 items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 shadow-sm focus-within:ring-2 focus-within:ring-[#1565c0]";
-
-  const inputClass =
-    "min-w-0 bg-transparent text-[12px] font-medium text-[#122A48] outline-none [color-scheme:light]";
-
-  return (
-    <div className="flex flex-wrap items-center gap-3">
-      <label className={wrapperClass}>
-        <span className="text-[12px] text-slate-500">
-          From
-        </span>
-
-        <input
-          type="date"
-          aria-label="History start date"
-          value={range.from}
-          max={range.to || undefined}
-          onChange={(event) => {
-            const from = event.target.value;
-
-            onChange({
-              from,
-              to:
-                from && range.to && from > range.to
-                  ? from
-                  : range.to,
-            });
-          }}
-          className={inputClass}
-        />
-      </label>
-
-      <label className={wrapperClass}>
-        <span className="text-[12px] text-slate-500">
-          To
-        </span>
-
-        <input
-          type="date"
-          aria-label="History end date"
-          value={range.to}
-          min={range.from || undefined}
-          onChange={(event) => {
-            const to = event.target.value;
-
-            onChange({
-              from:
-                to && range.from && to < range.from
-                  ? to
-                  : range.from,
-              to,
-            });
-          }}
-          className={inputClass}
-        />
-      </label>
-    </div>
-  );
-}
-
-function Pagination({
-  page,
-  totalPages,
-  onPage,
-}: {
-  page: number;
-  totalPages: number;
-  onPage: (page: number) => void;
-}) {
-  if (totalPages < 1) return null;
-
-  const buttonClass =
-    "inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-slate-300 bg-[#FAFCFD] px-[10px] text-[12px] font-medium text-[#88898D] transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:opacity-50 disabled:hover:bg-[#FAFCFD]";
-
-  return (
-    <div className="mt-auto flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3">
-      <p className="text-[13px] text-[#88898D]">
-        Page {page} of {totalPages}
-      </p>
-
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => onPage(Math.max(1, page - 1))}
-          disabled={page === 1}
-          className={buttonClass}
-        >
-          <svg {...svgProps} width={14} height={14}>
-            <path d="M15 6l-6 6 6 6" />
-          </svg>
-          Previous
-        </button>
-
-        <button
-          type="button"
-          onClick={() =>
-            onPage(Math.min(totalPages, page + 1))
-          }
-          disabled={page === totalPages}
-          className={buttonClass}
-        >
-          Next
-          <svg {...svgProps} width={14} height={14}>
-            <path d="M9 6l6 6-6 6" />
-          </svg>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function Empty({
-  title,
-  text,
-}: {
-  title: string;
-  text: string;
-}) {
-  return (
-    <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center">
-      <p className="font-semibold text-slate-900">
-        {title}
-      </p>
-
-      <p className="mt-1 text-[13px] text-slate-500">
-        {text}
-      </p>
-    </div>
-  );
-}
-
-function StatCard({
-  icon,
-  tint,
-  value,
-  label,
-}: {
-  icon: ReactNode;
-  tint: string;
-  value: number;
-  label: string;
-}) {
-  return (
-    <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <span
-        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${tint}`}
-      >
-        {icon}
-      </span>
-
-      <div>
-        <p className="text-xl font-bold leading-tight tabular-nums text-slate-900">
-          {value}
-        </p>
-
-        <p className="text-[13px] text-slate-500">
-          {label}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function DataTable({
-  headers,
-  children,
-}: {
-  headers: string[];
-  children: ReactNode;
-}) {
-  return (
-    <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200">
-      <table className="w-full min-w-[680px] text-left text-[13px] text-[#122A48]">
-        <thead>
-          <tr>
-            {headers.map((header) => (
-              <th key={header} className={TH}>
-                {header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-
-        <tbody className="divide-y divide-slate-100">
-          {children}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-/* ---------- Page ---------- */
-
-export default function SensorNodesPage() {
-  const nodes = SAMPLE_NODES;
-
-  const [now, setNow] = useState<number | null>(null);
-  const [viewId, setViewId] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [conn, setConn] = useState<ConnFilter>("all");
-  const [health, setHealth] =
-    useState<StatusFilter>("all");
-  const [water, setWater] =
-    useState<StatusFilter>("all");
-  const [page, setPage] = useState(1);
-
-  const perPage = 12;
+  useEffect(() => { setHPage(1) }, [hStatus, hFrom, hTo])
 
   useEffect(() => {
-    setNow(Date.now());
-  }, []);
+    if (!historyNode) return
+    const reqId = ++reqRef.current
+    setHLoading(true)
+    setHError(false)
+    api.get(readingsPath(historyNode.node_id, { status: hStatus, from: hFrom, to: hTo }, hPage, HISTORY_PAGE_SIZE))
+      .then(data => {
+        if (reqId !== reqRef.current) return
+        setHRows(data.results ?? data)
+        setHCount(data.count ?? (data.results ?? data).length)
+      })
+      .catch(() => { if (reqId === reqRef.current) setHError(true) })
+      .finally(() => { if (reqId === reqRef.current) setHLoading(false) })
+  }, [historyNode, hStatus, hFrom, hTo, hPage, hTick])
 
+  // a new reading for the open node: refresh the first page
+  const openIdRef = useRef<number | null>(null)
+  openIdRef.current = historyNode?.node_id ?? null
+  const pageRef = useRef(1)
+  pageRef.current = hPage
+  useWebSocket({
+    path: "/ws/sensor-readings/",
+    enabled: !!historyNode,
+    onMessage: (reading) => {
+      const id = reading?.node_details?.node_id
+      if (id != null && id === openIdRef.current && pageRef.current === 1) setHTick(t => t + 1)
+    },
+  })
+
+  // ---------- export (desktop = print dialog, iPhone/iPad = PDF in a new tab) ----------
+  const [triggerPrint, setTriggerPrint] = useState(false)
+  const [printTable, setPrintTable] = useState<PdfTable>({ title: "", columns: [], rows: [] })
   useEffect(() => {
-    setPage(1);
-  }, [search, conn, health, water]);
+    if (triggerPrint) {
+      printReport()
+      setTriggerPrint(false)
+    }
+  }, [triggerPrint])
 
-  const query = search.trim().toLowerCase();
+  const currentUser = getUser()
+  const generatedBy = currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : "Barangay Personnel"
 
-  const visible = nodes.filter((node) => {
-    const online = isOnline(node, now);
+  const buildHistoryTable = useCallback(async (): Promise<PdfTable> => {
+    if (!historyNode) throw new Error("No node selected")
+    const all = await fetchAllReadings(historyNode.node_id, { status: hStatus, from: hFrom, to: hTo })
+    return {
+      title: `${historyNode.node_name} — Readings History`,
+      columns: HISTORY_COLUMNS,
+      rows: all.map(readingRow),
+      orientation: "landscape",
+    }
+  }, [historyNode, hStatus, hFrom, hTo])
 
-    return (
-      (query === "" ||
-        node.id.toLowerCase().includes(query) ||
-        node.name.toLowerCase().includes(query) ||
-        node.zone.toLowerCase().includes(query)) &&
-      (conn === "all" ||
-        (conn === "online" ? online : !online)) &&
-      (health === "all" ||
-        node.health[0]?.status === health) &&
-      (water === "all" ||
-        node.readings[0]?.status === water)
-    );
-  });
+  const handleExport = async () => {
+    if (!historyNode) return
+    setExporting(true)
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil(visible.length / perPage)
-  );
+    if (isIOSDevice()) {
+      // iPhone/iPad ignore window.print(): open the PDF tab right now (still inside the tap), then fill it
+      openTablePdf(buildHistoryTable)
+        .catch(() => addToast("Failed to export history.", "error"))
+        .finally(() => setExporting(false))
+      return
+    }
 
-  const currentPage = Math.min(page, totalPages);
+    try {
+      setPrintTable(await buildHistoryTable())
+      setTriggerPrint(true)
+    } catch {
+      addToast("Failed to export history.", "error")
+    } finally {
+      setExporting(false)
+    }
+  }
 
-  const pagedNodes = visible.slice(
-    (currentPage - 1) * perPage,
-    currentPage * perPage
-  );
-
-  const onlineCount = nodes.filter((node) =>
-    isOnline(node, now)
-  ).length;
-
-  const viewing =
-    nodes.find((node) => node.id === viewId) ?? null;
+  const barangayName =
+    historyNode?.barangay_details?.barangay_name ??
+    (currentUser as { barangay_details?: { barangay_name?: string } } | null)?.barangay_details?.barangay_name ??
+    "this barangay"
 
   return (
-    <div
-      className={`${poppins.className} flex h-full min-h-0 w-full min-w-0 flex-1 flex-col p-1 text-[13px]`}
-    >
-      <h1 className="shrink-0 text-[17px] font-semibold text-slate-900">
-        Node Management
-      </h1>
-
-      <div className="mt-3 grid shrink-0 gap-3 sm:grid-cols-3">
-        <StatCard
-          icon={<SignalIcon />}
-          tint="bg-slate-100 text-slate-600"
-          value={nodes.length}
-          label="Total Nodes"
-        />
-
-        <StatCard
-          icon={<CheckCircleIcon />}
-          tint="bg-emerald-100 text-emerald-600"
-          value={onlineCount}
-          label="Online"
-        />
-
-        <StatCard
-          icon={<OffIcon />}
-          tint="bg-blue-100 text-blue-600"
-          value={nodes.length - onlineCount}
-          label="Offline"
-        />
-      </div>
-
-      <section
-        aria-label="IoT sensor nodes"
-        className="mt-3 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
-      >
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <h2 className="text-[13px] font-semibold text-slate-900">
-            IoT Sensor Nodes
-          </h2>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                <SearchIcon />
-              </span>
-
-              <input
-                type="search"
-                value={search}
-                onChange={(event) =>
-                  setSearch(event.target.value)
-                }
-                placeholder="Search node..."
-                aria-label="Search node"
-                className="h-9 w-52 rounded-lg bg-white pl-9 pr-3 text-[13px] ring-1 ring-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1565c0]"
-              />
-            </div>
-
-            <select
-              aria-label="Filter by connection status"
-              value={conn}
-              onChange={(event) =>
-                setConn(event.target.value as ConnFilter)
-              }
-              className={SELECT}
-            >
-              <option value="all">All Status</option>
-              <option value="online">Online</option>
-              <option value="offline">Offline</option>
-            </select>
-
-            <StatusSelect
-              label="Filter by device health"
-              allLabel="All Device Health"
-              value={health}
-              onChange={setHealth}
-            />
-
-            <StatusSelect
-              label="Filter by water level"
-              allLabel="All Water Levels"
-              value={water}
-              onChange={setWater}
-            />
-          </div>
+    <>
+      <div className="flex h-full flex-col text-[#122A48]">
+        {/* Summary cards */}
+        <div className="grid w-full grid-cols-3 gap-3">
+          <StatCard
+            label="Total Nodes"
+            value={loading ? "—" : total}
+            note="Sensor nodes in your barangay"
+            icon={<RadioTower size={20} color="#2C7B3C" />}
+            bg="bg-[#CDE3DE]"
+          />
+          <StatCard
+            label="Online"
+            value={loading ? "—" : online}
+            note="Nodes sending readings right now"
+            icon={<Wifi size={20} color="#2C7B3C" />}
+            bg="bg-[#B2FBC1]"
+          />
+          <StatCard
+            label="Offline"
+            value={loading ? "—" : offline}
+            note="Nodes not sending readings, or in sleep mode"
+            icon={<WifiOff size={20} color="#727272" />}
+            bg="bg-[#E5E5E6]"
+          />
         </div>
 
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto border-t border-slate-200">
-          <table className="w-full min-w-[820px] text-left text-[13px] text-[#122A48]">
-            <thead>
-              <tr>
-                <th className={TH}>Node ID</th>
-                <th className={TH}>Barangay</th>
-                <th className={TH}>Device Health</th>
-                <th className={TH}>Water Level</th>
-                <th className={TH}>Last Reading</th>
-                <th className={TH}>Status</th>
-                <th className={TH}>Actions</th>
-              </tr>
-            </thead>
+        {/* Table */}
+        <div className="mt-2 flex min-h-[420px] flex-1 overflow-visible">
+          <div
+            ref={panelRef}
+            className="flex w-full flex-col rounded-lg border border-[#00000040] bg-[#FAFCFD] shadow-[0_5px_4px_-4px_rgba(0,0,0,0.2)]"
+          >
+            <div className="flex items-center justify-between p-2">
+              <p className="text-sm font-bold">IoT Sensor Nodes</p>
 
-            <tbody className="divide-y divide-slate-100">
-              {pagedNodes.map((node) => {
-                const latest = node.readings[0];
-                const latestHealth = node.health[0];
+              <div className="flex items-center gap-3">
+                <SearchFilter value={search} onChange={setSearch} placeholder="Search node..." width="w-60" height="h-8" />
 
-                return (
-                  <tr
-                    key={node.id}
-                    className="hover:bg-slate-50"
-                  >
-                    <td
-                      className={`${TD} font-semibold text-[#122A48]`}
-                    >
-                      {node.id}
-                    </td>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="cursor-pointer rounded-lg border-2 border-[#C6C6C8] bg-white px-3 py-3 text-xs font-medium text-[#122A48]">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent position="popper" className="min-w-0">
+                    <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="All Status">All Status</SelectItem>
+                    <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="Online">Online</SelectItem>
+                    <SelectItem className="cursor-pointer p-2 text-xs text-[#122A48]" value="Offline">Offline</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
-                    <td className={`${TD} text-[#122A48]`}>
-                      {node.zone}
-                    </td>
+            <div ref={tableWrapRef}>
+              <Table>
+                <TableHeader className="border border-[#CFD8DC] bg-[#e8eef1b4]">
+                  <TableRow>
+                    {["NODE ID", "NODE NAME", "AVAILABILITY", "STATUS", "WATER LEVEL", "LAST READING", "ACTIONS"].map(h => (
+                      <TableHead key={h} className="text-left text-xs font-semibold text-[#727272]">{h}</TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {!loading && !fetchError && paginated.map(node => {
+                    const onlineNow = isNodeOnline(node)
+                    return (
+                      <TableRow key={node.node_id} className="border-b border-[#C6C6C8]">
+                        <TableCell className="h-14 text-left text-xs text-[#122A48]">{node.node_id}</TableCell>
+                        <TableCell className="h-14 text-left text-xs text-[#122A48]">{node.node_name}</TableCell>
 
-                    <td className={TD}>
-                      {latestHealth ? (
-                        <Pill status={latestHealth.status} />
-                      ) : (
-                        <span className="text-[#122A48]/60">
-                          No data
-                        </span>
-                      )}
-                    </td>
+                        {/* availability: same badges as Node Management */}
+                        <TableCell className="h-14 text-left text-xs">
+                          {node.status === "Maintenance" ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#EDE4FC] px-4 py-1.5 text-xs font-semibold text-[#7C3AED]">
+                              <span className="h-1.5 w-1.5 rounded-full bg-[#7C3AED]" />
+                              Under Maintenance
+                            </span>
+                          ) : (
+                            <span className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold ${
+                              node.availability_status === "Available" ? "bg-[#B2FBC173] text-[#2C7B3C]" :
+                              node.availability_status === "Retired"   ? "bg-[#E5E5E6] text-[#727272]" :
+                              "bg-[#DBEAFE] text-[#1565BC]"
+                            }`}>
+                              <span className={`h-1.5 w-1.5 rounded-full ${
+                                node.availability_status === "Available" ? "bg-[#1D8104]" :
+                                node.availability_status === "Retired"   ? "bg-[#727272]" :
+                                "bg-[#1565BC]"
+                              }`} />
+                              {node.availability_status}
+                            </span>
+                          )}
+                        </TableCell>
 
-                    <td className={TD}>
-                      {latest ? (
-                        <span className="inline-flex items-center gap-2">
-                          <span className="font-mono font-semibold tabular-nums text-[#122A48]">
-                            {+latest.waterLevelCm.toFixed(1)} cm
+                        {/* online / offline */}
+                        <TableCell className="h-14 text-left text-xs">
+                          <span
+                            title={node.is_force_sleeping ? "Sleep mode" : undefined}
+                            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold ${
+                              onlineNow ? "bg-[#B2FBC173] text-[#2C7B3C]" : "bg-[#E5E5E6] text-[#727272]"
+                            }`}
+                          >
+                            <span className={`h-1.5 w-1.5 rounded-full ${onlineNow ? "bg-[#1D8104]" : "bg-[#727272]"}`} />
+                            {onlineNow ? "Online" : "Offline"}
                           </span>
+                        </TableCell>
 
-                          <Pill status={latest.status} />
-                        </span>
-                      ) : (
-                        <span className="text-[#122A48]/60">
-                          No readings yet
-                        </span>
-                      )}
-                    </td>
+                        {/* latest reading */}
+                        <TableCell className="h-14 text-left text-xs text-[#122A48]">
+                          {node.water_level != null ? `${node.water_level} cm` : "—"}
+                        </TableCell>
+                        <TableCell className="h-14 text-left text-xs text-[#122A48]">
+                          {node.last_reading_at ? formatWhen(node.last_reading_at) : "No readings yet"}
+                        </TableCell>
 
-                    <td
-                      className={`${TD} font-medium text-[#122A48]`}
-                    >
-                      {latest && now !== null
-                        ? ago(latest.recordedAt, now)
-                        : "—"}
-                    </td>
-
-                    <td className={TD}>
-                      <ConnState
-                        online={isOnline(node, now)}
-                      />
-                    </td>
-
-                    <td className={TD}>
-                      <button
-                        type="button"
-                        onClick={() => setViewId(node.id)}
-                        aria-label={`View ${node.id}`}
-                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-sky-50 px-3 text-[12px] font-medium text-slate-700 transition-colors hover:bg-sky-100"
-                      >
-                        <HistoryIcon />
-                        View History
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-
-          {visible.length === 0 && (
-            <div className="p-4">
-              <Empty
-                title="No nodes match"
-                text="Try a different search or filter."
-              />
+                        <TableCell className="h-14 text-left text-xs">
+                          <Button
+                            onClick={() => openHistory(node)}
+                            className="flex cursor-pointer gap-2 rounded-lg border border-[#1565BC80] bg-[#CDE3DE45] px-3 py-3.5 text-xs text-[#122A48] hover:bg-[#75928a45]"
+                          >
+                            <History size={16} /> View History
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
             </div>
-          )}
-        </div>
 
-        <Pagination
-          page={currentPage}
-          totalPages={totalPages}
-          onPage={setPage}
-        />
-      </section>
+            {loading && !fetchError && (
+              <div className="flex flex-1 flex-col items-center justify-center gap-3">
+                <SpinnerIcon size={32} color="#1565BC" />
+                <p className="text-sm text-[#727272]">Loading nodes...</p>
+              </div>
+            )}
 
-      {viewing && (
-        <NodeModal
-          key={viewing.id}
-          node={viewing}
-          now={now}
-          onClose={() => setViewId(null)}
-        />
-      )}
-    </div>
-  );
-}
+            {fetchError && (
+              <div className="flex flex-1 flex-col items-center justify-center gap-3">
+                <div className="text-center text-[#D81010]">
+                  <p className="font-semibold">Failed to load sensor nodes</p>
+                  <p className="text-sm">Please try again later</p>
+                </div>
+                <Button
+                  onClick={() => nodesCache.refetch()}
+                  className="cursor-pointer rounded-lg border border-[#D81010] bg-transparent px-3 py-2 text-sm text-[#D81010] hover:bg-gray-100"
+                >
+                  Retry
+                </Button>
+              </div>
+            )}
 
-/* ---------- Node history modal ---------- */
+            {!loading && !fetchError && filtered.length === 0 && (
+              <div className="flex flex-1 flex-col items-center justify-center gap-1">
+                <div className="my-2 rounded-full bg-[#E5E5E6] p-4">
+                  <RadioTower size={30} color="#727272" />
+                </div>
+                <p className="text-sm font-bold">{nodes.length === 0 ? "No sensor nodes yet" : "No nodes found"}</p>
+                <p className="text-xs text-[#727272]">
+                  {nodes.length === 0 ? "No sensor nodes are assigned to your barangay." : "No nodes match your search or filter."}
+                </p>
+              </div>
+            )}
 
-interface TabProps {
-  node: SensorNode;
-  range: DateRange;
-  onRangeChange: (range: DateRange) => void;
-  filter: StatusFilter;
-  onFilter: (value: StatusFilter) => void;
-}
-
-function NodeModal({
-  node,
-  now,
-  onClose,
-}: {
-  node: SensorNode;
-  now: number | null;
-  onClose: () => void;
-}) {
-  const [tab, setTab] =
-    useState<"readings" | "health">("readings");
-
-  const [rf, setRf] = useState<StatusFilter>("all");
-  const [hf, setHf] = useState<StatusFilter>("all");
-
-  const [range, setRange] = useState<DateRange>(
-    getInitialDateRange
-  );
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-
-    window.addEventListener("keydown", onKey);
-
-    return () => {
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [onClose]);
-
-  const tabs = [
-    { key: "readings", label: "Readings History" },
-    { key: "health", label: "Health History" },
-  ] as const;
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="node-modal-title"
-        onClick={(event) => event.stopPropagation()}
-        className="flex h-[95vh] w-full max-w-7xl flex-col overflow-hidden rounded-xl bg-white shadow-xl"
-      >
-        <div className="flex shrink-0 items-start justify-between gap-3 px-5 py-4">
-          <div className="min-w-0">
-            <h2
-              id="node-modal-title"
-              className="text-[15px] font-semibold text-slate-900"
-            >
-              {node.id}
-            </h2>
-
-            <p className="truncate text-[11px] text-slate-500">
-              Node History · {node.name} · {node.zone}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <ConnState online={isOnline(node, now)} />
-
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100"
-            >
-              <CloseIcon />
-            </button>
+            <div className="mt-auto">
+              {!loading && !fetchError && filtered.length > 0 && (
+                <TablePagination
+                  totalItems={totalItems}
+                  itemsPerPage={itemsPerPage}
+                  currentPage={currentPage}
+                  onPageChange={setCurrentPage}
+                />
+              )}
+            </div>
           </div>
         </div>
-
-        <div
-          role="tablist"
-          aria-label="Node history"
-          className="flex shrink-0 border-y border-slate-200 px-2"
-        >
-          {tabs.map((item) => (
-            <button
-              key={item.key}
-              id={`node-tab-${item.key}`}
-              type="button"
-              role="tab"
-              aria-selected={tab === item.key}
-              aria-controls="node-history-panel"
-              onClick={() => setTab(item.key)}
-              className={`-mb-px border-b-2 px-4 py-2.5 text-[12px] font-medium ${
-                tab === item.key
-                  ? "border-[#1565c0] text-[#1565c0]"
-                  : "border-transparent text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-
-        <div
-          id="node-history-panel"
-          role="tabpanel"
-          aria-labelledby={`node-tab-${tab}`}
-          className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
-        >
-          {tab === "readings" ? (
-            <ReadingsTab
-              node={node}
-              range={range}
-              onRangeChange={setRange}
-              filter={rf}
-              onFilter={setRf}
-            />
-          ) : (
-            <HealthTab
-              node={node}
-              range={range}
-              onRangeChange={setRange}
-              filter={hf}
-              onFilter={setHf}
-            />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------- History toolbar ---------- */
-
-function Toolbar({
-  counts,
-  props,
-  onExport,
-  canExport,
-}: {
-  counts: Record<StatusFilter, number>;
-  props: TabProps;
-  onExport: () => void;
-  canExport: boolean;
-}) {
-  return (
-    <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <StatusSelect
-          label="Filter by status"
-          allLabel="All Status"
-          value={props.filter}
-          counts={counts}
-          onChange={props.onFilter}
-          className={SELECT}
-        />
-
-        <DateRangeFilter
-          range={props.range}
-          onChange={props.onRangeChange}
-        />
       </div>
 
-      <button
-        type="button"
-        onClick={onExport}
-        disabled={!canExport}
-        className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#2FD45B] px-2.5 text-[14px] font-medium text-white transition-colors hover:bg-[#26b84f] disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        <FileDown size={16} className="mr-1" />
-        Export
-      </button>
-    </div>
-  );
-}
+      {/* Readings history of one node, same dialog as Node Management (readings only) */}
+      <Dialog open={!!historyNode} onOpenChange={(o) => { if (!o) closeHistory() }}>
+        <DialogContent className="flex max-h-[80vh] min-w-80 flex-col rounded-lg border border-[#C6C6C8] p-0 text-[#122A48] md:min-w-[min(1100px,95vw)] [&>button]:hidden">
+          <DialogHeader>
+            <div className="-mb-3 flex items-center justify-between border-b border-[#C6C6C8] p-2 md:p-3">
+              <div className="flex flex-col">
+                <p className="text-sm font-bold md:text-base">{historyNode?.node_name}</p>
+                <p className="text-[11px] text-[#727272]">Readings History · only readings recorded in {barangayName}</p>
+              </div>
+              <button className="cursor-pointer" onClick={closeHistory}>
+                <X size={16} />
+              </button>
+            </div>
+          </DialogHeader>
+          <DialogTitle className="sr-only">Readings History</DialogTitle>
 
-/* ---------- Readings tab ---------- */
+          <div className="flex flex-1 flex-col overflow-y-auto">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#C6C6C8] p-2 md:p-3">
+              <div className="flex gap-3">
+                <Select value={hStatus} onValueChange={setHStatus}>
+                  <SelectTrigger className="cursor-pointer rounded-lg border-2 border-[#C6C6C8] bg-white px-3 py-2 text-xs font-medium text-[#122A48]">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent position="popper" className="min-w-0">
+                    {["All Status", "Normal", "Warning", "Critical"].map(s => (
+                      <SelectItem key={s} className="cursor-pointer p-2 text-xs text-[#122A48]" value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-function ReadingsTab(props: TabProps) {
-  const { node, range, filter } = props;
+                <DateRangeFilter from={hFrom} to={hTo} onChange={(f, t) => { setHFrom(f); setHTo(t) }} width="w-[210px]" />
+              </div>
 
-  const [page, setPage] = useState(1);
-  const perPage = 8;
-
-  const inRange = node.readings.filter((reading) =>
-    inDateRange(reading.recordedAt, range)
-  );
-
-  const counts = countBy(inRange);
-
-  const filtered =
-    filter === "all"
-      ? inRange
-      : inRange.filter(
-          (reading) => reading.status === filter
-        );
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filtered.length / perPage)
-  );
-
-  const currentPage = Math.min(page, totalPages);
-
-  const shown = filtered.slice(
-    (currentPage - 1) * perPage,
-    currentPage * perPage
-  );
-
-  useEffect(() => {
-    setPage(1);
-  }, [range.from, range.to, filter, node.id]);
-
-  const exportCsv = () =>
-    downloadCsv(
-      `${node.id}-readings-${exportRangeKey(range)}.csv`,
-      [
-        [
-          "Timestamp",
-          "Water Level (cm)",
-          "Flow Rate (m/s)",
-          "Clog %",
-          "Water Status",
-          "Clog Status",
-          "Overall Status",
-        ],
-        ...filtered.map((reading) => [
-          fmt(reading.recordedAt),
-          reading.waterLevelCm.toFixed(1),
-          reading.waterFlowMs.toFixed(4),
-          reading.clogPercentage.toFixed(1),
-          STATUS_STYLE[reading.waterLevelStatus].label,
-          STATUS_STYLE[reading.clogStatus].label,
-          STATUS_STYLE[reading.status].label,
-        ]),
-      ]
-    );
-
-  const emptyText =
-    node.readings.length === 0
-      ? "No readings recorded for this node yet."
-      : inRange.length === 0
-        ? `No readings for ${dateRangeLabel(range)}.`
-        : `No ${filter} readings for ${dateRangeLabel(range)}.`;
-
-  return (
-    <>
-      <Toolbar
-        counts={counts}
-        props={props}
-        onExport={exportCsv}
-        canExport={filtered.length > 0}
-      />
-
-      <DataTable headers={READING_HEADERS}>
-        {shown.length > 0 ? (
-          shown.map((reading) => (
-            <tr
-              key={reading.id}
-              className="hover:bg-slate-50"
-            >
-              <td
-                className={`${TD} font-medium text-[#122A48]`}
+              <Button
+                onClick={handleExport}
+                disabled={exporting || hCount === 0}
+                className="cursor-pointer bg-[#2fd45b] text-xs text-white hover:bg-[#28b54e]"
               >
-                {fmt(reading.recordedAt)}
-              </td>
+                <FileDown size={14} className="mr-1" />
+                {exporting ? "Preparing..." : "Export"}
+              </Button>
+            </div>
 
-              <td className={`${TD} tabular-nums`}>
-                {reading.waterLevelCm.toFixed(1)} cm
-              </td>
+            <Table>
+              <TableHeader className="border border-[#CFD8DC] bg-[#e8eef1b4]">
+                <TableRow>
+                  {["TIMESTAMP", "HOTSPOT NAME", "WATER LEVEL", "FLOW RATE", "CLOG %", "WATER STATUS", "CLOG STATUS", "OVERALL STATUS"].map(h => (
+                    <TableHead key={h} className="text-center text-xs font-semibold text-[#727272]">{h}</TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {hError ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="py-10 text-center">
+                      <p className="text-sm font-semibold text-[#D81010]">Failed to load readings.</p>
+                    </TableCell>
+                  </TableRow>
+                ) : hLoading && hRows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="py-10 text-center">
+                      <div className="flex flex-col items-center gap-2">
+                        <SpinnerIcon size={24} />
+                        <p className="text-sm text-[#727272]">Loading readings...</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : hRows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="py-10 text-center">
+                      <p className="text-sm text-[#727272]">No readings recorded for this node in your barangay.</p>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  hRows.map(r => (
+                    <TableRow key={r.reading_id} className="border-b border-[#C6C6C8] text-xs">
+                      <TableCell className="h-11 text-center">{formatWhen(r.timestamp)}</TableCell>
+                      <TableCell className="h-11 text-center">{r.node_details?.hotspot_details?.name ?? "—"}</TableCell>
+                      <TableCell className="h-11 text-center">{r.water_level != null ? `${r.water_level} cm` : "—"}</TableCell>
+                      <TableCell className="h-11 text-center">{r.water_flow_rate != null ? `${Number(r.water_flow_rate).toFixed(5)} m/s` : "—"}</TableCell>
+                      <TableCell className="h-11 text-center">{r.clog_pct != null ? `${r.clog_pct} %` : "—"}</TableCell>
+                      <TableCell className="h-11 text-center">
+                        <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${statusBadgeClass(r.reading_status)}`}>
+                          {r.reading_status}
+                        </span>
+                      </TableCell>
+                      <TableCell className="h-11 text-center">
+                        {r.clog_status ? (
+                          <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${statusBadgeClass(r.clog_status)}`}>
+                            {r.clog_status}
+                          </span>
+                        ) : "—"}
+                      </TableCell>
+                      <TableCell className="h-11 text-center">
+                        <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${statusBadgeClass(r.overall_status ?? r.reading_status)}`}>
+                          {r.overall_status ?? r.reading_status}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
 
-              <td className={`${TD} tabular-nums`}>
-                {reading.waterFlowMs.toFixed(4)} m/s
-              </td>
+            <div className="mt-auto">
+              {!hError && hCount > 0 && (
+                <TablePagination
+                  totalItems={hCount}
+                  itemsPerPage={HISTORY_PAGE_SIZE}
+                  currentPage={hPage}
+                  onPageChange={setHPage}
+                />
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-              <td className={`${TD} tabular-nums`}>
-                {reading.clogPercentage.toFixed(1)}%
-              </td>
-
-              <td className={TD}>
-                <Pill status={reading.waterLevelStatus} />
-              </td>
-
-              <td className={TD}>
-                <Pill status={reading.clogStatus} />
-              </td>
-
-              <td className={TD}>
-                <Pill status={reading.status} />
-              </td>
-            </tr>
-          ))
-        ) : (
-          <tr>
-            <td
-              colSpan={READING_HEADERS.length}
-              className="px-4 py-16 text-center text-[13px] text-[#122A48]/60"
-            >
-              {emptyText}
-            </td>
-          </tr>
-        )}
-      </DataTable>
-
-      <Pagination
-        page={currentPage}
-        totalPages={totalPages}
-        onPage={setPage}
+      <PrintReport
+        reportTitle={printTable.title}
+        columns={printTable.columns}
+        rows={printTable.rows}
+        generatedBy={generatedBy}
       />
+
+      <Toast toasts={toasts} onRemove={removeToast} />
     </>
-  );
+  )
 }
-
-/* ---------- Health tab ---------- */
-
-function HealthTab(props: TabProps) {
-  const { node, range, filter } = props;
-
-  const [page, setPage] = useState(1);
-  const perPage = 8;
-
-  const inRange = node.health.filter((healthCheck) =>
-    inDateRange(healthCheck.checkedAt, range)
-  );
-
-  const counts = countBy(inRange);
-
-  const filtered =
-    filter === "all"
-      ? inRange
-      : inRange.filter(
-          (healthCheck) => healthCheck.status === filter
-        );
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filtered.length / perPage)
-  );
-
-  const currentPage = Math.min(page, totalPages);
-
-  const shown = filtered.slice(
-    (currentPage - 1) * perPage,
-    currentPage * perPage
-  );
-
-  useEffect(() => {
-    setPage(1);
-  }, [range.from, range.to, filter, node.id]);
-
-  const exportCsv = () =>
-    downloadCsv(
-      `${node.id}-health-${exportRangeKey(range)}.csv`,
-      [
-        [
-          "Timestamp",
-          "Battery (V)",
-          "Battery (%)",
-          "Signal (dBm)",
-          "Sensor",
-          "Firmware",
-          "Status",
-        ],
-        ...filtered.map((healthCheck) => [
-          fmt(healthCheck.checkedAt),
-          healthCheck.batteryVolts.toFixed(2),
-          healthCheck.batteryPercent,
-          healthCheck.signalDbm,
-          healthCheck.waterSensor,
-          healthCheck.firmware,
-          STATUS_STYLE[healthCheck.status].label,
-        ]),
-      ]
-    );
-
-  const emptyText =
-    node.health.length === 0
-      ? `${node.id} has not reported battery, signal or firmware.`
-      : inRange.length === 0
-        ? `No health checks for ${dateRangeLabel(range)}.`
-        : `No ${filter} health checks for ${dateRangeLabel(range)}.`;
-
-  return (
-    <>
-      <Toolbar
-        counts={counts}
-        props={props}
-        onExport={exportCsv}
-        canExport={filtered.length > 0}
-      />
-
-      <DataTable headers={HEALTH_HEADERS}>
-        {shown.length > 0 ? (
-          shown.map((healthCheck) => (
-            <tr
-              key={healthCheck.id}
-              className="hover:bg-slate-50"
-            >
-              <td
-                className={`${TD} font-medium text-[#122A48]`}
-              >
-                {fmt(healthCheck.checkedAt)}
-              </td>
-
-              <td className={`${TD} tabular-nums`}>
-                {healthCheck.batteryVolts.toFixed(2)} V (
-                {healthCheck.batteryPercent}%)
-              </td>
-
-              <td className={`${TD} tabular-nums`}>
-                {healthCheck.signalDbm} dBm
-              </td>
-
-              <td className={`${TD} font-medium`}>
-                {healthCheck.waterSensor}
-              </td>
-
-              <td className={TD}>
-                {healthCheck.firmware}
-              </td>
-
-              <td className={TD}>
-                <Pill status={healthCheck.status} />
-              </td>
-            </tr>
-          ))
-        ) : (
-          <tr>
-            <td
-              colSpan={HEALTH_HEADERS.length}
-              className="px-4 py-16 text-center text-[13px] text-[#122A48]/60"
-            >
-              {emptyText}
-            </td>
-          </tr>
-        )}
-      </DataTable>
-
-      <Pagination
-        page={currentPage}
-        totalPages={totalPages}
-        onPage={setPage}
-      />
-    </>
-  );
-}
-

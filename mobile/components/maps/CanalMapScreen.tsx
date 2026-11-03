@@ -7,11 +7,14 @@ import { FloodRiskLevel, RISK_STYLE } from '@/constants/rainfall'
 // canal stats — matches backend's SensorNodeSerializer.get_condition() exactly
 export type CanalStatus = 'Normal' | 'Warning' | 'Critical'
 
+// marker-only states (not real conditions) so the map matches web
+export type MarkerStatus = CanalStatus | 'Sleep' | 'Maintenance'
+
 export interface CanalNode {
   id: string | number
   latitude: number
   longitude: number
-  status: CanalStatus
+  status: MarkerStatus
   label?: string
 }
 
@@ -25,10 +28,12 @@ interface CanalMapScreenProps {
 }
 
 // matches web's CONDITION_COLORS (colorMode='clog') exactly
-const STATUS_COLORS: Record<CanalStatus, string> = {
+const STATUS_COLORS: Record<MarkerStatus, string> = {
   Normal: '#1565BC',
   Warning: '#FF9705',
   Critical: '#D81010',
+  Maintenance: '#7C3AED',
+  Sleep: '#727272',
 }
 const DEFAULT_COLOR = '#727272' // "Sleep Mode" — legend-only, never actually assigned to a live node
 
@@ -42,6 +47,7 @@ const LEGEND_ITEMS: { color: string; label: string }[] = [
   { color: STATUS_COLORS.Normal, label: 'Normal' },
   { color: STATUS_COLORS.Warning, label: 'Warning' },
   { color: STATUS_COLORS.Critical, label: 'Critical' },
+  { color: STATUS_COLORS.Maintenance, label: 'Under Maintenance' },
 ]
 
 function buildLeafletHtml(

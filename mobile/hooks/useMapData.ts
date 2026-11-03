@@ -7,7 +7,13 @@ import { buildComposition } from "../lib/analytics";
 import { useLiveSocket } from "../lib/useLiveSocket";
 import { useAuth } from "../lib/AuthContext";
 
-const UNRESOLVED_STATUSES = ["Detected", "Responded"];
+// "Responded" already counts as handled, so only Detected = still obstructed (same rule as web)
+const OBSTRUCTING_STATUS = "Detected";
+
+// Same "live node" rule as web: offline / force-sleeping / maintenance nodes are left out of
+// Critical Nodes and Average Water Level, so a stale reading can't keep counting.
+const isLiveNode = (n: SensorNodeApi) =>
+  n.is_online && !n.is_force_sleeping && n.status !== "Maintenance";
 
 function currentMonthValue() {
   const d = new Date();
@@ -30,7 +36,7 @@ export function useMapData() {
     try {
       const [nodeData, clogData, wasteData] = await Promise.all([
         api.get("/api/sensor-nodes/"),
-        api.get("/api/clog-events/"),
+        api.get("/api/clog-events/?status=Detected&month=All"),
         api.get(`/api/waste-classifications/?month=${currentMonthValue()}`),
       ]);
       setNodes(nodeData ?? []);
@@ -112,19 +118,16 @@ export function useMapData() {
     (n) => n.hotspot_details?.latitude != null && n.hotspot_details?.longitude != null
   );
 
-  const criticalCount = nodes.filter((n) => n.condition === "Critical").length;
-  const obstructedNodeIds = new Set(
-    clogEvents
-      .filter((e) => UNRESOLVED_STATUSES.includes(e.status))
-      .map((e) => e.node)
-  );
-  const obstructedCount = obstructedNodeIds.size;
+  const liveNodes = nodes.filter(isLiveNode);
 
-  const awaitingResponseCount = new Set(
-    clogEvents.filter((e) => e.status === "Detected").map((e) => e.node)
+  const criticalCount = liveNodes.filter((n) => n.condition === "Critical").length;
+
+  // distinct nodes with a clog event still awaiting response
+  const obstructedCount = new Set(
+    clogEvents.filter((e) => e.status === OBSTRUCTING_STATUS).map((e) => e.node)
   ).size;
 
-  const waterLevelReadings = nodes
+  const waterLevelReadings = liveNodes
     .map((n) => n.water_level)
     .filter((v): v is number => v != null);
 
@@ -139,7 +142,6 @@ export function useMapData() {
     monitoringPointsTotal: nodes.length,
     criticalNodesCount: criticalCount,
     obstructedCanalsCount: obstructedCount,
-    awaitingResponseCount: awaitingResponseCount,
     averageWaterLevelCm: avgWaterLevelCm,
   };
 
@@ -147,5 +149,5 @@ export function useMapData() {
 
   const composition = buildComposition(classifications);
 
-  return { nodes, mappableNodes, awaitingResponseCount, stats, totalWasteKg, composition, loading, refreshing, error, refetch: fetchAll };
+  return { nodes, mappableNodes, stats, totalWasteKg, composition, loading, refreshing, error, refetch: fetchAll };
 }

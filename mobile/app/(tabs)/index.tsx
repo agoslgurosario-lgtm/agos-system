@@ -5,7 +5,7 @@ import { Feather } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { useAuth } from '@/lib/AuthContext'
-import CanalMapScreen, { type CanalStatus } from '@/components/maps/CanalMapScreen'
+import CanalMapScreen, { type CanalStatus, type MarkerStatus } from '@/components/maps/CanalMapScreen'
 import NodeDetailSheet, { type NodeDetail } from '@/components/maps/NodeDetailSheet'
 import WasteCompositionCard from '@/components/maps/WasteCompositionCard'
 import { useMapData } from '@/hooks/useMapData'
@@ -101,7 +101,11 @@ export default function TabOneScreen() {
         id: n.node_id,
         latitude: n.hotspot_details!.latitude,
         longitude: n.hotspot_details!.longitude,
-        status: ((n.is_online && !n.is_force_sleeping) ? (n.condition ?? 'Normal') : 'Sleep') as CanalStatus,
+        status: (
+          n.status === 'Maintenance' ? 'Maintenance' :
+          (!n.is_online || n.is_force_sleeping) ? 'Sleep' :
+          (n.condition ?? 'Normal')
+        ) as MarkerStatus,
         label: `${n.node_name} – ${n.barangay_details?.barangay_name ?? ''}`,
       })),
     [mappableNodes]
@@ -174,14 +178,14 @@ export default function TabOneScreen() {
                     icon="map-pin"
                     title="Monitoring Points"
                     value={String(stats.monitoringPointsTotal)}
-                    subtitle="Sensor nodes in this barangay"
+                    subtitle="Sensor nodes in your barangay"
                   />
 
                   <StatCard
                     icon="alert-triangle"
                     title="Critical Nodes"
                     value={String(stats.criticalNodesCount)}
-                    subtitle="Immediate action is needed"
+                    subtitle="Online nodes at critical level"
                     subtitleColor="#E74C3C"
                   />
                 </View>
@@ -191,14 +195,14 @@ export default function TabOneScreen() {
                     icon="slash"
                     title="Obstructed Canals"
                     value={String(stats.obstructedCanalsCount)}
-                    subtitle={`${stats.awaitingResponseCount} awaiting response`}
+                    subtitle="Clog events awaiting response"
                   />
 
                   <StatCard
                     icon="droplet"
                     title="Average water level"
                     value={stats.averageWaterLevelCm != null ? `${stats.averageWaterLevelCm} cm` : '—'}
-                    subtitle="Across all nodes"
+                    subtitle={stats.averageWaterLevelCm != null ? "Across online nodes" : "No online nodes right now"}
                   />
                 </View>
               </View>

@@ -120,12 +120,12 @@ const navItems: Record<string, NavItem[]> = {
     { label: "User Manual",    href: "/menro/manual",  icon: <Book size={14} /> },
   ],
   Barangay: [
-    { label: "Map",         href: "/barangay/map",              icon: <Map size={18} /> },
+    { label: "Localized Map",         href: "/barangay/map",              icon: <Map size={18} /> },
     { label: "Alerts",      href: "/barangay/alerts",           icon: <Siren size={18} /> },
-    { label: "Analytics",   href: "/barangay/analytics",        icon: <ChartNoAxesCombined size={18} /> },
-    { label: "Readings",    href: "/barangay/readings",         icon: <Activity size={18} /> },
-    { label: "Clog Events", href: "/barangay/clog-events",      icon: <TriangleAlert size={18} /> },
+    { label: "Waste Analytics",   href: "/barangay/analytics",        icon: <ChartNoAxesCombined size={18} /> },
+    { label: "Sensor Readings",    href: "/barangay/readings",         icon: <Activity size={18} /> },
     { label: "Node Health", href: "/barangay/health", icon: <Activity size={18} /> },
+    { label: "Clog Events", href: "/barangay/clog-events",      icon: <TriangleAlert size={18} /> },
     { label: "Barangay Reports",     href: "/barangay/barangay-reports", icon: <FileBarChart size={18} /> },
     { label: "Help", href: "/barangay/user-manual",      icon: <Book size={18} /> },
   ],
@@ -214,7 +214,7 @@ export default function NavBar() {
           <div className="whitespace-nowrap overflow-hidden">
             <p className="text-[#122A48] font-bold text-[13px] leading-tight">AGOS</p>
             <p className="text-[#122A48] text-[9px] leading-tight mt-1">
-              Autmated Geospatial Canal <br /> Obstruction Sensing System
+              Automated Geospatial Canal <br /> Obstruction Sensing System
             </p>
           </div>
           

@@ -1,282 +1,309 @@
-"use client";
+"use client"
 
-import dynamic from "next/dynamic";
-import { useState } from "react";
+// react
+import { useCallback, useEffect, useMemo } from "react"
 
-// Update this import to match where AgosMapWrapper.tsx is stored in your project.
-const AgosMapWrapper = dynamic(
-  () => import("@/components/Map/AgosMapWrapper"),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex h-full min-h-[420px] items-center justify-center rounded-xl bg-slate-100 text-sm text-slate-500">
-        Loading canal map...
-      </div>
-    ),
-  },
-);
+// charts
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts"
 
-const stats = [
-  {
-    label: "Monitoring Points",
-    value: "1",
-    note: "Sensor nodes in this barangay",
-    icon: "⌖",
-    iconClass: "bg-blue-50 text-blue-700",
-  },
-  {
-    label: "Critical Nodes",
-    value: "0",
-    note: "No critical nodes detected",
-    icon: "!",
-    iconClass: "bg-red-50 text-red-600",
-  },
-  {
-    label: "Obstructed Canals",
-    value: "1",
-    note: "Awaiting response",
-    icon: "◉",
-    iconClass: "bg-amber-50 text-amber-700",
-  },
-  {
-    label: "Average Water Level",
-    value: "5.9 cm",
-    note: "Across monitored nodes",
-    icon: "≈",
-    iconClass: "bg-cyan-50 text-cyan-700",
-  },
-];
+// icons
+import { RadioTower, TriangleAlert, Waves, Droplets, CloudRain } from "lucide-react"
 
-const alerts = [
-  {
-    title: "Obstructed canal reported",
-    detail: "SN-1 · Poblacion West",
-    status: "Awaiting response",
-    tone: "amber",
-    icon: "!",
-  },
-  {
-    title: "Water level monitoring",
-    detail: "Current average: 5.9 cm",
-    status: "No critical threshold triggered",
-    tone: "blue",
-    icon: "↗",
-  },
-  {
-    title: "Sensor node online",
-    detail: "SN-1 is reporting status",
-    status: "Last status: sample data",
-    tone: "green",
-    icon: "●",
-  },
-];
+// auth / lib
+import { fetchWithAuth } from "@/lib/auth"
+import { currentMonthRange, rangeQuery } from "@/lib/dateRange"
+import { formatWeightIn, pickWeightUnit } from "@/lib/formatWeight"
+import { usePageCache } from "@/components/hooks/usePageCache"
+import { usePolling } from "@/components/hooks/usePolling"
+import { useWebSocket } from "@/lib/hooks/useWebSocket"
 
-const waste = [
-  { label: "Biodegradable", value: "14.1%", color: "#52BD6B" },
-  { label: "Recyclable", value: "21.8%", color: "#5B9DF5" },
-  { label: "Residual", value: "12.6%", color: "#D7A064" },
-  { label: "Special Waste", value: "4.7%", color: "#EB6268" },
-];
+// components
+import AgosMapWrapper from "@/components/Map/AgosMapWrapper"
+import StatCard from "@/components/Analytics/StatCard"
 
-export default function LocalizedCanalMapPage() {
-  const [layer, setLayer] = useState<"clog" | "health" | "availability">(
-    "clog",
-  );
+// ---------- types (only what this page reads) ----------
+type SensorNode = {
+  node_id: number
+  node_name: string
+  latitude: number | null
+  longitude: number | null
+  status: string
+  is_online: boolean
+  is_force_sleeping: boolean
+  condition: string | null
+  water_level: number | null
+  clog_pct: number | null
+  barangay_details?: { barangay_name: string } | null
+}
+
+type ClogEvent = { node: number; status: string }
+
+type WasteClassification = {
+  classification_id: number
+  estimated_volume: number
+  recyclable_pct: number
+  biodegradable_pct: number
+  residual_pct: number
+  special_waste_pct: number
+}
+
+type RainfallCondition = "None" | "Yellow" | "Orange" | "Red" | "Unknown"
+
+// ---------- fetchers (the backend scopes all of these to the user's barangay) ----------
+const API = process.env.NEXT_PUBLIC_API_URL
+
+const fetchNodes = async (): Promise<SensorNode[]> => {
+  const res = await fetchWithAuth(`${API}/api/sensor-nodes/`)
+  if (!res.ok) throw new Error()
+  const data = await res.json()
+  return data.results ?? data
+}
+
+// Obstructed canal = a node with a clog event still in "Detected" (nobody responded yet).
+// Counted per node, same as mobile. month=All so an older open one still counts
+// (without it the backend only returns the current month).
+const fetchObstructedCount = async (): Promise<number> => {
+  const res = await fetchWithAuth(`${API}/api/clog-events/?status=Detected&month=All`)
+  if (!res.ok) throw new Error()
+  const data = await res.json()
+  const events: ClogEvent[] = data.results ?? data
+  return new Set(events.map(e => e.node)).size
+}
+
+const fetchWaste = async (): Promise<WasteClassification[]> => {
+  const { from, to } = currentMonthRange()
+  const res = await fetchWithAuth(`${API}/api/waste-classifications/?${rangeQuery(from, to)}`)
+  if (!res.ok) throw new Error()
+  const data = await res.json()
+  return data.results ?? data
+}
+
+const fetchRainfall = async (): Promise<RainfallCondition> => {
+  const res = await fetchWithAuth(`${API}/api/rainfall-condition/`)
+  if (!res.ok) throw new Error()
+  const data = await res.json()
+  return data.condition ?? "Unknown"
+}
+
+// ---------- flood risk badge ----------
+const FLOOD_RISK: Record<RainfallCondition, { label: string; note: string; badge: string }> = {
+  None:    { label: "Normal",  note: "No significant rainfall in your barangay.",  badge: "bg-[#58D07159] text-[#2C7B3C]" },
+  Yellow:  { label: "Yellow",  note: "Light to moderate rain. Monitor the canals.", badge: "bg-[#FFE45E66] text-[#8A6D00]" },
+  Orange:  { label: "Orange",  note: "Heavy rain. Flooding is possible.",           badge: "bg-[#D8921059] text-[#D48A00]" },
+  Red:     { label: "Red",     note: "Intense rain. Serious flooding is likely.",   badge: "bg-[#D8101059] text-[#D81010]" },
+  Unknown: { label: "Unknown", note: "No recent rainfall data for your barangay.",  badge: "bg-gray-100 text-gray-500" },
+}
+
+export default function BarangayMapPage() {
+  const nodesCache    = usePageCache("barangayMap:nodes",    fetchNodes,         [] as SensorNode[],             { autoFetch: false })
+  const clogsCache    = usePageCache("barangayMap:obstructed", fetchObstructedCount, 0,                          { autoFetch: false })
+  const wasteCache    = usePageCache("barangayMap:waste",    fetchWaste,         [] as WasteClassification[],    { autoFetch: false })
+  const rainfallCache = usePageCache("barangayMap:rainfall", fetchRainfall,      "Unknown" as RainfallCondition, { autoFetch: false })
+
+  const nodes = nodesCache.data
+  const waste = wasteCache.data
+  const loading = nodesCache.loading || wasteCache.loading
+
+  const refetchAll = useCallback(async () => {
+    await Promise.allSettled([
+      nodesCache.refetch(),
+      clogsCache.refetch(),
+      wasteCache.refetch(),
+      rainfallCache.refetch(),
+    ])
+  }, [])
+
+  useEffect(() => { refetchAll() }, [])
+  usePolling(refetchAll, 30000)
+
+  // live water level / clog updates, same handler the admin dashboard uses
+  useWebSocket({
+    path: "/ws/sensor-readings/",
+    onMessage: (reading) => {
+      nodesCache.setData(prev => prev.map(node =>
+        node.node_id === reading.node_details.node_id
+          ? { ...node, water_level: reading.water_level, clog_pct: reading.clog_pct, condition: reading.overall_status ?? reading.reading_status, is_online: true }
+          : node
+      ))
+    },
+  })
+
+  // ---------- summary cards (definitions must match mobile) ----------
+  const onlineNodes   = nodes.filter(n => n.is_online && !n.is_force_sleeping && n.status !== "Maintenance")
+  const criticalNodes = onlineNodes.filter(n => n.condition === "Critical").length
+  const levels        = onlineNodes.map(n => n.water_level).filter((v): v is number => v != null)
+  const avgLevel      = levels.length ? levels.reduce((a, b) => a + b, 0) / levels.length : null
+
+  // ---------- map markers (same condition rules as the admin dashboard map) ----------
+  const markers = useMemo(() =>
+    nodes
+      .filter(n => n.latitude != null && n.longitude != null)
+      .map(n => ({
+        latitude:  n.latitude!,
+        longitude: n.longitude!,
+        label:     `${n.node_name} – ${n.barangay_details?.barangay_name ?? ""}`,
+        sublabel:  `Water: ${n.water_level ?? "—"}cm | Clog: ${n.clog_pct ?? "—"}%`,
+        condition:
+          n.status === "Maintenance"            ? "Maintenance" :
+          (n.is_force_sleeping || !n.is_online) ? "Sleep" :
+          (n.condition ?? "Normal"),
+      })),
+    [nodes]
+  )
+
+  // ---------- waste composition (same math as the MENRO analytics page) ----------
+  const share = (key: keyof WasteClassification) =>
+    waste.reduce((sum, w) => sum + (w.estimated_volume || 0) * (Number(w[key]) || 0) / 100, 0)
+
+  const totalWaste = waste.reduce((sum, w) => sum + (w.estimated_volume || 0), 0)
+  const hasWaste = totalWaste > 0
+  const compositionData = [
+    { name: "Recyclable Waste",    value: share("recyclable_pct"),    color: "#7ED99B" },
+    { name: "Biodegradable Waste", value: share("biodegradable_pct"), color: "#7CB3E8" },
+    { name: "Residual Waste",      value: share("residual_pct"),      color: "#E8B27C" },
+    { name: "Special Waste",       value: share("special_waste_pct"), color: "#E87C7C" },
+  ]
+  const unit = pickWeightUnit([totalWaste])
+  const [totalValue, totalUnit] = formatWeightIn(totalWaste, unit).split(" ")
+
+  const risk = FLOOD_RISK[rainfallCache.data] ?? FLOOD_RISK.Unknown
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900">
-      <div className="mx-auto max-w-[1600px] space-y-5 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        {/* Statistic cards */}
-        <section
-          className="grid grid-cols-2 gap-3 xl:grid-cols-4"
-          aria-label="Monitoring statistics"
-        >
-          {stats.map((stat) => (
-            <article
-              key={stat.label}
-              className="flex min-h-[128px] gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
-            >
-              <div
-                className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl text-xl font-bold ${stat.iconClass}`}
-              >
-                {stat.icon}
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-slate-500 sm:text-sm">
-                  {stat.label}
-                </p>
-                <p className="mt-2 text-2xl font-extrabold tracking-tight sm:text-3xl">
-                  {stat.value}
-                </p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">
-                  {stat.note}
-                </p>
-              </div>
-            </article>
-          ))}
-        </section>
+    // fills the layout's <main>; min-h keeps it usable on small laptops (main scrolls then)
+    <div className="flex h-full min-h-[640px] flex-col gap-3 text-[#122A48]">
+      {/* title */}
+      <p className="shrink-0 text-[15px] font-bold min-[2560px]:text-lg">Barangay Summary</p>
 
-        {/* Main content */}
-        <section className="grid grid-cols-1 items-start gap-5 2xl:grid-cols-[minmax(0,1.7fr)_minmax(340px,0.9fr)]">
-          {/* Map panel */}
-          <article className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-            <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-              <div>
-                <h3 className="font-bold text-slate-900">Canal Network Map</h3>
-                <p className="mt-1 text-xs text-slate-500">
-                  GPS-tagged sensor nodes and current canal risk levels
-                </p>
-              </div>
-
-              {/* Uses the existing map's colorMode prop. Change modes if desired. */}
-              {/* <div className="flex w-fit rounded-xl bg-slate-100 p-1">
-                {(
-                  [
-                    ["clog", "Clog Risk"],
-                    ["health", "Node Health"],
-                    ["availability", "Availability"],
-                  ] as const
-                ).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setLayer(value)}
-                    className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
-                      layer === value
-                        ? "bg-[#1565BC] text-white shadow-sm"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div> */}
-            </div>
-
-            <div className="h-[420px] min-h-[340px] overflow-hidden rounded-xl border border-slate-200 bg-slate-100 sm:h-[520px]">
-              <AgosMapWrapper
-                latitude={16.229}
-                longitude={120.486}
-                label="SN-1 – Poblacion West"
-                zoom={15}
-                colorMode={layer}
-                showLegend={true}
-                showMarkerPopups={true}
-              />
-            </div>
-
-            <div className="mt-4 flex flex-col justify-between gap-3 rounded-xl bg-slate-50 p-4 sm:flex-row sm:items-center">
-              <div>
-                <p className="text-sm font-semibold text-slate-700">
-                  Overall flood risk level
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  Confirm this status against your live sensor readings.
-                </p>
-              </div>
-              <span className="w-fit rounded-full bg-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700">
-                Unknown
-              </span>
-            </div>
-          </article>
-
-          {/* Right side panels */}
-          <div className="grid min-w-0 gap-5 lg:grid-cols-2 2xl:grid-cols-1">
-            {/* Alerts */}
-            <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-              <div className="mb-4">
-                <h3 className="font-bold">Live Alerts</h3>
-                <p className="mt-1 text-xs text-slate-500">
-                  Latest conditions requiring attention
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                {alerts.map((alert) => (
-                  <div
-                    key={alert.title}
-                    className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3"
-                  >
-                    <div
-                      className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg text-sm font-extrabold ${
-                        alert.tone === "amber"
-                          ? "bg-amber-100 text-amber-700"
-                          : alert.tone === "blue"
-                            ? "bg-blue-100 text-blue-700"
-                            : "bg-emerald-100 text-emerald-700"
-                      }`}
-                    >
-                      {alert.icon}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold">{alert.title}</p>
-                      <p className="mt-1 text-xs text-slate-600">
-                        {alert.detail}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {alert.status}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </article>
-
-            {/* Waste composition */}
-            <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-              <div className="mb-4">
-                <h3 className="font-bold">Waste Composition</h3>
-                <p className="mt-1 text-xs text-slate-500">
-                  Recorded waste by category
-                </p>
-              </div>
-
-              <div className="flex flex-col items-center gap-6 py-2 sm:flex-row sm:items-center">
-                <div
-                  role="img"
-                  aria-label="Illustrative waste composition doughnut chart"
-                  className="relative grid h-40 w-40 shrink-0 place-items-center rounded-full"
-                  style={{
-                    background:
-                      "conic-gradient(#52BD6B 0 14.1%, #5B9DF5 14.1% 35.9%, #D7A064 35.9% 48.5%, #EB6268 48.5% 53.2%, #EDF0F4 53.2% 100%)",
-                  }}
-                >
-                  <div className="grid h-[102px] w-[102px] place-items-center rounded-full bg-white text-center">
-                    <div>
-                      <p className="text-2xl font-extrabold">30.0</p>
-                      <p className="text-[10px] font-bold tracking-widest text-slate-500">
-                        GRAMS
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="w-full space-y-4">
-                  {waste.map((item) => (
-                    <div
-                      key={item.label}
-                      className="grid grid-cols-[10px_minmax(0,1fr)_auto] items-center gap-2 text-xs"
-                    >
-                      <span
-                        className="h-2.5 w-2.5 rounded-full"
-                        style={{ backgroundColor: item.color }}
-                      />
-                      <span className="text-slate-600">{item.label}</span>
-                      <span className="font-bold text-slate-800">
-                        {item.value}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              {/* <p className="mt-5 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
-                Sample values for layout demonstration. Connect your actual
-                waste records before deployment.
-              </p> */}
-            </article>
-          </div>
-        </section>
+      {/* summary cards: natural height */}
+      <div className="grid w-full shrink-0 grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard
+          label="Monitoring Points"
+          value={loading ? "—" : nodes.length}
+          note="Sensor nodes in your barangay"
+          icon={<RadioTower size={20} color="#2C7B3C" />}
+          bg="bg-[#CDE3DE]"
+        />
+        <StatCard
+          label="Critical Nodes"
+          value={loading ? "—" : criticalNodes}
+          note="Online nodes at critical level"
+          icon={<TriangleAlert size={20} color="#D81010" />}
+          bg="bg-[#FFE5E5]"
+        />
+        <StatCard
+          label="Obstructed Canals"
+          value={clogsCache.loading ? "—" : clogsCache.data}
+          note="Canals with a clog awaiting response"
+          icon={<Waves size={20} color="#D48A00" />}
+          bg="bg-[#EED7AA]"
+        />
+        <StatCard
+          label="Average Water Level"
+          value={avgLevel != null ? `${avgLevel.toFixed(1)} cm` : "—"}
+          note={avgLevel != null ? "Across online nodes" : "No online nodes right now"}
+          icon={<Droplets size={20} color="#1565BC" />}
+          bg="bg-[#1565BC29]"
+        />
       </div>
-    </main>
-  );
+
+      {/* map column + waste composition: takes ALL the remaining height */}
+      <div className="flex min-h-0 w-full flex-1 gap-2">
+        {/* map + flood risk */}
+        <div className="flex min-h-0 min-w-0 flex-[3] flex-col gap-2">
+          <div className="flex min-h-[300px] flex-1 flex-col rounded-lg border border-[#C6C6C8] bg-[#FAFCFD]">
+            <div className="shrink-0 p-2">
+              <p className="text-sm font-bold min-[2560px]:text-base">Canal Network Map</p>
+            </div>
+            {/* absolute inset-0 inside a relative flex-1 box = map always fills whatever height is left */}
+            <div className="relative flex-1 overflow-hidden rounded-b-lg">
+              <div className="absolute inset-0">
+                {/* only mount once nodes are in, so the map centers on the real markers */}
+                {!loading && (
+                  <AgosMapWrapper
+                    key={markers.length}
+                    markers={markers}
+                    zoom={15}
+                    showMarkerPopups={true}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* overall flood risk */}
+          <div className="flex shrink-0 items-center justify-between gap-3 rounded-lg border border-[#C6C6C8] bg-[#FAFCFD] p-3 shadow-[0_5px_4px_-4px_rgba(0,0,0,0.2)]">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-[#1565BC29] p-2">
+                <CloudRain size={20} color="#1565BC" />
+              </div>
+              <div>
+                <p className="text-sm font-bold min-[2560px]:text-base">Overall Flood Risk Level</p>
+                <p className="text-xs text-[#727272] min-[2560px]:text-sm">{risk.note}</p>
+              </div>
+            </div>
+            <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium min-[2560px]:text-sm ${risk.badge}`}>
+              {risk.label}
+            </span>
+          </div>
+        </div>
+
+        {/* waste composition (MENRO analytics style), stretches to the map column's height */}
+        <div className="flex min-h-0 min-w-[260px] flex-1 flex-col rounded-lg border border-[#C6C6C8] bg-[#FAFCFD]">
+          <div className="w-full shrink-0 p-2">
+            <p className="text-sm font-bold min-[2560px]:text-base">Waste Composition</p>
+            <p className="text-[11px] text-[#727272] min-[2560px]:text-xs">This month</p>
+          </div>
+
+          <hr />
+
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-4">
+            {/* donut scales with screen height, never gets taller than the card allows */}
+            <div className="relative aspect-square h-[clamp(140px,24vh,300px)] max-h-full shrink">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={hasWaste ? compositionData : [{ name: "No data", value: 1, color: "#E5E5E6" }]}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius="66%"
+                    outerRadius="98%"
+                    paddingAngle={hasWaste ? 2 : 0}
+                    stroke="none"
+                  >
+                    {(hasWaste ? compositionData : [{ color: "#E5E5E6" }]).map((entry, i) => (
+                      <Cell key={i} fill={entry.color} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+                {hasWaste ? (
+                  <>
+                    <span className="text-2xl font-bold min-[2560px]:text-4xl">{totalValue}</span>
+                    <span className="text-xs text-[#122A48]/70 min-[2560px]:text-sm">{totalUnit.toUpperCase()}</span>
+                  </>
+                ) : (
+                  <span className="px-4 text-xs text-[#727272] min-[2560px]:text-sm">No waste data this month</span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex shrink-0 flex-col gap-3">
+              {compositionData.map(entry => {
+                const pct = hasWaste ? (entry.value / totalWaste) * 100 : 0
+                return (
+                  <div key={entry.name} className="flex items-center gap-2">
+                    <span className="h-4 w-4 shrink-0 rounded-full" style={{ backgroundColor: entry.color }} />
+                    <span className="text-xs min-[2560px]:text-sm">
+                      {entry.name} <span className="font-semibold">{pct.toFixed(1)}%</span>
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }

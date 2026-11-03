@@ -96,6 +96,32 @@ export const ALERT_STYLE: Record<string, { border: string; icon: string; shadow:
     icon: "bg-[#D6F5E3] text-[#1E8A5F]",
     shadow: "shadow-[0_0_3px_rgba(30,138,95,0.45)]"
   },
+  // barangay-only notices
+  Waste_Type_Approved: {
+    border: "border-[#A7E3C4]",
+    icon: "bg-[#DCFCE7] text-[#16A34A]",
+    shadow: "shadow-[0_0_3px_rgba(22,163,74,0.45)]"
+  },
+  Waste_Type_Rejected: {
+    border: "border-[#D9C8F5]",
+    icon: "bg-[#EDE4FC] text-[#7C3AED]",
+    shadow: "shadow-[0_0_3px_rgba(124,58,237,0.45)]"
+  },
+  Report_Due_Soon: {
+    border: "border-[#A5E3EE]",
+    icon: "bg-[#CFFAFE] text-[#0E7490]",
+    shadow: "shadow-[0_0_3px_rgba(14,116,144,0.45)]"
+  },
+  Report_Overdue: {
+    border: "border-[#FFD6A0]",
+    icon: "bg-[#FFF0D6] text-[#E65100]",
+    shadow: "shadow-[0_0_3px_rgba(230,81,0,0.45)]"
+  },
+  Node_Inspection_Request: {
+    border: "border-[#FDBA8C]",
+    icon: "bg-[#FFEDD5] text-[#C2410C]",
+    shadow: "shadow-[0_0_3px_rgba(194,65,12,0.45)]"
+  },
   default: {
     border: "border-[#C6C6C8]",
     icon: "bg-[#E5E5E6] text-[#727272]",

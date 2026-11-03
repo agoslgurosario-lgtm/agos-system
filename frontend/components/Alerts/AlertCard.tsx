@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { FaWater, FaExclamationTriangle, FaPlug, FaBatteryQuarter, FaSignal, FaExclamationCircle, FaClipboardCheck, FaChevronRight, } from "react-icons/fa"
+import { FaWater, FaExclamationTriangle, FaPlug, FaBatteryQuarter, FaSignal, FaExclamationCircle, FaClipboardCheck, FaChevronRight, FaTimesCircle, FaCheckCircle, FaCalendarAlt, FaClock, FaTools, } from "react-icons/fa"
 
 import { api } from "@/lib/api"
 import { ALERT_STYLE } from "@/lib/constant"
@@ -76,7 +76,16 @@ export const ALERT_META: Record<string, { label: string; Icon: React.ElementType
   Weak_Signal:        { label: "Weak Signal",            Icon: FaSignal             },
   Sensor_Failure:     { label: "Sensor Failure",         Icon: FaExclamationCircle  },
   Report_Submitted:   { label: "Report Submitted",       Icon: FaClipboardCheck     },
+  // barangay-only notices
+  Waste_Type_Approved:     { label: "Waste Type Approved",         Icon: FaCheckCircle  },
+  Waste_Type_Rejected:    { label: "Waste Type Not Approved",     Icon: FaTimesCircle  },
+  Report_Due_Soon:        { label: "Report Due Soon",             Icon: FaCalendarAlt  },
+  Report_Overdue:         { label: "Report Overdue",              Icon: FaClock        },
+  Node_Inspection_Request:{ label: "Device Inspection Requested", Icon: FaTools        },
 }
+
+// notices that belong to the barangay itself, not to a node
+export const NO_NODE_ALERTS = ["Waste_Type_Approved", "Waste_Type_Rejected", "Report_Due_Soon", "Report_Overdue"]
 
 
 // helpers
@@ -97,6 +106,55 @@ function formatDate(ts: string) {
 
 
 export function  ContextRow({ alertType, ctx }: { alertType: string; ctx: AlertContext }) {
+  // ---- barangay-only notices ----
+  if (alertType === "Waste_Type_Approved" || alertType === "Waste_Type_Rejected") {
+    const c = ctx as { waste_type?: string; reason?: string; original_name?: string }
+    return (
+      <div className="flex flex-col gap-1 text-xs text-[#727272]">
+        {c.waste_type && <span>Waste Type: <span className="font-semibold text-[#122A48]">{c.waste_type}</span></span>}
+        {c.original_name && <span>Originally named: <span className="font-semibold text-[#122A48]">{c.original_name}</span></span>}
+        {alertType === "Waste_Type_Rejected" && c.reason && (
+          <span>Reason: <span className="font-semibold text-[#D81010]">{c.reason}</span></span>
+        )}
+      </div>
+    )
+  }
+
+  if (alertType === "Report_Due_Soon" || alertType === "Report_Overdue") {
+    const c = ctx as { period_label?: string; due_date?: string; ready_count?: number; unverified_count?: number }
+    return (
+      <div className="flex flex-col gap-1 text-xs text-[#727272]">
+        {c.period_label && <span>Period: <span className="font-semibold text-[#122A48]">{c.period_label}</span></span>}
+        {c.due_date && (
+          <span>
+            {alertType === "Report_Overdue" ? "Was due on" : "Due on"}:{" "}
+            <span className={`font-semibold ${alertType === "Report_Overdue" ? "text-[#D81010]" : "text-[#122A48]"}`}>
+              {formatDate(c.due_date + "T00:00:00")}
+            </span>
+          </span>
+        )}
+        {c.ready_count != null && <span>Ready to submit: <span className="font-semibold text-[#122A48]">{c.ready_count}</span></span>}
+        {!!c.unverified_count && <span>Not yet verified: <span className="font-semibold text-[#E65100]">{c.unverified_count}</span></span>}
+        <span className="mt-0.5">
+          {c.ready_count
+            ? alertType === "Report_Overdue" ? "You can still submit it late." : "Submit it to MENRO before the deadline."
+            : "No verified reports yet. Complete and verify your reports, then submit."}
+        </span>
+      </div>
+    )
+  }
+
+  if (alertType === "Node_Inspection_Request") {
+    const c = ctx as { reason?: string; note?: string; requested_by?: string }
+    return (
+      <div className="flex flex-col gap-1 text-xs text-[#727272]">
+        {c.reason && <span>Reason: <span className="font-semibold text-[#122A48]">{c.reason}</span></span>}
+        {c.note && <span>Note: <span className="font-semibold text-[#122A48]">{c.note}</span></span>}
+        {c.requested_by && <span>Requested by: <span className="font-semibold text-[#122A48]">{c.requested_by}</span></span>}
+      </div>
+    )
+  }
+
   if (alertType === "Report_Submitted") {
     const c = ctx as ReportContext
     return (

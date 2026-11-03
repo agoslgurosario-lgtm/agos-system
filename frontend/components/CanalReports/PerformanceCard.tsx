@@ -140,6 +140,20 @@ export default function PerformanceCard() {
               )
             })}
           </div>
+          {/* weight under each bar (same flex-1 cells as the bars, so they line up) */}
+          <div className="mt-1 flex gap-2">
+            {data.trend.map((t, i) => (
+              <p
+                key={t.period_start}
+                title={`${t.label}: ${fmtKg(t.total_waste_kg)}`}
+                className={`min-w-0 flex-1 truncate text-center text-[9px] leading-3 ${
+                  i === data.trend.length - 1 ? "font-bold text-[#166534]" : "text-[#64748b]"
+                }`}
+              >
+                {t.total_waste_kg.toLocaleString("en-US", { maximumFractionDigits: 1 })} kg
+              </p>
+            ))}
+          </div>
           <p
             className="mt-1 truncate text-right text-[10px] font-semibold"
             style={{ color: total === 0 ? "#94a3b8" : allOnTime ? "#166534" : "#c2410c" }}

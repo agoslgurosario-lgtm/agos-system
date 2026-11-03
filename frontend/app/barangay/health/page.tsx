@@ -73,7 +73,6 @@ export default function BarangayHealth() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <p className="text-[#122A48] font-bold text-[15px] mb-2">Sensor Nodes Health</p>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 w-full text-[#122A48]">
         {cards.map(card => (

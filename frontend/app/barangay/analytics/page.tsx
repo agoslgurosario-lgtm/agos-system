@@ -1,76 +1,36 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import {
-  Activity,
-  AlertTriangle,
-  FileDown,
-  Loader2,
-  MapPin,
-  Scale,
-  ShieldCheck,
-} from "lucide-react";
+import { useMemo, useState } from "react";
+import { FileDown, Loader2, PieChart as PieChartIcon, Scale, ShieldCheck, TrendingUp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 import DetectionRow from "@/components/Analytics/DetectionRow";
 import WasteProgress from "@/components/Analytics/WasteProgress";
 import StatCard from "@/components/Analytics/StatCard";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DateRangeFilter } from "@/components/DateRangeFilter";
 import { TablePagination } from "@/components/TablePagination";
+import { Toast } from "@/components/Toast";
 import { usePagination } from "@/components/hooks/usePagination";
 import { useFillRows } from "@/components/hooks/useFillRows";
+import { useToast } from "@/components/hooks/useToast";
 
 import { useAnalytics } from "@/lib/hooks/useAnalytics";
-import {
-  buildComposition,
-  buildDetections,
-  buildTopBarangays,
-} from "@/lib/analytics";
+import { buildComposition, buildDetections } from "@/lib/analytics";
+import { currentMonthRange, toISODate } from "@/lib/dateRange";
+import { exportOrPrint } from "@/lib/exportOrPrint";
 import { formatWeight } from "@/lib/formatWeight";
 import { printAnalyticsReport } from "@/lib/printAnalyticsReport";
 import { getUser } from "@/lib/auth";
 
-// "YYYY-MM-DD" in local time (toISOString would shift the day for UTC+8)
-function toDateInput(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
-}
+const TABLE_COLUMNS = [
+  "CLASSIFICATION ID", "NODE", "DOMINANT WASTE TYPE", "RECYCLABLE", "BIODEGRADABLE",
+  "RESIDUAL", "SPECIAL WASTE", "CONFIDENCE", "ESTIMATED VOLUME", "TIMESTAMP",
+];
 
-function defaultFrom() {
-  const d = new Date();
-  return toDateInput(new Date(d.getFullYear(), d.getMonth(), 1));
-}
-
-// Same look as the filter dropdowns on the Waste Classification page
-function DateField({
-  label,
-  value,
-  min,
-  max,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  min?: string;
-  max?: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="flex h-9 items-center gap-2 rounded-lg border-2 border-[#C6C6C8] bg-white px-3 text-xs font-medium text-[#122A48]">
-      <span className="text-[#727272]">{label}</span>
-      <input
-        type="date"
-        value={value}
-        min={min}
-        max={max}
-        onChange={(e) => e.target.value && onChange(e.target.value)}
-        className="cursor-pointer bg-transparent text-xs font-medium text-[#122A48] outline-none"
-      />
-    </label>
-  );
-}
+const dayLabel = (d: string) =>
+  new Date(`${d}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 function Card({
   title,
@@ -85,116 +45,45 @@ function Card({
 }) {
   return (
     <section
-      className={`flex flex-col rounded-lg border border-[#00000040] bg-[#FAFCFD] p-4 shadow-[0_5px_4px_-4px_rgba(0,0,0,0.2)] ${className}`}
+      className={`flex flex-col rounded-lg border border-[#00000040] bg-[#FAFCFD] p-3 shadow-[0_5px_4px_-4px_rgba(0,0,0,0.2)] ${className}`}
     >
       <h2 className="text-sm font-bold text-[#122A48]">{title}</h2>
       {subtitle && <p className="text-[11px] text-[#727272]">{subtitle}</p>}
-      <div className="mt-3 flex-1">{children}</div>
+      <div className="mt-2 flex-1">{children}</div>
     </section>
   );
 }
 
 export default function AnalyticsPage() {
-  const today = toDateInput(new Date());
-  const [from, setFrom] = useState(defaultFrom());
-  const [to, setTo] = useState(today);
+  // date range: opens on the current month, clearing it goes back to the current month
+  const [range, setRange] = useState(() => currentMonthRange());
+  const { from, to } = range;
 
-  const {
-    classifications: allClassifications,
-    liveClassifications: allLiveClassifications,
-    nodes: allNodes,
-    loading,
-    refreshing,
-    error,
-    refetch,
-  } = useAnalytics(from, to);
-
-  // Barangay users only see their own barangay's data. Admin/MENRO have no barangay, so see all.
-  // Read in an effect so the server render and first client render match.
-  const [scopeId, setScopeId] = useState<number | null>(null);
-  const [scopeName, setScopeName] = useState<string | null>(null);
-  const [scoped, setScoped] = useState(false);
-  useEffect(() => {
-    const u = getUser() as {
-      user_role?: string;
-      barangay_id?: number | null;
-      barangay_details?: { barangay_name?: string } | null;
-    } | null;
-    if (u && (u.user_role === "Barangay" || u.barangay_id != null)) {
-      setScoped(true);
-      setScopeId(u.barangay_id ?? null);
-      setScopeName(u.barangay_details?.barangay_name ?? null);
+  const handleRangeChange = (f: string, t: string) => {
+    if (!f && !t) {
+      setRange(currentMonthRange());
+      return;
     }
-  }, []);
-
-  const inMyBarangay = (w: (typeof allClassifications)[number]) => {
-    const b = w.node_details?.barangay_details;
-    if (b?.barangay_id != null && scopeId != null) return b.barangay_id === scopeId;
-    return !!scopeName && b?.barangay_name === scopeName; // can't match -> hidden
+    setRange({ from: f || t, to: t || toISODate(new Date()) });
   };
-  const classifications = useMemo(
-    () => (scoped ? allClassifications.filter(inMyBarangay) : allClassifications),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [allClassifications, scoped, scopeId, scopeName]
-  );
-  const liveClassifications = useMemo(
-    () => (scoped ? allLiveClassifications.filter(inMyBarangay) : allLiveClassifications),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [allLiveClassifications, scoped, scopeId, scopeName]
-  );
 
-  // Sensor nodes: use the node's own barangay when the hook provides it (barangay_details / barangay_id),
-  // otherwise fall back to nodes that appear in this barangay's classifications.
-  const nodes = useMemo(() => {
-    if (!scoped) return allNodes;
-    const mine = new Set(
-      [...allClassifications, ...allLiveClassifications]
-        .filter(inMyBarangay)
-        .map((w) => w.node_details?.node_id)
-    );
-    return allNodes.filter((n) => {
-      const x = n as typeof n & {
-        barangay_id?: number | null;
-        barangay_details?: { barangay_id?: number; barangay_name?: string } | null;
-      };
-      const id = x.barangay_details?.barangay_id ?? x.barangay_id ?? null;
-      if (id != null && scopeId != null) return id === scopeId;
-      const name = x.barangay_details?.barangay_name;
-      if (name && scopeName) return name === scopeName;
-      return mine.has(n.node_id);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allNodes, allClassifications, allLiveClassifications, scoped, scopeId, scopeName]);
+  // The backend already limits waste classifications and sensor nodes to the user's barangay,
+  // so everything below is used as-is.
+  const { classifications, liveClassifications, nodes, loading, refreshing, error, refetch } =
+    useAnalytics(from, to);
 
-  // Keep the range valid: From can never be after To
-  const handleFrom = (v: string) => {
-    setFrom(v);
-    if (v > to) setTo(v);
-  };
-  const handleTo = (v: string) => {
-    setTo(v);
-    if (v < from) setFrom(v);
-  };
+  const { toasts, addToast, removeToast } = useToast();
 
   const composition = useMemo(() => buildComposition(classifications), [classifications]);
   const detections = useMemo(
     () => buildDetections(liveClassifications, nodes),
     [liveClassifications, nodes]
   );
-  // every barangay with data, for the printed report
-  const allBarangays = useMemo(
-    () => buildTopBarangays(classifications, Infinity),
-    [classifications]
-  );
 
   const busy = loading || refreshing;
 
   // Waste Classification Readings table: fill the card, paginate the rest (same as the MENRO analytics page)
-  const { panelRef, tableWrapRef, rows } = useFillRows({
-    rowHeight: 35,
-    initialRows: 5,
-    deps: [busy],
-  });
+  const { panelRef, tableWrapRef, rows } = useFillRows({ rowHeight: 35, initialRows: 5, deps: [busy] });
   const { paginated, currentPage, setCurrentPage, totalItems, itemsPerPage } = usePagination(
     classifications,
     rows
@@ -211,52 +100,79 @@ export default function AnalyticsPage() {
     [detections]
   );
 
+  // ---------- summary cards (all about the selected period, except Clear Nodes) ----------
   const stats = useMemo(() => {
-    const totalDetections = classifications.filter(
-      (c) => (c.estimated_volume || 0) > 0 || (c.dominant_waste_type && c.dominant_waste_type !== "None")
-    ).length;
     const totalWaste = classifications.reduce((sum, c) => sum + (c.estimated_volume || 0), 0);
+
+    const volumeByNode: Record<string, number> = {};
+    for (const c of classifications) {
+      const name = c.node_details?.node_name;
+      if (!name) continue;
+      volumeByNode[name] = (volumeByNode[name] || 0) + (c.estimated_volume || 0);
+    }
+    const [topNodeName, topNodeVolume] =
+      Object.entries(volumeByNode).sort((a, b) => b[1] - a[1])[0] ?? [null, 0];
+
+    const topType = totalWaste > 0 ? [...composition].sort((a, b) => b.percent - a.percent)[0] : null;
+
     return {
-      totalDetections,
       totalWaste,
-      activeHotspots: detections.filter((d) => d.status === "Detected").length,
-      criticalAreas: detections.filter((d) => d.severity === "High").length,
+      topType,
+      topNode: topNodeName && topNodeVolume > 0 ? { name: topNodeName, volume: topNodeVolume } : null,
       clearNodes: detections.filter((d) => d.status === "Clear").length,
     };
-  }, [classifications, detections]);
+  }, [classifications, composition, detections]);
 
-  const nodeCount = detections.length;
+  // ---------- export (desktop = print dialog, iPhone/iPad = PDF in a new tab) ----------
+  const handleExport = () => {
+    const user = getUser();
+    const period = from === to ? dayLabel(from) : `${dayLabel(from)} – ${dayLabel(to)}`;
+
+    exportOrPrint({
+      table: {
+        title: `Waste Analytics (${period})`,
+        columns: ["ID", "Node", "Dominant Type", "Recyclable", "Biodegradable", "Residual", "Special Waste", "Confidence", "Est. Volume", "Timestamp"],
+        rows: classifications.map((c) => [
+          c.classification_id,
+          c.node_details?.node_name ?? "—",
+          c.dominant_waste_type === "None" ? "No waste detected" : c.dominant_waste_type,
+          `${Number(c.recyclable_pct).toFixed(2)}%`,
+          `${Number(c.biodegradable_pct).toFixed(2)}%`,
+          `${Number(c.residual_pct).toFixed(2)}%`,
+          `${Number(c.special_waste_pct).toFixed(2)}%`,
+          `${Number(c.confidence).toFixed(2)}%`,
+          formatWeight(Number(c.estimated_volume)),
+          c.timestamp ? new Date(c.timestamp).toLocaleString("en-PH") : "—",
+        ]),
+        orientation: "landscape",
+      },
+      print: () =>
+        printAnalyticsReport({
+          from,
+          to,
+          generatedBy: user ? `${user.first_name} ${user.last_name}` : "Barangay Personnel",
+          composition,
+          records: classifications,
+        }),
+      onError: () => addToast("Failed to export. Please try again.", "error"),
+    });
+  };
 
   return (
     // No padding of its own: the layout already pads the page, same as the other pages
     <div className="flex min-h-full flex-col gap-3">
       {/* Filters + export */}
       <div className="flex w-full justify-between">
-        <div className="flex gap-3">
-          <DateField label="From" value={from} max={to} onChange={handleFrom} />
-          <DateField label="To" value={to} min={from} max={today} onChange={handleTo} />
-        </div>
+        <DateRangeFilter from={from} to={to} onChange={handleRangeChange} align="left" width="w-[240px]" />
 
-        <div>
-          <Button
-            onClick={() => {
-              const user = getUser();
-              printAnalyticsReport({
-                from,
-                to,
-                generatedBy: user ? `${user.first_name} ${user.last_name}` : "Admin",
-                composition,
-                barangays: allBarangays,
-                records: classifications,
-              });
-            }}
-            disabled={busy || error}
-            className="cursor-pointer bg-[#2fd45b] hover:bg-[#28b54e]"
-          >
-            <FileDown size={16} className="mr-1" />
-            Export
-          </Button>
-        </div>
+        <Button
+          onClick={handleExport}
+          disabled={busy || error}
+          className="cursor-pointer bg-[#2fd45b] hover:bg-[#28b54e]"
+        >
+          <FileDown size={16} className="mr-1" />
+          Export
+        </Button>
       </div>
 
       {error && (
@@ -266,7 +182,7 @@ export default function AnalyticsPage() {
           </p>
           <button
             onClick={() => refetch()}
-            className="rounded-lg border border-[#D81010] bg-transparent px-3 py-2 text-sm text-[#D81010] hover:bg-gray-100"
+            className="cursor-pointer rounded-lg border border-[#D81010] bg-transparent px-3 py-2 text-sm text-[#D81010] hover:bg-gray-100"
           >
             Retry
           </button>
@@ -283,21 +199,7 @@ export default function AnalyticsPage() {
       {!busy && !error && (
         <>
           {/* Summary cards */}
-          <div className="grid w-full grid-cols-2 gap-3 text-[#122A48] lg:grid-cols-5">
-            <StatCard
-              label="Total Detections"
-              value={stats.totalDetections}
-              note="Classifications in the selected period"
-              icon={<Activity size={20} color="#582579" />}
-              bg="bg-[#E1CDE3]"
-            />
-            <StatCard
-              label="Active Hotspots"
-              value={stats.activeHotspots}
-              note={`Of ${nodeCount} sensor nodes, right now`}
-              icon={<MapPin size={20} color="#1565BC" />}
-              bg="bg-[#1565BC61]"
-            />
+          <div className="grid w-full grid-cols-2 gap-3 text-[#122A48] lg:grid-cols-4">
             <StatCard
               label="Total Waste"
               value={formatWeight(stats.totalWaste)}
@@ -306,28 +208,43 @@ export default function AnalyticsPage() {
               bg="bg-[#B2FBC1]"
             />
             <StatCard
-              label="Critical Areas"
-              value={stats.criticalAreas}
-              note="High volume nodes, right now"
-              icon={<AlertTriangle size={20} color="#D48A00" />}
+              label="Dominant Waste Type"
+              value={stats.topType ? stats.topType.type : "—"}
+              note={
+                stats.topType
+                  ? `${stats.topType.percent}% of the total waste`
+                  : "No waste data in the selected period"
+              }
+              icon={<PieChartIcon size={20} color="#582579" />}
+              bg="bg-[#E1CDE3]"
+            />
+            <StatCard
+              label="Highest Volume Node"
+              value={stats.topNode ? stats.topNode.name : "—"}
+              note={
+                stats.topNode
+                  ? `${formatWeight(stats.topNode.volume)} in the selected period`
+                  : "No waste data in the selected period"
+              }
+              icon={<TrendingUp size={20} color="#D48A00" />}
               bg="bg-[#EED7AA]"
             />
             <StatCard
               label="Clear Nodes"
               value={stats.clearNodes}
-              note="No detection, right now"
+              note={`Of ${detections.length} sensor nodes, no detection right now`}
               icon={<ShieldCheck size={20} color="#727272" />}
               bg="bg-[#E5E5E6]"
             />
           </div>
 
-          {/* Main grid */}
+          {/* Compact top row: leaves room for the readings table */}
           <div className="grid items-stretch gap-3 xl:grid-cols-[1.4fr_1fr]">
             <Card title="Solid Debris Detection" subtitle="Latest reading per sensor node">
               {sortedDetections.length === 0 ? (
                 <p className="py-4 text-center text-[12px] text-slate-400">No sensor nodes found.</p>
               ) : (
-                <div className="max-h-[560px] space-y-2 overflow-y-auto pr-1">
+                <div className="max-h-[190px] space-y-2 overflow-y-auto pr-1">
                   {sortedDetections.map((item) => (
                     <DetectionRow key={item.node_id} {...item} />
                   ))}
@@ -335,7 +252,7 @@ export default function AnalyticsPage() {
               )}
             </Card>
 
-            <Card title="Classified Waste Type">
+            <Card title="Classified Waste Type" subtitle="Share of the total waste in the selected period">
               {composition.map((item) => (
                 <WasteProgress key={item.type} {...item} />
               ))}
@@ -345,7 +262,7 @@ export default function AnalyticsPage() {
           {/* Waste Classification Readings, same table as the MENRO analytics page */}
           <div
             ref={panelRef}
-            className="mt-1 flex min-h-0 flex-1 flex-col rounded-lg border border-[#C6C6C8] bg-[#FAFCFD]"
+            className="flex min-h-[320px] flex-1 flex-col rounded-lg border border-[#C6C6C8] bg-[#FAFCFD]"
           >
             <div className="w-full p-2">
               <p className="text-sm font-bold">Waste Classification Readings</p>
@@ -355,18 +272,7 @@ export default function AnalyticsPage() {
               <Table>
                 <TableHeader className="h-12 border border-[#CFD8DC] bg-[#e8eef1b4]">
                   <TableRow>
-                    {[
-                      "CLASSIFICATION ID",
-                      "NODE",
-                      "DOMINANT WASTE TYPE",
-                      "RECYCLABLE",
-                      "BIODEGRADABLE",
-                      "RESIDUAL",
-                      "SPECIAL WASTE",
-                      "CONFIDENCE",
-                      "ESTIMATED VOLUME",
-                      "TIMESTAMP",
-                    ].map((h) => (
+                    {TABLE_COLUMNS.map((h) => (
                       <TableHead key={h} className="text-left text-xs font-semibold text-[#727272]">
                         {h}
                       </TableHead>
@@ -387,9 +293,7 @@ export default function AnalyticsPage() {
                       <TableCell className="text-left text-xs">{Number(w.special_waste_pct).toFixed(2)}%</TableCell>
                       <TableCell className="text-left text-xs">{Number(w.confidence).toFixed(2)}%</TableCell>
                       <TableCell className="text-left text-xs">{formatWeight(Number(w.estimated_volume))}</TableCell>
-                      <TableCell className="text-left text-xs">
-                        {new Date(w.timestamp).toLocaleString()}
-                      </TableCell>
+                      <TableCell className="text-left text-xs">{new Date(w.timestamp).toLocaleString()}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -413,6 +317,8 @@ export default function AnalyticsPage() {
           </div>
         </>
       )}
+
+      <Toast toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }
