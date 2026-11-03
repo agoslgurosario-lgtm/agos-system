@@ -1,7 +1,7 @@
 "use client"
 
 import { AlertTriangle } from "lucide-react"
-import type { SignatoryStatus } from "./useSignatoryStatus"
+import type { SignatoryStatus } from "@/lib/hooks/useSignatoryStatus"
 
 export function SignatoryBanner({ status }: { status: SignatoryStatus }) {
   if (status.loading || status.complete) return null
