@@ -14,7 +14,7 @@ import { SpinnerIcon } from "@/components/SpinnerIcon"
 import StyledBadge from "@/components/StyledBadge"
 import { PrintCanalReport } from "@/components/PrintReport/PrintCanalReport"
 import { DateRangeFilter } from "@/components/DateRangeFilter"
-import { BarangayReportsSkeleton } from "@/components/Skeleton/Admin/HistorySkeleton/BarangayReportsSkeleton"
+import { BarangayReportsSkeleton } from "@/components/Skeleton/Barangay/BarangayReportsSkeleton"
 
 // react
 import { useState, useEffect, useCallback } from "react"

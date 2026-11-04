@@ -41,6 +41,7 @@ import { getUser } from "@/lib/auth"
 import { useWebSocket } from "@/lib/hooks/useWebSocket"
 import { historyCache } from "@/lib/historyCache"
 import { remarksText } from "@/lib/historyRemarks"
+import { formatWeight } from "@/lib/formatWeight"
 import { isIOSDevice } from "@/lib/device"
 import { openTablePdf, PdfTable } from "@/lib/openPdf"
 
@@ -69,6 +70,7 @@ type SensorReading = {
   water_level: number | null
   water_flow_rate: number | null
   clog_pct: number | null
+  estimated_weight?: number | null
   node_details: {
     node_id: number
     hotspot_details: {
@@ -858,13 +860,14 @@ export default function NodeManagement() {
       if (readingsFrom) params.set('from', readingsFrom)
       if (readingsTo) params.set('to', readingsTo)
       const all = await fetchAllPages(`${process.env.NEXT_PUBLIC_API_URL}/api/sensor-readings/node/${readingsDialog.node.node_id}/?${params.toString()}`)
-      const columns = ["Timestamp", "Hotspot Name", "Water Level", "Flow Rate", "Clog %", "Water Status", "Clog Status", "Status"]
+      const columns = ["Timestamp", "Hotspot Name", "Water Level", "Flow Rate", "Clog %", "Est. Weight", "Water Status", "Clog Status", "Status"]
       const rows = all.map(r => [
         new Date(r.timestamp).toLocaleString('en-PH', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }),
         r.node_details.hotspot_details?.name ?? '—',
         r.water_level != null ? `${r.water_level} cm` : '—',
         r.water_flow_rate != null ? `${Number(r.water_flow_rate).toFixed(5)} m/s` : '—',
         r.clog_pct != null ? `${r.clog_pct} %` : '—',
+        (r.estimated_weight ?? 0) > 0 ? `~ ${formatWeight(r.estimated_weight)}` : '0 g',
         r.reading_status,
         r.clog_status ?? '—',
         r.overall_status ?? r.reading_status,
@@ -1393,6 +1396,7 @@ export default function NodeManagement() {
                   <TableHead className="font-semibold text-center text-xs text-[#727272]">WATER LEVEL</TableHead>
                   <TableHead className="font-semibold text-center text-xs text-[#727272]">FLOW RATE</TableHead>
                   <TableHead className="font-semibold text-center text-xs text-[#727272]">CLOG %</TableHead>
+                  <TableHead className="font-semibold text-center text-xs text-[#727272]">EST. WEIGHT</TableHead>
                   <TableHead className="font-semibold text-center text-xs text-[#727272]">WATER STATUS</TableHead>
                   <TableHead className="font-semibold text-center text-xs text-[#727272]">CLOG STATUS</TableHead>
                   <TableHead className="font-semibold text-center text-xs text-[#727272]">OVERALL STATUS</TableHead>
@@ -1401,13 +1405,13 @@ export default function NodeManagement() {
               <TableBody>
                 {readingsError ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-10">
+                    <TableCell colSpan={9} className="text-center py-10">
                       <p className="text-[#D81010] font-semibold text-sm">Failed to load readings.</p>
                     </TableCell>
                   </TableRow>
                 ) : readingsBusy ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-10">
+                    <TableCell colSpan={9} className="text-center py-10">
                       <div className="flex flex-col items-center gap-2">
                         <SpinnerIcon size={24} />
                         <p className="text-[#727272] text-sm">Loading readings...</p>
@@ -1416,7 +1420,7 @@ export default function NodeManagement() {
                   </TableRow>
                 ) : nodeReadings.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-10">
+                    <TableCell colSpan={9} className="text-center py-10">
                       <p className="text-[#727272] text-sm">No readings recorded for this node yet.</p>
                     </TableCell>
                   </TableRow>
@@ -1430,6 +1434,7 @@ export default function NodeManagement() {
                       <TableCell className="text-center h-11">{r.water_level != null ? `${r.water_level} cm` : '—'}</TableCell>
                       <TableCell className="text-center h-11">{r.water_flow_rate != null ? `${Number(r.water_flow_rate).toFixed(5)} m/s` : '—'}</TableCell>
                       <TableCell className="text-center h-11">{r.clog_pct != null ? `${r.clog_pct} %` : '—'}</TableCell>
+                      <TableCell className="text-center h-11">{(r.estimated_weight ?? 0) > 0 ? `~ ${formatWeight(r.estimated_weight)}` : '0 g'}</TableCell>
                       <TableCell className="text-center h-11">
                         <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${statusBadgeClass(r.reading_status)}`}>
                           {r.reading_status}

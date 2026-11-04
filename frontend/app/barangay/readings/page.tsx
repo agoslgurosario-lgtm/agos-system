@@ -19,6 +19,7 @@ import { useWebSocket } from "@/lib/hooks/useWebSocket"
 import { isIOSDevice } from "@/lib/device"
 import { openTablePdf, type PdfTable } from "@/lib/openPdf"
 import { printReport } from "@/lib/printReport"
+import { formatWeight } from "@/lib/formatWeight"
 import { usePageCache } from "@/components/hooks/usePageCache"
 import { usePolling } from "@/components/hooks/usePolling"
 import { usePagination } from "@/components/hooks/usePagination"
@@ -56,6 +57,7 @@ type SensorReading = {
   water_level: number | null
   water_flow_rate: number | null
   clog_pct: number | null
+  estimated_weight?: number | null
   node_details: { hotspot_details?: { name: string } | null } | null
 }
 
@@ -111,7 +113,7 @@ const fetchAllReadings = async (nodeId: number, f: HistoryFilters): Promise<Sens
   return all
 }
 
-const HISTORY_COLUMNS = ["Timestamp", "Hotspot Name", "Water Level", "Flow Rate", "Clog %", "Water Status", "Clog Status", "Overall Status"]
+const HISTORY_COLUMNS = ["Timestamp", "Hotspot Name", "Water Level", "Flow Rate", "Clog %", "Est. Weight", "Water Status", "Clog Status", "Overall Status"]
 
 const readingRow = (r: SensorReading) => [
   formatWhen(r.timestamp),
@@ -119,6 +121,7 @@ const readingRow = (r: SensorReading) => [
   r.water_level != null ? `${r.water_level} cm` : "—",
   r.water_flow_rate != null ? `${Number(r.water_flow_rate).toFixed(5)} m/s` : "—",
   r.clog_pct != null ? `${r.clog_pct} %` : "—",
+  (r.estimated_weight ?? 0) > 0 ? `~ ${formatWeight(r.estimated_weight)}` : "0 g",
   r.reading_status,
   r.clog_status ?? "—",
   r.overall_status ?? r.reading_status,
@@ -499,7 +502,7 @@ export default function BarangayReadingsPage() {
             <Table>
               <TableHeader className="border border-[#CFD8DC] bg-[#e8eef1b4]">
                 <TableRow>
-                  {["TIMESTAMP", "HOTSPOT NAME", "WATER LEVEL", "FLOW RATE", "CLOG %", "WATER STATUS", "CLOG STATUS", "OVERALL STATUS"].map(h => (
+                  {["TIMESTAMP", "HOTSPOT NAME", "WATER LEVEL", "FLOW RATE", "CLOG %", "EST. WEIGHT", "WATER STATUS", "CLOG STATUS", "OVERALL STATUS"].map(h => (
                     <TableHead key={h} className="text-center text-xs font-semibold text-[#727272]">{h}</TableHead>
                   ))}
                 </TableRow>
@@ -507,13 +510,13 @@ export default function BarangayReadingsPage() {
               <TableBody>
                 {hError ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-10 text-center">
+                    <TableCell colSpan={9} className="py-10 text-center">
                       <p className="text-sm font-semibold text-[#D81010]">Failed to load readings.</p>
                     </TableCell>
                   </TableRow>
                 ) : hLoading && hRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-10 text-center">
+                    <TableCell colSpan={9} className="py-10 text-center">
                       <div className="flex flex-col items-center gap-2">
                         <SpinnerIcon size={24} />
                         <p className="text-sm text-[#727272]">Loading readings...</p>
@@ -522,7 +525,7 @@ export default function BarangayReadingsPage() {
                   </TableRow>
                 ) : hRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-10 text-center">
+                    <TableCell colSpan={9} className="py-10 text-center">
                       <p className="text-sm text-[#727272]">No readings recorded for this node in your barangay.</p>
                     </TableCell>
                   </TableRow>
@@ -534,6 +537,7 @@ export default function BarangayReadingsPage() {
                       <TableCell className="h-11 text-center">{r.water_level != null ? `${r.water_level} cm` : "—"}</TableCell>
                       <TableCell className="h-11 text-center">{r.water_flow_rate != null ? `${Number(r.water_flow_rate).toFixed(5)} m/s` : "—"}</TableCell>
                       <TableCell className="h-11 text-center">{r.clog_pct != null ? `${r.clog_pct} %` : "—"}</TableCell>
+                      <TableCell className="h-11 text-center">{(r.estimated_weight ?? 0) > 0 ? `~ ${formatWeight(r.estimated_weight)}` : "0 g"}</TableCell>
                       <TableCell className="h-11 text-center">
                         <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${statusBadgeClass(r.reading_status)}`}>
                           {r.reading_status}

@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Alert } from "react-native";
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Alert, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
 import { api } from "@/lib/api";
 import { CanalMonitoringReport } from "@/types/reports";
@@ -10,6 +10,7 @@ import AlertBellButton from "@/components/alerts/AlertBellButton";
 import SubmitBanner from "@/components/reports/SubmitBanner";
 import PerformanceCard from "@/components/reports/PerformanceCard";
 import Pagination from "@/components/alerts/Pagination";
+import ReportFilterSheet, { type SeverityFilter, type StatusFilter } from "@/components/reports/ReportFilterSheet";
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Shadow } from "react-native-shadow-2";
@@ -92,6 +93,12 @@ export default function ReportsListScreen() {
 
   const [exportingId, setExportingId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
+
+  // filters (same sheet pattern as the Sensor Nodes screen)
+  const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("All");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
+  const [filterVisible, setFilterVisible] = useState(false);
+  const filtersActive = severityFilter !== "All" || statusFilter !== "All";
   const prevCount = useRef(0);
 
   const loadData = useCallback(async (isRefresh = false) => {
@@ -120,13 +127,22 @@ export default function ReportsListScreen() {
 
   const inProgressCount = reports.filter((r) => !r.is_submitted).length;
 
-  const sortedReports = [...reports].sort(
+  // a report with no severity yet (still in progress) can't match a severity filter
+  const filteredReports = reports.filter((r) => {
+    if (severityFilter !== "All" && r.severity !== severityFilter) return false;
+    if (statusFilter !== "All" && r.status !== statusFilter) return false;
+    return true;
+  });
+
+  const sortedReports = [...filteredReports].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
 
   const totalPages = Math.max(1, Math.ceil(sortedReports.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const pageReports = sortedReports.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  useEffect(() => { setPage(1); }, [severityFilter, statusFilter]);
 
   useEffect(() => {
     if (prevCount.current > 0 && reports.length > prevCount.current) setPage(1);
@@ -176,7 +192,14 @@ export default function ReportsListScreen() {
         contentContainerClassName="p-4 pb-28"
       >
         <View className="mb-4 flex-row items-center justify-between gap-3">
-          <Text className="flex-1 text-lg font-bold text-[#122A48]" numberOfLines={2}>
+          <Pressable onPress={() => setFilterVisible(true)} hitSlop={10} className="relative">
+            <Ionicons name="filter-outline" size={22} color="#334155" />
+            {filtersActive && (
+              <View className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-[#D81010]" />
+            )}
+          </Pressable>
+
+          <Text className="flex-1 text-center text-lg font-bold text-[#122A48]" numberOfLines={2}>
             Canal Monitoring Reports
           </Text>
 
@@ -192,9 +215,15 @@ export default function ReportsListScreen() {
         <Text className="mb-3 text-sm font-semibold text-[#122A48]">Recent Reports</Text>
 
         <View className="gap-3">
-          {sortedReports.length === 0 && (
+          {reports.length === 0 && (
             <Text className="mt-5 text-center text-[13px] text-[#94a3b8]">
               No reports yet. Tap "Add report" to file one.
+            </Text>
+          )}
+
+          {reports.length > 0 && sortedReports.length === 0 && (
+            <Text className="mt-5 text-center text-[13px] text-[#94a3b8]">
+              No reports match these filters.
             </Text>
           )}
 
@@ -302,6 +331,14 @@ export default function ReportsListScreen() {
 
         <Pagination currentPage={safePage} totalPages={totalPages} onPageChange={setPage} />
       </ScrollView>
+
+      <ReportFilterSheet
+        visible={filterVisible}
+        onClose={() => setFilterVisible(false)}
+        severity={severityFilter}
+        status={statusFilter}
+        onApply={(sev, st) => { setSeverityFilter(sev); setStatusFilter(st); }}
+      />
 
       <View style={{ position: "absolute", bottom: 20 + insets.bottom, right: 20 }}>
         <Shadow

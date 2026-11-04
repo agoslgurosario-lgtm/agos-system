@@ -35,6 +35,8 @@ export interface CanalMonitoringReport {
   post_completed_at: string | null
   verified_at: string | null
   verified_by_name: string | null
+  // {position: name}: the snapshot taken at submit time, otherwise the barangay's current Active signatories (detail endpoint only)
+  signatories?: Record<string, string>
   void_reason?: string | null
   earlier_voided?: { report_id: number; reason: string; voided_at: string | null; voided_by_name: string | null }[]
   node_summaries?: {

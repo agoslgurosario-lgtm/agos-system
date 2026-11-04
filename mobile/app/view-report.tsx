@@ -17,7 +17,13 @@ import { PurokBreakdown } from "@/components/reports/PurokBreakdown";
 import { VoidReportModal } from "@/components/reports/VoidReportModal";
 
 
-const WASTE_ROWS: { key: keyof CanalMonitoringReport; label: string }[] = [
+// same order as the printed report
+const SIGNATORY_POSITIONS = [
+  "Barangay Secretary", "Chairman Environment",
+  "Brgy. Sanitary Inspector", "Punong Barangay",
+];
+
+const WASTE_ROWS:{ key: keyof CanalMonitoringReport; label: string }[] = [
   { key: "waste_plastic_kg", label: "Plastic" },
   { key: "waste_food_wrapper_kg", label: "Food Wrapper" },
   { key: "waste_paper_cardboard_kg", label: "Paper / Cardboard" },
@@ -395,6 +401,14 @@ export default function ViewReportScreen() {
           />
           {report.remarks ? <DetailLabelValue label="REMARKS" value={report.remarks} /> : null}
           <DetailLabelValue label="FILED BY" value={filedBy} />
+
+          <View className="my-3 h-px bg-[#f1f5f9]" />
+
+          {/* SIGNATORIES */}
+          <SectionHeader icon="file-sign" title="SIGNATORIES" />
+          {SIGNATORY_POSITIONS.map((position) => (
+            <DetailLabelValue key={position} label={position} value={report.signatories?.[position] ?? ""} />
+          ))}
 
           {photoGroups.length > 0 && (
             <>
