@@ -5,7 +5,7 @@ from .views import (
     ReportMediaListView, ReportMediaUploadView, ReportMediaDetailView, ReportMediaByClogEventView, SignatoryStatusView,
     CustomWasteTypeListCreateView, CustomWasteTypeReviewView, CanalReportSystemDataView, CanalReportCompletePostView, 
     CanalReportVerifyView, CanalReportCompleteView, CleanupPreviewView, CanalReportPurokRowsView,
-    CanalReportVoidView,
+    CanalReportVoidView, PersonnelListCreateView,
 )
 from .submission_views import (
     PeriodListView, SubmissionPreviewView, SubmissionsView,
@@ -25,6 +25,7 @@ urlpatterns = [
     path('report-media/<int:media>/', ReportMediaDetailView.as_view()),
     path('canal-reports/signatory-status/', SignatoryStatusView.as_view()),
     path('report-media/clog-event/<int:event_id>/', ReportMediaByClogEventView.as_view(), name='report-media-by-clog-event'),
+    path('personnel/', PersonnelListCreateView.as_view()),
     path('custom-waste-types/', CustomWasteTypeListCreateView.as_view()),
     path('custom-waste-types/<int:waste_type_id>/', CustomWasteTypeReviewView.as_view()),
     path('canal-reports/<int:report_id>/system-data/', CanalReportSystemDataView.as_view()),

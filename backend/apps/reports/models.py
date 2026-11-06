@@ -222,6 +222,33 @@ class CustomWasteType(models.Model):
         return self.name
 
 
+class BarangayPersonnel(models.Model):
+    """A name in one barangay's saved list of response personnel. Private to that barangay;
+    no MENRO review. Reports still store their own text string."""
+    personnel_id = models.AutoField(primary_key=True)
+    barangay = models.ForeignKey(
+        Barangay, on_delete=models.CASCADE, related_name='personnel', db_column='barangay_id'
+    )
+    name = models.CharField(max_length=60)
+    name_key = models.CharField(max_length=60)  # lowercase, for duplicate checks
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='+', db_column='created_by'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'tbl_barangay_personnel'
+        ordering = ['-last_used_at', 'name']
+        constraints = [
+            models.UniqueConstraint(fields=['barangay', 'name_key'], name='uniq_personnel_per_barangay'),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.barangay_id})"
+
+
 class ReportCustomWaste(models.Model):
     """One row per custom waste type recorded on a report (the 'Other' entries)."""
     item_id = models.AutoField(primary_key=True)

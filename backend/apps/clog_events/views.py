@@ -18,6 +18,7 @@ from datetime import timedelta
 from django.db import transaction
 from django.utils.dateparse import parse_datetime
 from apps.reports.models import CanalMonitoringReport
+from apps.reports.personnel import parse_personnel, join_names, record_personnel
 from agos_backend.date_range import has_date_range, filter_by_date_range
 
 
@@ -256,14 +257,23 @@ class ClogEventRespondView(APIView):
         errors = {}
         if not personnel:
             errors['assigned_personnel'] = 'Please list the personnel assigned to the response.'
-        elif len(personnel) > 500:
-            errors['assigned_personnel'] = 'Personnel list is too long (max 500 characters).'
+        else:
+            personnel_names, personnel_errors = parse_personnel(personnel)
+            if personnel_errors:
+                errors['assigned_personnel'] = personnel_errors[0]
+            elif not personnel_names:
+                errors['assigned_personnel'] = 'Please list the personnel assigned to the response.'
+            elif len(join_names(personnel_names)) > 500:
+                errors['assigned_personnel'] = 'Personnel list is too long (max 500 characters).'
+            else:
+                personnel = join_names(personnel_names)
         if not action:
             errors['action_taken'] = 'Please describe the action to be taken.'
         elif len(action) > 2000:
             errors['action_taken'] = 'Action is too long (max 2000 characters).'
         if errors:
             return Response(errors, status=400)
+        personnel = join_names(record_personnel(event.barangay, personnel_names, user))
 
         with transaction.atomic():
             event = ClogEvent.objects.select_for_update().get(pk=event.pk)

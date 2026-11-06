@@ -14,6 +14,8 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from .models import CanalMonitoringReport, ReportMedia, CustomWasteType, ReportPurokRow, ReportNodeSummary
 from .serializers import CanalMonitoringReportSerializer, ReportMediaSerializer, CustomWasteTypeSerializer, ReportPurokRowSerializer
+from .personnel import parse_personnel, find_similar as find_similar_person, record_personnel, join_names
+from .models import BarangayPersonnel
 from .waste_types import clean_name, name_key, find_similar, find_fixed_match
 from django.db import IntegrityError
 from apps.users.permissions import (
@@ -381,6 +383,45 @@ class SignatoryStatusView(APIView):
     def get(self, request):
         missing = _missing_signatory_positions(request.user.barangay)
         return Response({'complete': not missing, 'missing': missing})
+
+
+class PersonnelListCreateView(APIView):
+    """A barangay's saved response personnel (private to that barangay)."""
+    permission_classes = [IsBarangay]
+
+    def get(self, request):
+        barangay = request.user.barangay
+        names = list(BarangayPersonnel.objects.filter(barangay=barangay).values_list('name', flat=True))
+        last = (CanalMonitoringReport.objects.filter(barangay=barangay)
+                .exclude(status='Voided').exclude(assigned_personnel__isnull=True)
+                .exclude(assigned_personnel='').order_by('-report_id').first())
+        last_crew = parse_personnel(last.assigned_personnel)[0] if last else []
+        return Response({'names': names, 'last_crew': last_crew})
+
+    def post(self, request):
+        """Body: {text, save?: true}. Splits the text into names. With save=false it only
+        previews; otherwise new names are added to the list."""
+        barangay = request.user.barangay
+        names, errors = parse_personnel(request.data.get('text'))
+        if errors:
+            return Response({'error': errors[0], 'errors': errors}, status=status.HTTP_400_BAD_REQUEST)
+        if not names:
+            return Response({'error': 'Enter at least one name.'}, status=status.HTTP_400_BAD_REQUEST)
+        if len(join_names(names)) > 500:
+            return Response({'error': 'Too many names at once (max 500 characters).'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        known = list(BarangayPersonnel.objects.filter(barangay=barangay).values_list('name', flat=True))
+        known_lower = {n.lower(): n for n in known}
+        canonical = [known_lower.get(n.lower(), n) for n in names]
+        # a near-match is a hint only: two real people can have similar names
+        similar = {n: s for n in canonical if (s := find_similar_person(n, known))}
+
+        if str(request.data.get('save', 'true')).lower() in ('false', '0'):
+            return Response({'names': canonical, 'similar': similar})
+
+        saved = record_personnel(barangay, names, request.user)
+        return Response({'names': saved, 'similar': similar}, status=status.HTTP_201_CREATED)
 
 
 class CustomWasteTypeListCreateView(generics.ListCreateAPIView):

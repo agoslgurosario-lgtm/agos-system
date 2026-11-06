@@ -26,6 +26,7 @@ import { PhotoPreviewModal } from "@/components/reports/PhotoPreviewModal";
 import { IncompleteSignatoriesModal } from "@/components/reports/IncompleteSignatoriesModal";
 import { PostReportSummary, type SystemData } from "@/components/reports/PostReportSummary";
 import { CompletePostModal } from "@/components/reports/CompletePostModal";
+import { PersonnelField, PersonnelSheet, namesFromText, namesToText } from "@/components/reports/PersonnelPicker";
 import { ConfirmActionModal } from "@/components/reports/ConfirmActionModal";
 
 
@@ -490,6 +491,7 @@ export default function NewReportScreen() {
     params.report_id ? Number(params.report_id) : null
   );
   const [isLoadingReport, setIsLoadingReport] = useState(!!params.report_id);
+  const [personnelOpen, setPersonnelOpen] = useState(false);
   const [isLocked, setIsLocked] = useState(false); // already submitted — read-only
 
   const [photoSheetField, setPhotoSheetField] = useState<PhotoField | null>(null);
@@ -1254,13 +1256,10 @@ export default function NewReportScreen() {
           {!isPost && (
             <>
               <View className="mb-3">
-                <Field
-                  stacked 
-                  label="Assigned Personnel"
-                  required
-                  value={form.assignedPersonnel}
-                  onChangeText={(t) => update("assignedPersonnel", t)}
-                  placeholder="Who carried out the cleanup"
+<PersonnelField
+                  names={namesFromText(form.assignedPersonnel)}
+                  onRemove={(n) => update("assignedPersonnel", namesToText(namesFromText(form.assignedPersonnel).filter((x) => x !== n)))}
+                  onOpen={() => setPersonnelOpen(true)}
                 />
               </View>
 
@@ -1440,6 +1439,13 @@ export default function NewReportScreen() {
       />
 
       <DraftSavedModal visible={isDraftSavedVisible} onClose={handleDraftSavedClose} />
+
+      <PersonnelSheet
+        visible={personnelOpen}
+        names={namesFromText(form.assignedPersonnel)}
+        onChange={(n) => update("assignedPersonnel", namesToText(n))}
+        onClose={() => setPersonnelOpen(false)}
+      />
 
       <AddOtherWasteModal
         visible={isAddWasteVisible}

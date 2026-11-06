@@ -29,6 +29,7 @@ import { usePagination } from "@/components/hooks/usePagination";
 import { TablePagination } from "@/components/TablePagination";
 
 // auth
+import { PersonnelField, PersonnelDialog, namesFromText, namesToText } from "@/components/CanalReports/PersonnelPicker"
 import { fetchWithAuth } from "@/lib/auth"
 import { api } from "@/lib/api"
 import { ROUTES } from "@/lib/canalReportRoutes"
@@ -225,6 +226,7 @@ function ResponseDialog({ event, open, onClose, onSaved, onContinue }: {
 }) {
   const [when, setWhen] = useState('')
   const [personnel, setPersonnel] = useState('')
+  const [personnelOpen, setPersonnelOpen] = useState(false)
   const [action, setAction] = useState('')
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<{ when?: string; personnel?: string; action?: string; general?: string }>({})
@@ -233,7 +235,7 @@ function ResponseDialog({ event, open, onClose, onSaved, onContinue }: {
   // a fresh form every time it opens (a re-detected event starts at the original response time)
   useEffect(() => {
     if (!open || !event) return
-    setPersonnel(''); setAction(''); setErrors({}); setReportId(null); setSaving(false)
+    setPersonnel(''); setPersonnelOpen(false); setAction(''); setErrors({}); setReportId(null); setSaving(false)
     setWhen(toLocalInput(new Date(event.previous_responded_at ?? Date.now())))
   }, [open, event?.event_id])
 
@@ -329,15 +331,11 @@ function ResponseDialog({ event, open, onClose, onSaved, onContinue }: {
 
               <div>
                 <label className="mb-1 block text-[11px] font-bold text-[#64748B]">ASSIGNED PERSONNEL *</label>
-                <textarea
-                  rows={2} maxLength={500} value={personnel} disabled={saving}
-                  onChange={e => { setPersonnel(e.target.value); clearError('personnel') }}
-                  placeholder="e.g. Juan Dela Cruz, Maria Santos"
-                  className={input(errors.personnel)}
+                <PersonnelField
+                  names={namesFromText(personnel)} disabled={saving} error={errors.personnel}
+                  onRemove={n => { setPersonnel(namesToText(namesFromText(personnel).filter(x => x !== n))); clearError('personnel') }}
+                  onOpen={() => setPersonnelOpen(true)}
                 />
-                <p className={`mt-1 text-[11px] ${errors.personnel ? 'text-[#D81010]' : 'text-[#94A3B8]'}`}>
-                  {errors.personnel ?? 'Separate names with commas.'}
-                </p>
               </div>
 
               <div>
@@ -364,6 +362,11 @@ function ResponseDialog({ event, open, onClose, onSaved, onContinue }: {
             </div>
           </>
         )}
+      <PersonnelDialog
+          open={personnelOpen} names={namesFromText(personnel)}
+          onChange={n => { setPersonnel(namesToText(n)); clearError('personnel') }}
+          onClose={() => setPersonnelOpen(false)}
+        />
       </DialogContent>
     </Dialog>
   )

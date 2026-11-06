@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.db import transaction
+from .personnel import parse_personnel, join_names, record_personnel, MAX_STRING
 from .models import CanalMonitoringReport, ReportMedia, CustomWasteType, ReportCustomWaste, ReportNodeSummary, ReportPurokRow
 from apps.barangay.serializers import BarangaySerializer
 from apps.users.serializers import UserSerializer
@@ -123,6 +124,33 @@ class CanalMonitoringReportSerializer(serializers.ModelSerializer):
         u = obj.verified_by
         return f"{u.first_name} {u.last_name}".strip() if u else None
 
+    def validate_assigned_personnel(self, value):
+        """Split on commas, '&', 'and', etc.; reject bad names; store a clean 'A, B, C' string.
+        An unchanged (possibly legacy) value is left alone."""
+        self._personnel_names = None
+        if self.instance is not None and value == self.instance.assigned_personnel:
+            return value
+        names, errors = parse_personnel(value)
+        if errors:
+            raise serializers.ValidationError(errors[0])
+        text = join_names(names)
+        if len(text) > MAX_STRING:
+            raise serializers.ValidationError(f'Personnel list is too long (max {MAX_STRING} characters).')
+        self._personnel_names = names
+        return text
+
+    def _record_personnel(self, report):
+        names = getattr(self, '_personnel_names', None)
+        if names:
+            request = self.context.get('request')
+            user = getattr(request, 'user', None)
+            canonical = record_personnel(report.barangay, names, user)
+            text = join_names(canonical)
+            if text != report.assigned_personnel:
+                report.assigned_personnel = text
+                report.save(update_fields=['assigned_personnel'])
+        self._personnel_names = None
+
     def validate_clog_event(self, event):
         request = self.context.get('request')
         user = getattr(request, 'user', None)
@@ -168,6 +196,7 @@ class CanalMonitoringReportSerializer(serializers.ModelSerializer):
         report = super().create(validated_data)
         if items is not None:
             self._save_custom_waste(report, items)
+        self._record_personnel(report)
         return report
 
     @transaction.atomic
@@ -176,6 +205,7 @@ class CanalMonitoringReportSerializer(serializers.ModelSerializer):
         report = super().update(instance, validated_data)
         if items is not None:  # omitted = leave existing entries untouched
             self._save_custom_waste(report, items)
+        self._record_personnel(report)
         return report
 
     def validate(self, attrs):

@@ -8,6 +8,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
 import type { ClogEvent } from "@/types/clog-events";
 import { ReopenedNotice } from "./ReopenedNotice";
+import { PersonnelField, PersonnelPanel, namesFromText, namesToText } from "@/components/reports/PersonnelPicker";
 
 
 interface Props {
@@ -36,12 +37,13 @@ export function ResponseModal({ visible, event, respondedAt, onClose, onSaved, o
   const [when, setWhen] = useState<Date>(new Date(respondedAt));
   const [pickerMode, setPickerMode] = useState<"date" | "time" | null>(null);
   const [tempDate, setTempDate] = useState<Date | null>(null);
+  const [picking, setPicking] = useState(false);   // personnel panel shown inside this modal (no second Modal: unreliable on iOS)
 
   // fresh form every time it opens
   useEffect(() => {
     if (visible) {
       setPersonnel(""); setAction(""); setErrors({}); setReportId(null); setSaving(false);
-      setWhen(new Date(respondedAt)); setPickerMode(null); setTempDate(null);
+      setWhen(new Date(respondedAt)); setPickerMode(null); setTempDate(null); setPicking(false);
     }
   }, [visible]);
 
@@ -131,6 +133,14 @@ export function ResponseModal({ visible, event, respondedAt, onClose, onSaved, o
                   <Text className="text-sm font-semibold text-[#475569]">Later</Text>
                 </TouchableOpacity>
               </View>
+            ) : picking ? (
+              <ScrollView keyboardShouldPersistTaps="handled">
+                <PersonnelPanel
+                  names={namesFromText(personnel)}
+                  onChange={(n) => { setPersonnel(namesToText(n)); setErrors((p) => ({ ...p, personnel: undefined, general: undefined })); }}
+                  onDone={() => setPicking(false)}
+                />
+              </ScrollView>
             ) : (
               <ScrollView keyboardShouldPersistTaps="handled">
                 <Text className="mb-1 text-base font-bold text-[#122A48]">Response Details</Text>
@@ -174,20 +184,14 @@ export function ResponseModal({ visible, event, respondedAt, onClose, onSaved, o
                   />
                 )}
 
-                <Text className="mb-1 text-[11px] font-bold text-[#64748B]">ASSIGNED PERSONNEL *</Text>
-                <TextInput
-                  value={personnel}
-                  onChangeText={(t) => { setPersonnel(t); setErrors((p) => ({ ...p, personnel: undefined, general: undefined })); }}
-                  placeholder="e.g. Juan Dela Cruz, Maria Santos"
-                  placeholderTextColor="#94A3B8"
-                  maxLength={500}
-                  multiline
-                  className={`rounded-xl border bg-[#F8FAFC] px-3 py-2.5 text-[13px] text-[#122A48] ${errors.personnel ? "border-[#dc2626]" : "border-[#E2E8F0]"}`}
-                  style={{ minHeight: 48, textAlignVertical: "top" }}
-                />
-                <Text className="mb-3 mt-1 text-[11px] text-[#94A3B8]">
-                  {errors.personnel ? <Text className="text-[#dc2626]">{errors.personnel}</Text> : "Separate names with commas."}
-                </Text>
+                <View className="mb-3">
+                  <PersonnelField
+                    names={namesFromText(personnel)}
+                    onRemove={(n) => setPersonnel(namesToText(namesFromText(personnel).filter((x) => x !== n)))}
+                    onOpen={() => setPicking(true)}
+                    error={errors.personnel}
+                  />
+                </View>
 
                 <Text className="mb-1 text-[11px] font-bold text-[#64748B]">ACTION TAKEN *</Text>
                 <TextInput

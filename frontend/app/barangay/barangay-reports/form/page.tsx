@@ -35,6 +35,7 @@ import { ConfirmModal } from "@/components/CanalReports/ConfirmModal"
 import { PostReportSummary, type SystemData } from "@/components/CanalReports/PostReportSummary"
 import { CompletePostModal } from "@/components/CanalReports/CompletePostModal"
 import { AddOtherWasteModal } from "@/components/CanalReports/AddOtherWasteModal"
+import { PersonnelField, PersonnelDialog, namesFromText, namesToText } from "@/components/CanalReports/PersonnelPicker"
 import { fetchWithAuth, getUser } from "@/lib/auth"
 import { ROUTES } from "@/lib/canalReportRoutes"
 import { WASTE_CATEGORIES, WASTE_HINT, MEDIA_CATEGORIES, type WasteKey } from "@/lib/wasteCategories"
@@ -168,6 +169,7 @@ function CleanupForm() {
   const [otherModal, setOtherModal] = useState(false)
 
   const [personnel, setPersonnel] = useState("")
+  const [personnelOpen, setPersonnelOpen] = useState(false)
   const [action, setAction] = useState("")
   const [remarks, setRemarks] = useState("")
 
@@ -616,7 +618,11 @@ function CleanupForm() {
             {!isPost && (<>
             <div>
               <label className={label}>Assigned Personnel <span className="text-[#D81010]">*</span></label>
-              <input value={personnel} onChange={e => setPersonnel(e.target.value)} placeholder="Who carried out the cleanup" className={field} />
+              <PersonnelField
+                names={namesFromText(personnel)}
+                onRemove={n => setPersonnel(namesToText(namesFromText(personnel).filter(x => x !== n)))}
+                onOpen={() => setPersonnelOpen(true)}
+              />
             </div>
             <div>
               <label className={label}>Action Taken <span className="text-[#D81010]">*</span></label>
@@ -688,6 +694,13 @@ function CleanupForm() {
       </div>
 
       {/* add other waste */}
+      <PersonnelDialog
+        open={personnelOpen}
+        names={namesFromText(personnel)}
+        onChange={n => setPersonnel(namesToText(n))}
+        onClose={() => setPersonnelOpen(false)}
+      />
+
       <AddOtherWasteModal
         open={otherModal}
         onClose={() => setOtherModal(false)}
