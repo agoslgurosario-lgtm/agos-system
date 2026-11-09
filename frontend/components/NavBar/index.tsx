@@ -95,7 +95,7 @@ const navItems: Record<string, NavItem[]> = {
         { label: "Maintenance Logs",    href: "/admin/maintenance-logs",  icon: <Wrench size={14} /> },
         { label: "Audit Logs",          href: "/admin/audit",   icon: <Stamp size={14} /> },
         { label: "Settings",    href: "/admin/settings",  icon: <Settings size={14} /> },
-        { label: "User Manual",    href: "/admin/manual",  icon: <Book size={14} /> },
+        { label: "Help",    href: "/admin/manual",  icon: <Book size={14} /> },
       ]
     },
   ],
@@ -107,7 +107,7 @@ const navItems: Record<string, NavItem[]> = {
     { label: "Canal Hotspots",        href: "/menro/hotspots",        icon: <Target size={18} /> },
     { label: "Barangay Reports", href: "/menro/barangay-reports", icon: <FileBarChart size={18} /> },
     { label: "Report Analytics", href: "/menro/report-analytics", icon: <ChartColumn size={18} /> },
-    { label: "User Manual",    href: "/menro/manual",  icon: <Book size={14} /> },
+    { label: "Help",    href: "/menro/manual",  icon: <Book size={14} /> },
   ],
   MENRO_Staff: [
     { label: "Regional Map",       href: "/menro/map",        icon: <Map size={18} /> },
@@ -117,7 +117,7 @@ const navItems: Record<string, NavItem[]> = {
     { label: "Canal Hotspots",    href: "/menro/hotspots",   icon: <Target size={18} /> },
     { label: "Barangay Reports", href: "/menro/barangay-reports", icon: <FileBarChart size={18} /> },
     { label: "Report Analytics", href: "/menro/report-analytics", icon: <ChartColumn size={18} /> },
-    { label: "User Manual",    href: "/menro/manual",  icon: <Book size={14} /> },
+    { label: "Help",    href: "/menro/manual",  icon: <Book size={14} /> },
   ],
   Barangay: [
     { label: "Localized Map",         href: "/barangay/map",              icon: <Map size={18} /> },
