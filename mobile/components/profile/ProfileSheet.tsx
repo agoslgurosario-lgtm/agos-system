@@ -108,7 +108,7 @@ export default function ProfileSheet({ visible, onClose }: Props) {
             onPress={() => router.push('/user-manual')}
           >
             <Ionicons name="book-outline" size={16} color="#334155" />
-            <Text className="text-slate-700 text-[14px] font-semibold">User Manual</Text>
+            <Text className="text-slate-700 text-[14px] font-semibold">Help</Text>
           </Pressable>
 
           <Pressable
