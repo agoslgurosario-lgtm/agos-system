@@ -62,7 +62,7 @@ function getFilteredBarangay(barangays: Barangay[], search: string, statusFilter
     .filter(b => {
       if (statusFilter === 'Registered') return b.is_active && b.is_registered
       if (statusFilter === 'Unregistered') return b.is_active && !b.is_registered
-      if (statusFilter === 'Inactive') return !b.is_active
+      if (statusFilter === 'Deactivated') return !b.is_active
       return true
     })
     .filter(b => b.barangay_name.toLowerCase().includes(search.toLowerCase()))
@@ -99,7 +99,7 @@ export default function Barangay() {
 
   // filter states
   const [search, setSearch] = useState<string>('')
-  const [statusFilter, setStatusFilter] = useState<'All' | 'Registered' | 'Unregistered' | 'Inactive'>('All')
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Registered' | 'Unregistered' | 'Deactivated'>('All')
 
   const [registerDialog, setRegisterDialog] = useState<DialogState>({
     open: false,
@@ -309,7 +309,7 @@ export default function Barangay() {
             { icon: <MapPinned size={20} color="#1565BC" />, bg: "bg-[#CDE3DE]", count: total, label: "Total Barangay" },
             { icon: <CheckCircle size={20} color="#2C7B3C" />, bg: "bg-[#B2FBC1]", count: registered, label: "All Registered" },
             { icon: <MapPinOff size={20} color="#FF0101" />, bg: "bg-[#FFE5E5]", count: unregistered, label: "All Unregistered" },
-            { icon: <Ban size={20} color="#727272" />, bg: "bg-[#E5E5E6]", count: inactive, label: "All Inactive" },
+            { icon: <Ban size={20} color="#727272" />, bg: "bg-[#E5E5E6]", count: inactive, label: "All Deactivated" },
           ].map(card => (
             <div key={card.label} className="rounded-lg border-2 border-[#C6C6C8] h-17 min-[2560px]:h-20 min-[3840px]:h-24 w-full flex items-center p-3 gap-3 relative bg-[#FAFCFD] shadow-[0_5px_4px_-4px_rgba(0,0,0,0.2)]">
               <div className={`${card.bg} rounded-lg p-2`}>{card.icon}</div>
@@ -337,7 +337,7 @@ export default function Barangay() {
                   <SelectItem value="All" className="cursor-pointer p-2 text-xs">All Barangay</SelectItem>
                   <SelectItem value="Registered" className="cursor-pointer p-2 text-xs">Registered</SelectItem>
                   <SelectItem value="Unregistered" className="cursor-pointer p-2 text-xs">Unregistered</SelectItem>
-                  <SelectItem value="Inactive" className="cursor-pointer p-2 text-xs">Inactive</SelectItem>
+                  <SelectItem value="Deactivated" className="cursor-pointer p-2 text-xs">Deactivated</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -367,7 +367,7 @@ export default function Barangay() {
                             title={barangay.deactivation_reason || undefined}
                             className="px-2 py-0.5 rounded-full bg-[#E5E5E6] text-[#727272] text-[10px] font-semibold"
                           >
-                            Inactive
+                            Deactivated
                           </span>
                         )}
                       </div>
