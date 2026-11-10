@@ -1,0 +1,16 @@
+{
+  "sensor_nodes.SystemHealthLog": [
+    123,
+    124,
+    125,
+    126
+  ],
+  "alerts.Alert": [
+    562,
+    563,
+    564,
+    565,
+    566,
+    567
+  ]
+}

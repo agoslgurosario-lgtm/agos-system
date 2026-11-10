@@ -13,7 +13,7 @@ from .serializers import AlertSoundConfigSerializer, UploadedAlertSoundSerialize
 from rest_framework.permissions import IsAuthenticated
 
 MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024  # 2MB
-MAX_DURATION_SECONDS = 10
+MAX_DURATION_SECONDS = 20
 ALLOWED_CONTENT_TYPES = ['audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/mp3']
 
 
