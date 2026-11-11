@@ -71,23 +71,7 @@ backend/requirements-ml.txt
 seed_data.json
 
 # ─── AI Service — local debug/test scripts ───
-ai_service/venv
-ai_service/webcam_test.py
-ai_service/test_both_together.py
-
-# yolo
-ai_service/export_yolo.py
-ai_service/debug_onnx.py
-ai_service/test_onnx_vs_pt.py
-ai_service/test_manual_onnx.py
-ai_service/check_memory.py
-ai_service/check_memory_onnx.py
-
-# keras (mobilenetv2)
-ai_service/convert_classifier.py
-ai_service/check_memory_tflite.py
-ai_service/check_memory_litert.py
-ai_service/test_tflite_vs_keras.py
+ai_service/
 
 # mobile firebase key
 mobile/agos-31475-firebase-adminsdk-fbsvc-d2315df569.json
